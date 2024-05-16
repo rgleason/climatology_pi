@@ -22,7 +22,7 @@ sources. Satellite weather data from the last 30 years is averaged, then represe
 Climatology provides monthly data for Wind, Currents, Sea Level
 Pressure, Sea Temperature, Air Temperature, Cloud Cover, Precipitation, Relative Humidity, Lightning, Sea Depth, and Cyclones.
 
-image::climatology1thumb.jpeg[] 
+image::climatology1thumb.jpeg[200] 
 
 July Wind with Current overlay. (Click for enlarged view)
 
