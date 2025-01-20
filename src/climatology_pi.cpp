@@ -74,7 +74,7 @@ wxString ClimatologyUserDataDirectory()
 }
 
 climatology_pi::climatology_pi(void *ppimgr)
-      :opencpn_plugin_117(ppimgr)
+      :opencpn_plugin_118(ppimgr)
 {
       m_pClimatologyDialog = nullptr;
       // Create the PlugIn icons

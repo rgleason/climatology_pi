@@ -60,7 +60,7 @@ extern QString qtStyleSheet;
 
 #define CLIMATOLOGY_TOOL_POSITION    -1          // Request default positioning of toolbar tool
 
-class climatology_pi : public opencpn_plugin_117
+class climatology_pi : public opencpn_plugin_118
 {
 public:
       climatology_pi(void *ppimgr);
