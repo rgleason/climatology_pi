@@ -52,14 +52,8 @@ ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
 #endif
     m_cfgdlg = new ClimatologyConfigDialog(this);
 
-    Now();
-
     m_cursorlat = m_cursorlon = 0;
-
-    {
-#include "now.xpm"
-    m_bpNow->SetBitmapLabel(now);
-    }
+    
     DimeWindow( this );
     PopulateTrackingControls();
 
@@ -79,11 +73,6 @@ bool ClimatologyDialog::Show(bool show)
 {
     if (show == false) {
         pPlugIn->SendTimelineMessage( wxInvalidDateTime );
-    }
-    else if (g_pOverlayFactory != 0 && m_sTimeline != 0) {
-        wxDateTime timeline = g_pOverlayFactory->m_CurrentTimeline;
-        timeline.SetYear(wxDateTime::Now().GetYear() + ( m_sTimeline->GetValue() > 365?1:0));
-        pPlugIn->SendTimelineMessage( timeline );
     }
     return ClimatologyDialogBase::Show(show);
 }
@@ -227,82 +216,11 @@ wxString ClimatologyDialog::GetValue(int index, Coord coord)
     return wxString::Format("%.2f", val);
 }
 
-void ClimatologyDialog::DayMonthUpdate()
-{
-    wxDateTime &timeline = g_pOverlayFactory->m_CurrentTimeline;
-    int nMonthDays = wxDateTime::GetNumberOfDays((wxDateTime::Month)m_cMonth->GetSelection(),
-                                                    1999); // not a leap year
-    if( m_sDay->GetValue() > nMonthDays)
-        timeline.SetDay(1);
-    else
-        timeline.SetDay(m_sDay->GetValue());
 
-    m_sDay->SetRange(1, nMonthDays);
-
-    timeline.SetMonth((wxDateTime::Month)m_cMonth->GetSelection());
-
-    int yearday = g_pOverlayFactory->m_CurrentTimeline.GetDayOfYear();
-
-//  OR
-//  Sean add line just below back and changed int yearday commit 15d4101
-//    timeline.SetDay(0);
-//    timeline.SetMonth((wxDateTime::Month)m_cMonth->GetSelection());
-//    timeline.SetDay(m_sDay->GetValue());
-//    int yearday = timeline.GetDayOfYear();
-
-    if(yearday < 67) {
-        yearday += 365;
-    }
-    m_sTimeline->SetValue(yearday);
-
-    UpdateTrackingControls();
-    wxDateTime now = timeline;
-    now.SetYear(wxDateTime::Now().GetYear() + ( yearday > 365?1:0));
-    pPlugIn->SendTimelineMessage(now);
-//    pPlugIn->GetOverlayFactory()->m_bUpdateCyclones = true;
-    RefreshRedraw();
-}
-
-void ClimatologyDialog::OnTimeline( wxScrollEvent& event )
-{
-    wxDateTime &timeline = g_pOverlayFactory->m_CurrentTimeline;
-    wxDateTime old = timeline;
-
-    timeline.SetToYearDay((event.GetPosition() - 1) % 365 + 1);
-    m_cMonth->SetSelection(timeline.GetMonth());
-
-
-    m_sDay->SetRange(1, wxDateTime::GetNumberOfDays(timeline.GetMonth(),
-                                                    1999)); // not a leap year
-    m_sDay->SetValue(timeline.GetDay());
-
-    if (old.IsSameDate(timeline))
-        return;
-    UpdateTrackingControls();
-    wxDateTime now = timeline;
-    now.SetYear(wxDateTime::Now().GetYear()+ ( event.GetPosition() > 365?1:0));
-    pPlugIn->SendTimelineMessage(now);
-//    pPlugIn->GetOverlayFactory()->m_bUpdateCyclones = true;
-    RefreshRedraw();
-}
-
-void ClimatologyDialog::OnTimelineDown( wxScrollEvent& event )
-{
-    if(event.GetPosition() >= 432)
-        m_sTimeline->SetValue(event.GetPosition() - 365);
-}
-
-void ClimatologyDialog::OnTimelineUp( wxScrollEvent& event )
-{
-    if(event.GetPosition() <= 67)
-        m_sTimeline->SetValue(event.GetPosition() + 365);
-}
 
 void ClimatologyDialog::OnAll( wxCommandEvent& event )
 {
-    m_cMonth->Enable(!m_cbAll->GetValue());
-    m_sDay->Enable(!m_cbAll->GetValue());
-    m_sTimeline->Enable(!m_cbAll->GetValue());
+    // Timeline controls are now managed by the global timeline widget
 
     g_pOverlayFactory->m_bAllTimes = event.IsChecked();
 
@@ -311,11 +229,7 @@ void ClimatologyDialog::OnAll( wxCommandEvent& event )
     RefreshRedraw();
 }
 
-void ClimatologyDialog::OnNow( wxCommandEvent& event )
-{
-    Now();
-    RefreshRedraw();
-}
+
 
 void ClimatologyDialog::OnUpdateDisplay( wxCommandEvent& event )
 {
@@ -357,22 +271,21 @@ void ClimatologyDialog::OnCBAny( wxCommandEvent& event )
     RefreshRedraw();                     // Reload the visibility options
 }
 
-void ClimatologyDialog::Now()
+
+
+void ClimatologyDialog::UpdateFromTimeline(const wxDateTime &selectedTime)
 {
-    wxDateTime now = wxDateTime::Now();
-
-    m_cMonth->SetSelection(now.GetMonth());
-    m_sDay->SetValue(now.GetDay());
-
-    int day = now.GetDayOfYear();
+    if(!selectedTime.IsValid())
+        return;
+        
+    // Update the internal timeline to match the selected time
+    int day = selectedTime.GetDayOfYear();
     if(g_pOverlayFactory) {
         wxDateTime &timeline = g_pOverlayFactory->m_CurrentTimeline;
-        timeline.SetToYearDay(day + 1);
+        timeline.SetToYearDay(day);
     }
-
-    if(day <= 67)
-        day += 365;
-    m_sTimeline->SetValue(day);
-    pPlugIn->SendTimelineMessage(now);
+    
+    // Update tracking controls and refresh
     UpdateTrackingControls();
+    RefreshRedraw();
 }

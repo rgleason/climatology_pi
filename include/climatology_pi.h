@@ -60,7 +60,7 @@ extern QString qtStyleSheet;
 
 #define CLIMATOLOGY_TOOL_POSITION    -1          // Request default positioning of toolbar tool
 
-class climatology_pi : public opencpn_plugin_118
+class climatology_pi : public opencpn_plugin_121
 {
 public:
       climatology_pi(void *ppimgr);
@@ -108,6 +108,9 @@ public:
 
       void OnClimatologyDialogClose();
       void SendTimelineMessage(wxDateTime time);
+
+      /** Invoked by OpenCPN core when the selected time is updated in the timeline widget. */
+      virtual void OnTimelineSelectedTimeChanged(const wxDateTime &selectedTime);
 
 private:
       void FreeData();

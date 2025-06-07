@@ -74,7 +74,7 @@ wxString ClimatologyUserDataDirectory()
 }
 
 climatology_pi::climatology_pi(void *ppimgr)
-      :opencpn_plugin_118(ppimgr)
+      :opencpn_plugin_121(ppimgr)
 {
       m_pClimatologyDialog = nullptr;
       // Create the PlugIn icons
@@ -250,6 +250,12 @@ void climatology_pi::CreateOverlayFactory()
         m_pClimatologyDialog->FitLater(); // buggy wx
     }
     m_pClimatologyDialog->Hide();
+    
+    // Get the current timeline selection and apply it
+    wxDateTime timelineSelection = GetTimelineSelectedTime();
+    if(timelineSelection.IsValid()) {
+        OnTimelineSelectedTimeChanged(timelineSelection);
+    }
 }
 
 void climatology_pi::SetDefaults(void)
@@ -457,4 +463,11 @@ bool climatology_pi::SaveConfig(void)
 void climatology_pi::SetColorScheme(PI_ColorScheme cs)
 {
     DimeWindow(m_pClimatologyDialog);
+}
+
+void climatology_pi::OnTimelineSelectedTimeChanged(const wxDateTime &selectedTime)
+{
+    if(m_pClimatologyDialog) {
+        m_pClimatologyDialog->UpdateFromTimeline(selectedTime);
+    }
 }
