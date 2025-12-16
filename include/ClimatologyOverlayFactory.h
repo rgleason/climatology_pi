@@ -26,6 +26,7 @@
 
 #include <list>
 #include <map>
+#include <vector>
 
 #include "zuFile.h"
 
@@ -75,13 +76,22 @@ struct WindData
 struct CurrentData
 {
     CurrentData(int lats, int lons, int mul)
-    : latitudes(lats), longitudes(lons), multiplier(mul)
-        { data[0] = new float[lats*lons], data[1] = new float[lats*lons]; }
+      : latitudes(lats), longitudes(lons), multiplier(mul)
+    {
+        if (latitudes <= 0 || longitudes <= 0)
+            throw std::bad_alloc();
+        size_t elems = static_cast<size_t>(latitudes) * static_cast<size_t>(longitudes);
+        if (elems == 0 || elems > (SIZE_MAX / sizeof(float)))
+            throw std::bad_alloc();
+        data[0].assign(elems, 0.0f);
+        data[1].assign(elems, 0.0f);
+    }
+
     double Value(enum Coord coord, int xi, int yi);
     double InterpCurrent(enum Coord coord, double lat, double lon);
 
     int latitudes, longitudes, multiplier;
-    float *data[2];
+    std::vector<float> data[2];
 };
 
 struct ElNinoYear
