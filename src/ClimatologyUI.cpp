@@ -21,34 +21,10 @@ ClimatologyDialogBase::ClimatologyDialogBase( wxWindow* parent, wxWindowID id, c
 	fgSizer1->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_ALL );
 
 	wxStaticBoxSizer* sbSizer21;
-	sbSizer21 = new wxStaticBoxSizer( new wxStaticBox( this, wxID_ANY, _("Month") ), wxVERTICAL );
-
-	wxFlexGridSizer* fgSizer23;
-	fgSizer23 = new wxFlexGridSizer( 0, 0, 0, 0 );
-	fgSizer23->AddGrowableCol( 0 );
-	fgSizer23->SetFlexibleDirection( wxBOTH );
-	fgSizer23->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
-
-	wxString m_cMonthChoices[] = { _("January"), _("Febuary"), _("March"), _("April"), _("May"), _("June"), _("July"), _("August"), _("September"), _("October"), _("November"), _("December") };
-	int m_cMonthNChoices = sizeof( m_cMonthChoices ) / sizeof( wxString );
-	m_cMonth = new wxChoice( sbSizer21->GetStaticBox(), wxID_ANY, wxDefaultPosition, wxSize( 80,-1 ), m_cMonthNChoices, m_cMonthChoices, 0 );
-	m_cMonth->SetSelection( 0 );
-	fgSizer23->Add( m_cMonth, 0, wxALL|wxEXPAND, 5 );
-
-	m_sDay = new wxSpinCtrl( sbSizer21->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( -1,-1 ), wxSP_ARROW_KEYS, 1, 31, 1 );
-	fgSizer23->Add( m_sDay, 0, wxALL, 5 );
+	sbSizer21 = new wxStaticBoxSizer( new wxStaticBox( this, wxID_ANY, _("Timeline Control") ), wxVERTICAL );
 
 	m_cbAll = new wxCheckBox( sbSizer21->GetStaticBox(), wxID_ANY, _("All"), wxDefaultPosition, wxDefaultSize, 0 );
-	fgSizer23->Add( m_cbAll, 0, wxALL, 0 );
-
-	m_bpNow = new wxBitmapButton( sbSizer21->GetStaticBox(), wxID_ANY, wxNullBitmap, wxDefaultPosition, wxDefaultSize, wxBU_AUTODRAW|0 );
-	fgSizer23->Add( m_bpNow, 0, wxALL, 0 );
-
-
-	sbSizer21->Add( fgSizer23, 1, wxEXPAND, 5 );
-
-	m_sTimeline = new wxSlider( sbSizer21->GetStaticBox(), wxID_ANY, 0, 1, 500, wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL );
-	sbSizer21->Add( m_sTimeline, 0, wxEXPAND, 5 );
+	sbSizer21->Add( m_cbAll, 0, wxALL, 5 );
 
 
 	fgSizer1->Add( sbSizer21, 1, wxEXPAND, 5 );
@@ -193,25 +169,11 @@ ClimatologyDialogBase::ClimatologyDialogBase( wxWindow* parent, wxWindowID id, c
 	this->Layout();
 	fgSizer1->Fit( this );
 
-	this->Centre( wxBOTH );
+	// this->Centre( wxBOTH ); // Commented out to fix macOS centering crash
 
 	// Connect Events
 	this->Connect( wxEVT_CLOSE_WINDOW, wxCloseEventHandler( ClimatologyDialogBase::OnClose ) );
-	m_cMonth->Connect( wxEVT_COMMAND_CHOICE_SELECTED, wxCommandEventHandler( ClimatologyDialogBase::OnMonth ), NULL, this );
-	m_sDay->Connect( wxEVT_COMMAND_SPINCTRL_UPDATED, wxSpinEventHandler( ClimatologyDialogBase::OnDay ), NULL, this );
 	m_cbAll->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnAll ), NULL, this );
-	m_bpNow->Connect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnNow ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_TOP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_BOTTOM, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_LINEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_LINEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_PAGEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_PAGEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_THUMBTRACK, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_THUMBRELEASE, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_CHANGED, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_LINEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimelineDown ), NULL, this );
-	m_sTimeline->Connect( wxEVT_SCROLL_LINEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimelineUp ), NULL, this );
 	m_cbWind->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
 	m_cbCurrent->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
 	m_cbPressure->Connect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
@@ -230,21 +192,7 @@ ClimatologyDialogBase::~ClimatologyDialogBase()
 {
 	// Disconnect Events
 	this->Disconnect( wxEVT_CLOSE_WINDOW, wxCloseEventHandler( ClimatologyDialogBase::OnClose ) );
-	m_cMonth->Disconnect( wxEVT_COMMAND_CHOICE_SELECTED, wxCommandEventHandler( ClimatologyDialogBase::OnMonth ), NULL, this );
-	m_sDay->Disconnect( wxEVT_COMMAND_SPINCTRL_UPDATED, wxSpinEventHandler( ClimatologyDialogBase::OnDay ), NULL, this );
 	m_cbAll->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnAll ), NULL, this );
-	m_bpNow->Disconnect( wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnNow ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_TOP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_BOTTOM, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_LINEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_LINEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_PAGEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_PAGEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_THUMBTRACK, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_THUMBRELEASE, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_CHANGED, wxScrollEventHandler( ClimatologyDialogBase::OnTimeline ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_LINEDOWN, wxScrollEventHandler( ClimatologyDialogBase::OnTimelineDown ), NULL, this );
-	m_sTimeline->Disconnect( wxEVT_SCROLL_LINEUP, wxScrollEventHandler( ClimatologyDialogBase::OnTimelineUp ), NULL, this );
 	m_cbWind->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
 	m_cbCurrent->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
 	m_cbPressure->Disconnect( wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler( ClimatologyDialogBase::OnUpdateDisplay ), NULL, this );
@@ -819,7 +767,7 @@ ClimatologyConfigDialogBase::ClimatologyConfigDialogBase( wxWindow* parent, wxWi
 	this->Layout();
 	fgSizer3->Fit( this );
 
-	this->Centre( wxBOTH );
+	// this->Centre( wxBOTH ); // Commented out to fix macOS centering crash
 
 	// Connect Events
 	m_notebook1->Connect( wxEVT_COMMAND_NOTEBOOK_PAGE_CHANGED, wxNotebookEventHandler( ClimatologyConfigDialogBase::OnPageChanged ), NULL, this );
