@@ -166,60 +166,97 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
                              + failed_msg +
                              _("Would you like to try to download?"),
                              _("Climatology"), wxYES | wxNO | wxICON_WARNING);
-        if(mdlg.ShowModal() == wxID_YES) {
-            int i = 0;
-            bool failed = false;
-            wxString path = ClimatologyUserDataDirectory();
-        
-            wxString servers[] = {"https://github.com"};
-            int servercount = ((sizeof servers) / (sizeof *servers));
-            wxString url = "/seandepagnier/climatology_pi_data/blob/master/";
+			if(mdlg.ShowModal() == wxID_YES) {
+				
+				wxLogMessage("climatology_pi: Starting climatology data download. %d files missing.", 
+							 (int)m_FailedFiles.size());
 
-            for(std::list<wxString>::iterator it = m_FailedFiles.begin();
-                it != m_FailedFiles.end(); it++ ) {
-                wxString fn = *it;
-                if(!fn.EndsWith(".txt"))
-                    fn += ".gz"; // download gzipped file
-                int j;
-                for(j=0; j<servercount; j++) {
-                    int ind = (i+j)%servercount;
-                    wxString urlpath = servers[ind] + url;
-                
-                    _OCPN_DLStatus status = OCPN_downloadFile(
-                        urlpath + fn + "?raw=true",
-                        path+fn, _("downloading climatology data file"),
-                        wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
-                        *_img_climatology, GetOCPNCanvasWindow(),
-                        OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
-                        OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
-                        OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE, 20);
-                    if(status == OCPN_DL_NO_ERROR)
-                        break;
-                    if(status == OCPN_DL_ABORTED)
-                        return;
-                }
-                if(j == servercount)
-                    failed = true;
-            }
+				bool failed = false;
+				wxString path = ClimatologyUserDataDirectory();
+				
+//  Sean's database				
+//				wxString baseurl = "https://raw.githubusercontent.com/seandepagnier/climatology_pi_data/master/";
 
-            if(failed) {
-                wxMessageDialog mdlg(&m_dlg,
-                                     _("Some Data Failed to download.\n"
-                                       "Climatology data incomplete"),
-                                     _("Climatology"), wxOK | wxICON_WARNING);
-                mdlg.ShowModal();
-            } else {
-                Load();
-                if(m_FailedFiles.size()) {
-                    wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
-                    wxMessageDialog mdlg(&m_dlg,
-                                         _("Some Data Failed to load.") +"\n"
-                                           + failed_msg + "...\n" +
-                                         _("Climatology data incomplete."),
-                                         _("Climatology"), wxOK | wxICON_WARNING);
-                    mdlg.ShowModal();
-                }
-            }
+//   Best to use this database so repo has full control, later we can add fallback mirrors.
+				wxString baseurl = "https://raw.githubusercontent.com/rgleason/climatology_pi_data/master/";
+
+
+				int i = 0;
+				int total = m_FailedFiles.size();
+
+				for(auto it = m_FailedFiles.begin(); it != m_FailedFiles.end(); ++it) {
+
+					wxString fn = *it;
+					if(!fn.EndsWith(".txt"))
+						fn += ".gz";
+
+					wxString url = baseurl + fn;
+					wxString dest = path + fn;
+
+					wxLogMessage("climatology_pi: Downloading (%d/%d): %s → %s",
+								 i+1, total, url, dest);
+
+					wxString msg = wxString::Format("File %d of %d", i+1, total);
+
+					_OCPN_DLStatus status = OCPN_downloadFile(
+						url,
+						dest,
+						_("downloading climatology data file"),
+						msg,
+						*_img_climatology,
+						GetOCPNCanvasWindow(),
+						OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
+						OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
+						OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE,
+						20
+					);
+
+					if(status == OCPN_DL_ABORTED) {
+						wxLogMessage("climatology_pi: Download aborted by user at file %d/%d (%s).",
+									 i+1, total, fn);
+					return;
+					}
+
+					if(status != OCPN_DL_NO_ERROR) {
+						wxLogMessage("climatology_pi: ERROR downloading %s (status=%d)", fn, status);
+						failed = true;
+					} else {
+						wxLogMessage("climatology_pi: Successfully downloaded %s", fn);
+					}
+
+				i++;
+				}
+
+				if(failed) {
+					wxLogMessage("climatology_pi: One or more files failed to download.");
+				} else {
+					wxLogMessage("climatology_pi: All climatology data files downloaded successfully.");
+				}
+
+				if(failed) {
+					wxMessageDialog mdlg(&m_dlg,
+										 _("Some Data Failed to download.\n"
+										   "Climatology data incomplete"),
+										 _("Climatology"), wxOK | wxICON_WARNING);
+					mdlg.ShowModal();
+				} else {
+					Load();
+
+					if(m_FailedFiles.size()) {
+						wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
+						wxMessageDialog mdlg(&m_dlg,
+											 _("Some Data Failed to load.") + "\n"
+											   + failed_msg + "...\n" +
+											 _("Climatology data incomplete."),
+											 _("Climatology"), wxOK | wxICON_WARNING);
+						mdlg.ShowModal();
+					} else {
+						m_bCompletedLoading = true;
+						wxLogMessage("climatology_pi: Data download + reload successful, broadcasting availability.");
+						s_climatology_pi->SendClimatology(true);
+					}
+				}
+			}
         }
     }
 
