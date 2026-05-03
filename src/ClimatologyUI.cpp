@@ -85,7 +85,7 @@ ClimatologyDialogBase::ClimatologyDialogBase( wxWindow* parent, wxWindowID id, c
 	m_tWind = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 70,-1 ), 0 );
 	fgSizer15->Add( m_tWind, 0, wxALL, 5 );
 
-	m_tWindDir = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 60,-1 ), 0 );
+	m_tWindDir = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 75,-1 ), 0 );
 	fgSizer15->Add( m_tWindDir, 0, wxALL, 5 );
 
 	m_cbCurrent = new wxCheckBox( sbSizer2->GetStaticBox(), wxID_ANY, _("Current"), wxDefaultPosition, wxDefaultSize, 0 );
@@ -96,7 +96,7 @@ ClimatologyDialogBase::ClimatologyDialogBase( wxWindow* parent, wxWindowID id, c
 	m_tCurrent = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 70,-1 ), 0 );
 	fgSizer15->Add( m_tCurrent, 0, wxALL, 5 );
 
-	m_tCurrentDir = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 60,-1 ), 0 );
+	m_tCurrentDir = new wxTextCtrl( sbSizer2->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize( 70,-1 ), 0 );
 	fgSizer15->Add( m_tCurrentDir, 0, wxALL, 5 );
 
 

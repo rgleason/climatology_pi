@@ -249,8 +249,11 @@ ClimatologyConfigDialog::ClimatologyConfigDialog(ClimatologyDialog *parent)
     PopulateUnits(m_lastdatatype);
     ReadDataTypeSettings(m_lastdatatype);
 
-    m_stVersion->SetLabel(wxString::Format("%d.%d",
-                                           PLUGIN_VERSION_MAJOR, PLUGIN_VERSION_MINOR));
+    m_stVersion->SetLabel(wxString::Format("%d.%d.%d.%d",
+			PLUGIN_VERSION_MAJOR,
+			PLUGIN_VERSION_MINOR,
+			PLUGIN_VERSION_PATCH,
+			PLUGIN_VERSION_TWEAK));
     m_tDataDirectory->SetValue(ClimatologyDataDirectory());
 
     m_refreshTimer.Connect(wxEVT_TIMER, wxTimerEventHandler(ClimatologyConfigDialog::OnRefreshTimer) , NULL, this);
