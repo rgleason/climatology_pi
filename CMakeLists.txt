@@ -37,12 +37,24 @@ if(COMMAND cmake_policy)
     cmake_policy(SET CMP0043 NEW)
   endif (POLICY CMP0043)
   cmake_policy(SET CMP0048 NEW)
+  if (POLICY CMP0068)
+    cmake_policy(SET CMP0068 NEW)
+  endif (POLICY CMP0068)
   if (POLICY CMP0076)
     cmake_policy(SET CMP0076 NEW)
   endif (POLICY CMP0076)
   if (POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
   endif (POLICY CMP0077)
+  if (POLICY CMP0079)
+    cmake_policy(SET CMP0079 NEW)
+  endif (POLICY CMP0079)
+  if (POLICY CMP0175)
+    cmake_policy(SET CMP0175 NEW)
+  endif (POLICY CMP0175)
+  if (POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+  endif (POLICY CMP0177)
 endif (COMMAND cmake_policy)
 
 # set for vscode/vscodium
@@ -60,19 +72,22 @@ set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic wea
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "6")
 set(VERSION_PATCH "35")
-set(VERSION_TWEAK "0")
-set(VERSION_DATE  "04/01/2025")#DD/MM/YYYY format
+set(VERSION_TWEAK "3")
+set(VERSION_DATE  "05/02/2025")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
 set(OCPN_API_VERSION_MINOR "18")
+
+set(WX_VER "32")
+set(WX_VER_PATCH "8")
+
 set(TP_COMMENT "  * Release using CI")
 
 set(PARENT "opencpn")
 
-#Use to set up a local webserver with git installed.
-#Default is github.com. Now set in pluginconfigure.cmake
-#set(GIT_REPOSITORY_SERVER "github.com")
+# Use to set up a local webserver with git installed. Default is github.com.
+# Now set in PluginSetup.cmake set(GIT_REPOSITORY_SERVER "github.com")
 
 ## Specifies Cloudsmith upload repository suffix for each catalog
 set(PROD "prod")   #Standard Repos
@@ -80,8 +95,8 @@ set(BETA "beta")   #Standard Repos
 set(ALPHA "alpha") #Standard Repos
 
 # Set if  Cloudsmith Base Repository name does not match your Git Repository name.
-#set(CLOUDSMITH_BASE_REPOSITORY "${GIT_REPOSITORY_NAME}")
-#set(CLOUDSMITH_BASE_REPOSITORY "opencpn-plugins")  #Ricks's customization
+#set (CLOUDSMITH_BASE_REPOSITORY "${GIT_REPOSITORY_NAME}")
+#set (CLOUDSMITH_BASE_REPOSITORY "opencpn-plugins")  #Ricks's customization
 set(CLOUDSMITH_BASE_REPOSITORY "climatology")  #without the _pi
 
 # Set the following to use OpenCPN cloudsmith repositories instead of own repositories
@@ -101,8 +116,10 @@ option(PLUGIN_USE_SVG "Use SVG graphics" ON)
 
 set(CMAKE_CXX_STANDARD 11)
 
+# Use local version of GLU library requires libs/glu directory
+# set(USE_LOCAL_GLU FALSE)
 # Prefer libGL.so to libOpenGL.so, see CMP0072
-set(OpenGL_GL_PREFERENCE "LEGACY")   #not operational
+set(OpenGL_GL_PREFERENCE "LEGACY") # not operational
 
 option(USE_GL "Enable OpenGL support" ON)
 message(STATUS "${CMLOC}USE_GL: ${USE_GL}")
@@ -150,7 +167,7 @@ include("PluginConfigure")
 
 add_definitions(-DUSE_S57)
 
-## ----- Section above - Add your project SET(SRCS and SET(HDRS  etc.-------##
+## ---- Section Below - Add your project SET(SRCS and SET(HDRS  etc..
 
 
 SET(SRCS
@@ -193,7 +210,7 @@ add_definitions(-DPLUGIN_USE_SVG)
 ## This add_library  can be used in conditionals below.
 ##=============================================================
 
-set(SRC ${SRCS} ${HDRS})
+set(SRC ${SRCS} ${HDRS} )
 
 ##=============================================================
 ## Modify/configure 'Include' Directories below for the Plugin
@@ -204,7 +221,7 @@ set(SRC ${SRCS} ${HDRS})
 ## Change target_sources to match your project needs.
 ##==============================================================
 
-target_sources(${PACKAGE_NAME} PUBLIC ${SRC})
+target_sources(${PACKAGE_NAME} PUBLIC ${SRC} )
 
 ##==============================================================
 
@@ -218,20 +235,20 @@ if (NOT OCPN_FLATPAK_CONFIG)
     target_link_libraries(${PACKAGE_NAME} windows::headers)
   endif (WIN32)
 
-    add_subdirectory(opencpn-libs/api-18)
-    target_link_libraries(${PACKAGE_NAME} ocpn::api)
+ add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
+  target_link_libraries(${PACKAGE_NAME} ocpn::api)
 
-    add_subdirectory(opencpn-libs/tinyxml)
-    target_link_libraries(${PACKAGE_NAME} ocpn::tinyxml)
+  add_subdirectory(opencpn-libs/tinyxml)
+  target_link_libraries(${PACKAGE_NAME} ocpn::tinyxml)
 
-    add_subdirectory(opencpn-libs/jsonlib)
-    target_link_libraries(${PACKAGE_NAME} ocpn::jsonlib)
+  add_subdirectory(opencpn-libs/jsonlib)
+  target_link_libraries(${PACKAGE_NAME} ocpn::jsonlib)
 
-    add_subdirectory(opencpn-libs/wxJSON)
-    target_link_libraries(${PACKAGE_NAME} ocpn::wxjson)
+  add_subdirectory(opencpn-libs/wxJSON)
+  target_link_libraries(${PACKAGE_NAME} ocpn::wxjson)
 
-    add_subdirectory(opencpn-libs/plugin_dc)
-    target_link_libraries(${PACKAGE_NAME} ocpn::plugin-dc)
+  add_subdirectory(opencpn-libs/plugin_dc)
+  target_link_libraries(${PACKAGE_NAME} ocpn::plugin-dc)
 
      IF(NOT UNIX)
 

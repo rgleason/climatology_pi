@@ -28,6 +28,11 @@
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 
+#include <wx/wfstream.h>
+#include <wx/filename.h>
+#include <wx/dir.h>
+#include <zlib.h>
+
 
 #ifdef __WXOSX__
 # include <OpenGL/OpenGL.h>
@@ -66,6 +71,81 @@ static PFNGLMULTITEXCOORD2DARBPROC s_glMultiTexCoord2dARB = 0;
 
 static int texture_format;
 static bool glQueried = false;
+
+//=======
+bool DecompressGzipFile(const wxString& gzFilePath,
+                        wxString* outError = nullptr) {
+  wxFileName fn(gzFilePath);
+  if (!fn.FileExists()) {
+    if (outError) *outError = "File does not exist: " + gzFilePath;
+    return false;
+  }
+
+  wxString outFilePath = gzFilePath;
+  if (outFilePath.EndsWith(".gz"))
+    outFilePath = outFilePath.Left(outFilePath.Length() - 3);
+
+  gzFile gzf = gzopen(gzFilePath.mb_str(), "rb");
+  if (!gzf) {
+    if (outError) *outError = "Failed to open gzip file: " + gzFilePath;
+    return false;
+  }
+
+  wxFile outFile(outFilePath, wxFile::write);
+  if (!outFile.IsOpened()) {
+    if (outError) *outError = "Failed to open output file: " + outFilePath;
+    gzclose(gzf);
+    return false;
+  }
+
+  char buffer[8192];
+  int bytesRead;
+  while ((bytesRead = gzread(gzf, buffer, sizeof(buffer))) > 0) {
+    outFile.Write(buffer, bytesRead);
+  }
+
+  gzclose(gzf);
+  outFile.Close();
+
+  if (bytesRead < 0) {
+    if (outError) *outError = "Error reading gzip file: " + gzFilePath;
+    return false;
+  }
+
+  return true;
+}
+//=======
+
+
+
+void DecompressAllGzFiles(const wxString& dataDir) {
+  wxDir dir(dataDir);
+  if (!dir.IsOpened()) return;
+
+  wxString filename;
+  bool cont = dir.GetFirst(&filename, "*.gz", wxDIR_FILES);
+  while (cont) {
+    wxString gzFilePath = dataDir + wxFileName::GetPathSeparator() + filename;
+    wxString outFilePath = gzFilePath.Left(gzFilePath.Length() - 3);
+    wxFileName outFile(outFilePath);
+    if (!outFile.FileExists() ||
+        outFile.GetModificationTime() <
+            wxFileName(gzFilePath).GetModificationTime()) {
+      wxString error;
+      wxLogMessage("climatology_pi: Startup decompress %s", gzFilePath);
+      if (!DecompressGzipFile(gzFilePath, &error)) {
+        wxLogMessage("climatology_pi: Failed to decompress %s: %s", gzFilePath,
+                     error);
+      } else {
+        wxLogMessage("climatology_pi: Successfully decompressed %s",
+                     gzFilePath);
+        wxRemoveFile(gzFilePath);
+      }
+    }
+    cont = dir.GetNext(&filename);
+  }
+}
+
 
 static GLboolean QueryExtension( const char *extName )
 {
@@ -138,7 +218,12 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     m_cyclonesDisplayList(0), m_cyclone_drawn_counter(0)
 {
     // make sure the user data directory exists
-    wxFileName::Mkdir(ClimatologyUserDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    wxFileName::Mkdir(ClimatologyDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+
+    // Automatically decompress any .gz files in the data directory
+    // To ensure all .gz files are decompressed at startup before loadingand data
+    DecompressAllGzFiles(ClimatologyDataDirectory());
+
     for(int m=0; m<13; m++) {
         m_WindData[m] = NULL;
         m_CurrentData[m] = NULL;
@@ -155,6 +240,130 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
 
     m_bAllTimes = false;
 
+    // ---------------------------
+    // REPEAT UNTIL ALL FILES LOAD
+    // ---------------------------
+
+    bool firstLoop = true;
+
+    while (true) {
+
+      if (!firstLoop) {
+        // Only decompress after downloads
+        // If downloads succeeded, loop will re-run Load()
+        DecompressAllGzFiles(ClimatologyUserDataDirectory());
+      }
+      firstLoop = false;
+     
+      // Attempt to load data
+      Load();
+
+      if (m_FailedFiles.empty()) {
+        wxLogMessage("climatology_pi: All data loaded successfully.");
+        m_bCompletedLoading = true;
+        break;
+      }
+
+      // Build short failed list
+      wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
+      if (m_sFailedMessage.Len() > FAILED_FILELIST_MSG_LEN)
+        failed_msg.Append("...\n\n");
+
+      // Ask user if they want to download
+      wxMessageDialog ask(&m_dlg,
+                          _("Some Data Failed to load:\n") + failed_msg +
+                              _("Would you like to try to download?"),
+                          _("Climatology"), wxYES | wxNO | wxICON_WARNING);
+
+      if (ask.ShowModal() != wxID_YES) {
+        wxLogMessage("climatology_pi: User declined further downloads.");
+        break;
+      }
+
+      // -------------------------
+      // DOWNLOAD LOOP
+      // -------------------------
+
+      int i = 0;
+      bool failed = false;
+      wxString path = ClimatologyDataDirectory();
+
+      wxString servers[] = {"https://raw.githubusercontent.com"};
+      wxString url = "/rgleason/climatology_pi_data/master/";
+      int servercount = ((sizeof servers) / (sizeof *servers));
+
+      for (auto it = m_FailedFiles.begin(); it != m_FailedFiles.end(); ++it) {
+        wxString fn = *it;
+        if (!fn.EndsWith(".txt")) fn += ".gz";
+
+        int j;
+        for (j = 0; j < servercount; j++) {
+          int ind = (i + j) % servercount;
+          wxString urlpath = servers[ind] + url;
+
+          wxString label = wxString::Format("File %d of %d ", i + 1,
+                                            (int)m_FailedFiles.size());
+
+          _OCPN_DLStatus status = OCPN_downloadFile(
+              urlpath + fn,  // FIXED: removed ?raw=true
+              path + fn, _("downloading climatology data file"), label,
+              wxNullBitmap, GetOCPNCanvasWindow(),
+              OCPN_DLDS_ELAPSED_TIME | OCPN_DLDS_ESTIMATED_TIME |
+                  OCPN_DLDS_REMAINING_TIME | OCPN_DLDS_SPEED | OCPN_DLDS_SIZE |
+                  OCPN_DLDS_URL | OCPN_DLDS_CAN_ABORT | OCPN_DLDS_AUTO_CLOSE,
+              20);
+
+          if (status == OCPN_DL_NO_ERROR) {
+            // increment only on success
+            i++;
+
+            if (fn.EndsWith(".gz")) {
+              wxString gzFilePath = path + fn;
+              wxString error;
+
+              wxLogMessage("climatology_pi: Attempting to decompress %s",
+                           gzFilePath);
+
+              if (!DecompressGzipFile(gzFilePath, &error)) {
+                wxLogMessage("climatology_pi: Failed to decompress %s: %s",
+                             gzFilePath, error);
+              } else {
+                wxLogMessage("climatology_pi: Successfully decompressed %s",
+                             gzFilePath);
+                wxRemoveFile(gzFilePath);
+              }
+            }
+
+            break;  // success
+          }
+
+          if (status == OCPN_DL_ABORTED) return;  // user aborted
+        }
+
+        if (j == servercount) failed = true;
+      }
+
+      if (failed) {
+        wxMessageDialog warn(&m_dlg,
+                             _("Some Data Failed to download.\n"
+                               "Would you like to try again?"),
+                             _("Climatology"), wxYES | wxNO | wxICON_WARNING);
+
+        if (warn.ShowModal() != wxID_YES) {
+          wxLogMessage("climatology_pi: User stopped retry attempts.");
+          break;
+        }
+
+        // Loop continues ? re-check missing files
+        continue;
+      }
+
+      // If downloads succeeded, loop will re-run Load()
+    }
+
+
+
+    /*
     Load();
 
     if(m_FailedFiles.size()) {
@@ -169,11 +378,11 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
         if(mdlg.ShowModal() == wxID_YES) {
             int i = 0;
             bool failed = false;
-            wxString path = ClimatologyUserDataDirectory();
+            wxString path = ClimatologyDataDirectory();
         
             wxString servers[] = {"https://github.com"};
             int servercount = ((sizeof servers) / (sizeof *servers));
-            wxString url = "/seandepagnier/climatology_pi_data/blob/master/";
+            wxString url = "/rgleason/climatology_pi_data/blob/master/";
 
             for(std::list<wxString>::iterator it = m_FailedFiles.begin();
                 it != m_FailedFiles.end(); it++ ) {
@@ -184,17 +393,36 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
                 for(j=0; j<servercount; j++) {
                     int ind = (i+j)%servercount;
                     wxString urlpath = servers[ind] + url;
-                
-                    _OCPN_DLStatus status = OCPN_downloadFile(
-                        urlpath + fn + "?raw=true",
-                        path+fn, _("downloading climatology data file"),
-                        wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
-                        *_img_climatology, GetOCPNCanvasWindow(),
-                        OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
-                        OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
-                        OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE, 20);
-                    if(status == OCPN_DL_NO_ERROR)
-                        break;
+					_OCPN_DLStatus status = OCPN_downloadFile(
+						urlpath + fn + "?raw=true",
+						path+fn, _("downloading climatology data file"),
+						wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
+						wxNullBitmap, GetOCPNCanvasWindow(),
+						// *_img_climatology, GetOCPNCanvasWindow(),
+						OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
+						OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
+						OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE, 20);
+                    if (status == OCPN_DL_NO_ERROR) {
+                      if (fn.EndsWith(".gz")) {
+                        // Decompress if .gz
+                        wxString gzFilePath = path + fn;
+                        wxString error;
+                        wxLogMessage(
+                            "climatology_pi: Attempting to decompress %s",
+                            gzFilePath);
+                        if (!DecompressGzipFile(gzFilePath, &error)) {
+                          wxLogMessage(
+                              "climatology_pi: Failed to decompress %s: %s",
+                              gzFilePath, error);
+                        } else {
+                          wxLogMessage(
+                              "climatology_pi: Successfully decompressed %s",
+                              gzFilePath);
+                          wxRemoveFile(gzFilePath);
+                        }
+                      }
+                      break;
+                    }
                     if(status == OCPN_DL_ABORTED)
                         return;
                 }
@@ -222,9 +450,12 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
             }
         }
     }
-
+   
+    
     if(!m_FailedFiles.size())
         m_bCompletedLoading = true;
+    */
+
 }
 
 ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
@@ -685,7 +916,7 @@ void ClimatologyOverlayFactory::ReadWindData(int month, wxString filename)
 #else
     int div = 1;
 #endif
-    wxString path = ClimatologyUserDataDirectory();
+    wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
         path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
@@ -834,7 +1065,7 @@ void ClimatologyOverlayFactory::ReadCurrentData(int month, wxString filename)
     ZUFILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             goto missing;
     }
@@ -920,7 +1151,7 @@ ZUFILE *ClimatologyOverlayFactory::OpenClimatologyDataFile(wxString filename)
     ZUFILE *f = NULL;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             m_FailedFiles.push_back(filename);
     }
@@ -1185,7 +1416,7 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
     ZUFILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             goto missing;
     }
@@ -1394,7 +1625,7 @@ bool ClimatologyOverlayFactory::ReadElNinoYears(wxString filename)
     FILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = fopen((path + filename).mb_str(), "r"))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = fopen((path + filename).mb_str(), "r")))
             goto missing;
     }

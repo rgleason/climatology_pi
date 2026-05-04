@@ -896,6 +896,10 @@ else (NOT QT_ANDROID)
 
 endif (NOT QT_ANDROID)
 
-find_package(Gettext REQUIRED)
+# Disable Gettext on Windows (GitHub MSVC runners do not provide msgfmt/msgmerge)
+if(NOT WIN32)
+    find_package(Gettext REQUIRED)
+endif()
 
 set(CMLOC ${SAVE_CMLOC})
+
