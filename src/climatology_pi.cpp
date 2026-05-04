@@ -56,16 +56,23 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p)
 
 static climatology_pi *s_climatology_pi;
 
+
+// Apparently this is the new standard location for downloaded files.
+// E.G. for Windows resolves to 
+// C:\Users\fcgle\AppData\Local\opencpn\plugins\climatology_pi\data
+// This is now what shows in the About Tab.
+// This will be the directory until I am told differently.
+// I am most used to C:\ProgramData\opencpn\plugins\climatology_pi\data
+// and I am agnostic.
 wxString ClimatologyDataDirectory()
 {
-//    wxString s =wxFileName::GetPathSeparator();
-//    return *GetpSharedDataLocation() + "plugins"
-//        + s + "climatology_pi" + s + "data" + s;
-
     wxChar s =wxFileName::GetPathSeparator();
     return GetPluginDataDir("climatology_pi") + s + "data" + s;
 }
 
+// No longer used
+// E.G. for Windows resolves to 
+// C:\ProgramData\opencpn\plugins\climatology_pi\data
 wxString ClimatologyUserDataDirectory()
 {
     wxChar s = wxFileName::GetPathSeparator();
