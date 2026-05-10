@@ -58,40 +58,34 @@ static climatology_pi *s_climatology_pi;
 
 wxString ClimatologyDataDirectory()
 {
-//    wxString s =wxFileName::GetPathSeparator();
-//    return *GetpSharedDataLocation() + "plugins"
-//        + s + "climatology_pi" + s + "data" + s;
+    wxFileName dir(GetPluginDataDir("climatology_pi"), "");
+    dir.AppendDir("data");
 
-    wxChar s =wxFileName::GetPathSeparator();
-    return GetPluginDataDir("climatology_pi") + s + "data" + s;
+    if (!dir.DirExists())
+        dir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+
+    return dir.GetFullPath();
 }
 
-wxString ClimatologyUserDataDirectory()
-{
-    wxChar s = wxFileName::GetPathSeparator();
-    return *GetpPrivateApplicationDataLocation() + s + "plugins"
-        + s + "climatology_pi" + s + "data" + s;
-}
+
 
 climatology_pi::climatology_pi(void *ppimgr)
       :opencpn_plugin_118(ppimgr)
 {
       m_pClimatologyDialog = nullptr;
+
       // Create the PlugIn icons
       initialize_images();
 
-      //original way usingimages in file  icon.cpp
-        s_climatology_pi = this;
+      //original technique using images in file  icon.cpp
+      s_climatology_pi = this;
 
-// Create the PlugIn icons  -from shipdriver
-// loads png file for the listing panel icon
-    wxFileName fn;
-    auto path = GetPluginDataDir("climatology_pi");
-    fn.SetPath(path);
+    // Build the full path to the panel icon
+    wxFileName fn(GetPluginDataDir("climatology_pi"), "");
     fn.AppendDir("UserIcons");
     fn.SetFullName("climatology_panel.png");
 
-    path = fn.GetFullPath();
+    wxString path = fn.GetFullPath();
 
     wxInitAllImageHandlers();
 
@@ -105,8 +99,7 @@ climatology_pi::climatology_pi(void *ppimgr)
         m_panelBitmap = wxBitmap(panelIcon);
     else
         wxLogWarning("Climatology panel icon has NOT been loaded");
-// End of from Shipdriver
-
+    // End 
 }
 
 climatology_pi::~climatology_pi()

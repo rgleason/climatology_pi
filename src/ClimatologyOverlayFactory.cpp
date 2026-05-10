@@ -138,7 +138,7 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     m_cyclonesDisplayList(0), m_cyclone_drawn_counter(0)
 {
     // make sure the user data directory exists
-    wxFileName::Mkdir(ClimatologyUserDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+    wxFileName::Mkdir(ClimatologyDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
     for(int m=0; m<13; m++) {
         m_WindData[m] = NULL;
         m_CurrentData[m] = NULL;
@@ -169,7 +169,7 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
         if(mdlg.ShowModal() == wxID_YES) {
             int i = 0;
             bool failed = false;
-            wxString path = ClimatologyUserDataDirectory();
+            wxString path = ClimatologyDataDirectory();
         
             wxString servers[] = {"https://github.com"};
             int servercount = ((sizeof servers) / (sizeof *servers));
@@ -685,7 +685,7 @@ void ClimatologyOverlayFactory::ReadWindData(int month, wxString filename)
 #else
     int div = 1;
 #endif
-    wxString path = ClimatologyUserDataDirectory();
+    wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
         path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
@@ -834,7 +834,7 @@ void ClimatologyOverlayFactory::ReadCurrentData(int month, wxString filename)
     ZUFILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             goto missing;
     }
@@ -920,7 +920,7 @@ ZUFILE *ClimatologyOverlayFactory::OpenClimatologyDataFile(wxString filename)
     ZUFILE *f = NULL;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             m_FailedFiles.push_back(filename);
     }
@@ -1185,7 +1185,7 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
     ZUFILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = TryOpenFile(path + filename)))
             goto missing;
     }
@@ -1394,7 +1394,7 @@ bool ClimatologyOverlayFactory::ReadElNinoYears(wxString filename)
     FILE *f;
     wxString path = ClimatologyDataDirectory();
     if(!(f = fopen((path + filename).mb_str(), "r"))) {
-        path = ClimatologyUserDataDirectory();
+        path = ClimatologyDataDirectory();
         if(!(f = fopen((path + filename).mb_str(), "r")))
             goto missing;
     }
