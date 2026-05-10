@@ -65,6 +65,7 @@ public:
     void PopulateTrackingControls();
     void RefreshRedraw();
     void SetCursorLatLon(double lat, double lon);
+    void UpdateFromTimeline(const wxDateTime &selectedTime);
     bool SettingEnabled(int setting);
     void DisableSetting(int setting);
 
@@ -82,14 +83,7 @@ private:
 
     wxString GetValue(int index, Coord coord=MAG);
 
-    void DayMonthUpdate();
-    void OnMonth( wxCommandEvent& event ) { DayMonthUpdate(); }
-    void OnDay( wxSpinEvent& event ) { DayMonthUpdate(); }
-    void OnTimeline( wxScrollEvent& event );
-    void OnTimelineDown( wxScrollEvent& event );
-    void OnTimelineUp( wxScrollEvent& event );
     void OnAll( wxCommandEvent& event );
-    void OnNow( wxCommandEvent& event );
     void OnUpdateDisplay( wxCommandEvent& event );
     void OnConfig( wxCommandEvent& event );
 
@@ -97,8 +91,6 @@ private:
     void OnCBAny( wxCommandEvent& event );
 
     void OnFitTimer( wxTimerEvent & ) { Fit(); }
-
-    void Now();
     
     wxWindow *pParent;
 

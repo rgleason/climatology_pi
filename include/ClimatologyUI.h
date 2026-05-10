@@ -48,8 +48,7 @@ class ClimatologyDialogBase : public wxDialog
 	private:
 
 	protected:
-		wxSpinCtrl* m_sDay;
-		wxBitmapButton* m_bpNow;
+
 		wxStaticText* m_stSpeed;
 		wxStaticText* m_stDirection;
 		wxTextCtrl* m_tWind;
@@ -64,21 +63,13 @@ class ClimatologyDialogBase : public wxDialog
 
 		// Virtual event handlers, override them in your derived class
 		virtual void OnClose( wxCloseEvent& event ) { event.Skip(); }
-		virtual void OnMonth( wxCommandEvent& event ) { event.Skip(); }
-		virtual void OnDay( wxSpinEvent& event ) { event.Skip(); }
 		virtual void OnAll( wxCommandEvent& event ) { event.Skip(); }
-		virtual void OnNow( wxCommandEvent& event ) { event.Skip(); }
-		virtual void OnTimeline( wxScrollEvent& event ) { event.Skip(); }
-		virtual void OnTimelineDown( wxScrollEvent& event ) { event.Skip(); }
-		virtual void OnTimelineUp( wxScrollEvent& event ) { event.Skip(); }
 		virtual void OnUpdateDisplay( wxCommandEvent& event ) { event.Skip(); }
 		virtual void OnConfig( wxCommandEvent& event ) { event.Skip(); }
 
 
 	public:
-		wxChoice* m_cMonth;
 		wxCheckBox* m_cbAll;
-		wxSlider* m_sTimeline;
 		wxCheckBox* m_cbWind;
 		wxCheckBox* m_cbCurrent;
 		wxCheckBox* m_cbPressure;
