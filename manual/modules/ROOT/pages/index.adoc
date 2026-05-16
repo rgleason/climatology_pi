@@ -148,22 +148,35 @@ You must also get the data files, the plugin will inform you where to install th
 
 == FAQ
 
-How do I set the Wind Rose settings so that they work right? Set the two settings somewhere around Size:100 and Spacing:100 or Size:125 and
-Spacing:60.
+=== How do I set the Wind Rose settings so that they work right? 
+Set the two settings somewhere around Size:100 and Spacing:100 or Size:125 and Spacing:60.
 
 image::climatology-wind-setting-100-100.jpeg[]
 
-image::climatology-wind-setting-100-100.jpeg[]
 
 Wind set at Size:100 and Spacing:100
 
 image::climatology-wind-rose-settings-125-60.jpeg[]
 
-image::climatology-wind-rose-settings-125-60.jpeg[]
 
 Wind set at Size:125 and Spacing:60 (Size:140 and Spacing:100 also might work)
 
 Also Enable in the Wind Tab.
+
+=== How to set the Wind settings for a more useful graphical display?
+
+This display is very useful for seeing the general wind patterns and strength over a large area. The wind atlas roses show the percentage of time the wind is in each direction, the arrows show the direction and strength of the average wind, and the overlay map shows the strength of the average wind. This display is very useful for planning longer voyages and for visualizing weather patterns.
+
+. Wind Atlas Roses with size and distance apart set for screen size
+. Overlay Map enabled showing wind strength with opacity set highish.
+. Direction Arrows enabled, with barbs, size 10 and spacing 36. Opacity set to 25%.
+. Under the wind tab, set the size and distance. For me with a high res display size is 200 spacing 170 set on max opacity.
+
+image::wind-atlas-spacing-size-on-high-res-screens.jpg[]
+
+image::wind-atlas-settings.jpg[]
+
+Nice display which shows what you need to know on the macro scale.
 
 == Warning about use of Data:
 
