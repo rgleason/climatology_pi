@@ -1,0 +1,132 @@
+Ahh, good instinct asking this — because the **first curl build command** is the one that determines *everything* that follows:  
+whether you get a DLL, whether you get an import library, whether OpenSSL is used, whether zlib is linked, and whether MSVC can link your plugin.
+
+Let’s lock this down cleanly so you know exactly what the “first build command” should be.
+
+---
+
+# ⭐ The correct first build command for curl (Win32, MSVC, DLL build)
+
+From **Developer PowerShell for VS 2022**, inside:
+
+```
+C:\Users\fcgle\source\climatology_pi\win_curl
+```
+
+the correct first command is:
+
+```powershell
+cmake -G "Visual Studio 17 2022" -A Win32 `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DBUILD_SHARED_LIBS=ON `
+  -DCURL_USE_OPENSSL=ON `
+  -DOPENSSL_ROOT_DIR="C:/Users/fcgle/source/climatology_pi/win_curl/build32/openssl" `
+  -DCURL_ZLIB=ON `
+  -DZLIB_ROOT="C:/Users/fcgle/source/climatology_pi/win_curl/build32/zlib" `
+  -DCURL_USE_SCHANNEL=OFF `
+  -DCURL_USE_WINSSL=OFF `
+  -DBUILD_CURL_EXE=OFF `
+  -B curl\build32 `
+  -S curl
+```
+
+This is the **configuration** step — the “first build command.”
+
+It tells CMake:
+
+- build a **DLL** (`BUILD_SHARED_LIBS=ON`)
+- use **OpenSSL**, not WinSSL
+- use **zlib**
+- target **Win32**
+- generate a **Visual Studio 2022** solution
+- put the build output in `curl/build32`
+
+This is the command that sets up the entire build.
+
+---
+================================================================
+
+# ⭐ The second command (the actual build)
+
+```powershell
+cmake --build curl\build32 --config Release
+```
+
+This produces:
+
+```
+curl/build32/lib/Release/libcurl.dll
+curl/build32/lib/Release/libcurl_imp.lib   (sometimes)
+```
+
+---
+=============================================================================
+
+# ⭐ The third command (the install step — the one you were missing)
+
+```powershell
+cmake --install curl\build32 --config Release --prefix output32
+```
+
+This produces the final, correct toolchain:
+
+```
+output32/libcurl.dll
+output32/lib/libcurl_imp.lib
+output32/include/curl/*.h
+output32/lib/cmake/CURL/*.cmake
+```
+
+This is the step that generates the import library (`libcurl_imp.lib`) that MSVC needs.
+
+---
+
+# ⭐ Why your install step was fast
+
+Because:
+
+- the DLL was already built earlier  
+- the install step only copies files  
+- no compilation happens during install  
+
+So yes — it’s normal that the install step finishes in seconds.
+
+The long compile time happened earlier when your script built OpenSSL and curl.
+
+---
+
+# ⭐ Summary — the “first build command” you asked for
+
+Here it is again, clean and isolated:
+
+```powershell
+cmake -G "Visual Studio 17 2022" -A Win32 `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DBUILD_SHARED_LIBS=ON `
+  -DCURL_USE_OPENSSL=ON `
+  -DOPENSSL_ROOT_DIR="C:/Users/fcgle/source/climatology_pi/win_curl/build32/openssl" `
+  -DCURL_ZLIB=ON `
+  -DZLIB_ROOT="C:/Users/fcgle/source/climatology_pi/win_curl/build32/zlib" `
+  -DCURL_USE_SCHANNEL=OFF `
+  -DCURL_USE_WINSSL=OFF `
+  -DBUILD_CURL_EXE=OFF `
+  -B curl\build32 `
+  -S curl
+```
+
+This is the command that configures curl correctly for OpenCPN plugin use.
+
+---
+
+If you want, I can rewrite your entire PowerShell script so it:
+
+- builds OpenSSL  
+- builds zlib  
+- builds curl  
+- installs curl  
+- produces a clean reproducible toolchain  
+- never requires manual steps  
+
+Just say the word.
+
+=====================================================================

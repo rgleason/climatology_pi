@@ -1,0 +1,50 @@
+#pragma once
+
+#include <wx/string.h>
+#include <wx/window.h>
+#include <wx/thread.h>
+#include <wx/event.h>
+#include <vector>
+#include <mutex>
+
+#include "DownloadFileEntry.hpp"
+
+// ------------------------------------------------------------
+// Events
+// ------------------------------------------------------------
+wxDECLARE_EVENT(EVT_DM_PROGRESS, wxCommandEvent);
+wxDECLARE_EVENT(EVT_DM_COMPLETE, wxCommandEvent);
+
+class DownloadWorker;
+
+// ------------------------------------------------------------
+// DownloadManager
+// ------------------------------------------------------------
+class DownloadManager
+{
+public:
+    DownloadManager(wxWindow* parent, const wxString& dataDir);
+    ~DownloadManager();
+
+    void SetManifest(const std::vector<DownloadFileEntry>& files);
+    bool AllRequiredAvailable() const;
+
+    void StartBackgroundDownload(bool interactive);
+    void Cancel();
+	
+	bool CurlDownload(wxString url, const wxString& dest);
+
+
+
+private:
+    friend class DownloadWorker;
+
+    wxWindow* m_parent;
+    wxString  m_dataDir;
+
+    std::vector<DownloadFileEntry> m_files;
+    DownloadWorker* m_worker = nullptr;
+
+    mutable std::mutex m_mutex;
+    bool m_cancelled = false;
+};
