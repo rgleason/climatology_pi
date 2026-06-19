@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Climatology :: Climatology Manual</title>
-    <link rel="canonical" href="https://nowhere.net/climatology/0.1/index.html">
-    <meta name="generator" content="Antora 2.3.4">
-    <link rel="stylesheet" href="../../_/css/site.css">
-<link rel="icon" href="../../_/img/favicon.ico" type="image/x-icon">
-    <script>var uiRootPath = '../../_'</script>
+    <title>Climatology :: Climatology</title>
+    <link rel="canonical" href="https://nowhere.net/climatology/index.html">
+    <meta name="generator" content="Antora 3.1.14">
+    <link rel="stylesheet" href="../_/css/site.css">
+<link rel="icon" href="../_/img/favicon.ico" type="image/x-icon">
+    <script>var uiRootPath = '../_'</script>
   </head>
   <body class="article">
 <header class="header">
@@ -18,7 +18,7 @@
       <a class="navbar-title"
          href="https://nowhere.net"
       >
-        Climatology Manual
+        Climatology
         </a>
       <button class="navbar-burger" data-target="topbar-nav">
         <span></span>
@@ -32,22 +32,6 @@
        <div class="navbar-item has-dropdown is-hoverable">
           <a class="navbar-link" href="#">Resources</a>
           <div class="navbar-dropdown">
-            <a class="navbar-item" href="https://www.opencpn.org">OpenCPN.org</a>
-            <a class="navbar-item"
-               href="https://opencpn.org/wiki/dokuwiki/doku.php?id=opencpn:opencpn_user_manual"
-            >
-               User Manual
-               </a>
-            <a class="navbar-item" href="https://github.com/opencpn/OpenCPN">
-               Github Site
-               </a>
-            <a class="navbar-item" href="https://opencpn.org/flyspray/">
-               Bugtracker
-               </a>
-            <a class="navbar-item"
-                href="https://rasbats.github.io/opencpn-plugins-manual/">
-                    Plugin Manual (pre-alpha)
-               </a>
           </div>
         </div>
       </div>
@@ -55,22 +39,17 @@
   </nav>
 </header>
 <div class="body">
-<div class="nav-container" data-component="climatology" data-version="0.1">
+<div class="nav-container" data-component="climatology" data-version="">
   <aside class="nav">
     <div class="panels">
 <div class="nav-panel-explore is-active" data-panel="explore">
   <div class="context">
-    <span class="title">climatology</span>
-    <span class="version">0.1</span>
+    <span class="title">Climatology</span>
+    <span class="version">default</span>
   </div>
   <ul class="components">
     <li class="component is-current">
-      <a class="title" href="index.html">climatology</a>
-      <ul class="versions">
-        <li class="version is-current is-latest">
-          <a href="index.html">0.1</a>
-        </li>
-      </ul>
+      <a class="title" href="index.html">Climatology</a>
     </li>
   </ul>
 </div>
@@ -82,8 +61,11 @@
 <button class="nav-toggle"></button>
   <a href="index.html" class="home-link is-current"></a>
 <nav class="breadcrumbs" aria-label="breadcrumbs">
+  <ul>
+    <li><a href="index.html">Climatology</a></li>
+  </ul>
 </nav>
-  <div class="edit-this-page"><a href="file:///C:/Users/Rick/documents/github/climatology_pi/manual/modules/ROOT/pages/index.adoc">Edit this Page</a></div>
+  <div class="edit-this-page"><a href="file:///C:/Users/fcgle/source/climatology_pi/manual/modules/ROOT/pages/index.adoc">Edit this Page</a></div>
 </div>
   <div class="content">
 <aside class="toc sidebar" data-title="Contents" data-levels="2">
@@ -100,7 +82,7 @@
 <p>Source: <a href="https://github.com/seandepagnier/climatology_pi" class="bare">https://github.com/seandepagnier/climatology_pi</a><br></p>
 </li>
 <li>
-<p>Maintenance Source: <a href="https://github.com/rgleason/climatology_pi.git" class="bare">https://github.com/rgleason/climatology_pi.git</a><br></p>
+<p>Maintenance Source: <a href="https://github.com/rgleason/climatology_pi" class="bare">https://github.com/rgleason/climatology_pi</a><br></p>
 </li>
 <li>
 <p>Download: <a href="https://opencpn.org/OpenCPN/plugins/climatology.html" class="bare">https://opencpn.org/OpenCPN/plugins/climatology.html</a><br></p>
@@ -138,7 +120,7 @@ Pressure, Sea Temperature, Air Temperature, Cloud Cover, Precipitation, Relative
 </div>
 <div class="imageblock">
 <div class="content">
-<img src="_images/climatology1thumb.jpeg" alt="climatology1thumb">
+<img src="_images/climatology1thumb.jpeg" alt="200">
 </div>
 </div>
 <div class="paragraph">
@@ -147,7 +129,7 @@ Pressure, Sea Temperature, Air Temperature, Cloud Cover, Precipitation, Relative
 <div class="sect2">
 <h3 id="_how_do_i_set_the_wind_and_wind_rose_settings_to_work_right"><a class="anchor" href="#_how_do_i_set_the_wind_and_wind_rose_settings_to_work_right"></a>How do I set the Wind and Wind Rose settings to work right?</h3>
 <div class="paragraph">
-<p>See <a href="climatology.html#faq">FAQ</a> below.</p>
+<p>See <a href="#_faq">FAQ</a> below.</p>
 </div>
 <div class="paragraph">
 <p>The wind atlas time shows the percentage of time the wind is in each of
@@ -168,8 +150,8 @@ percentage of average speed as calm (3 knots or less) or in red at least gale fo
 <h2 id="_weather_routing_plugin_uses_climatology_data"><a class="anchor" href="#_weather_routing_plugin_uses_climatology_data"></a>Weather_routing plugin uses Climatology Data</h2>
 <div class="sectionbody">
 <div class="paragraph">
-<p><a href="weather_routing.html">Weather_routing_pi</a> can utilize the 30 year wind averages and current date from Climatology_pi. This is a unique and useful application. For more information see
-<a href="weather_routing.html">Weather_routing_pi</a>.</p>
+<p>Weather_routing_pi can utilize the 30 year wind averages and current date from Climatology_pi. This is a unique and useful application. For more information see
+<a href="#weather_routing::index.adoc" class="xref unresolved">Weather_routing_pi</a>.</p>
 </div>
 </div>
 </div>
@@ -363,14 +345,10 @@ download from <a href="http://opencpn.org/ocpn/downloadplugins">opencpn.org/ocpn
 <div class="sect1">
 <h2 id="_faq"><a class="anchor" href="#_faq"></a>FAQ</h2>
 <div class="sectionbody">
+<div class="sect2">
+<h3 id="_how_do_i_set_the_wind_rose_settings_so_that_they_work_right"><a class="anchor" href="#_how_do_i_set_the_wind_rose_settings_so_that_they_work_right"></a>How do I set the Wind Rose settings so that they work right?</h3>
 <div class="paragraph">
-<p>How do I set the Wind Rose settings so that they work right? Set the two settings somewhere around Size:100 and Spacing:100 or Size:125 and
-Spacing:60.</p>
-</div>
-<div class="imageblock">
-<div class="content">
-<img src="_images/climatology-wind-setting-100-100.jpg" alt="climatology wind setting 100 100">
-</div>
+<p>Set the two settings somewhere around Size:100 and Spacing:100 or Size:125 and Spacing:60.</p>
 </div>
 <div class="imageblock">
 <div class="content">
@@ -382,11 +360,6 @@ Spacing:60.</p>
 </div>
 <div class="imageblock">
 <div class="content">
-<img src="_images/climatology-wind-rose-settings-125-60.jpg" alt="climatology wind rose settings 125 60">
-</div>
-</div>
-<div class="imageblock">
-<div class="content">
 <img src="_images/climatology-wind-rose-settings-125-60.jpeg" alt="climatology wind rose settings 125 60">
 </div>
 </div>
@@ -395,6 +368,42 @@ Spacing:60.</p>
 </div>
 <div class="paragraph">
 <p>Also Enable in the Wind Tab.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_how_to_set_the_wind_settings_for_a_more_useful_graphical_display"><a class="anchor" href="#_how_to_set_the_wind_settings_for_a_more_useful_graphical_display"></a>How to set the Wind settings for a more useful graphical display?</h3>
+<div class="paragraph">
+<p>This display is very useful for seeing the general wind patterns and strength over a large area. The wind atlas roses show the percentage of time the wind is in each direction, the arrows show the direction and strength of the average wind, and the overlay map shows the strength of the average wind. This display is very useful for planning longer voyages and for visualizing weather patterns.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Wind Atlas Roses with size and distance apart set for screen size</p>
+</li>
+<li>
+<p>Overlay Map enabled showing wind strength with opacity set highish.</p>
+</li>
+<li>
+<p>Direction Arrows enabled, with barbs, size 10 and spacing 36. Opacity set to 25%.</p>
+</li>
+<li>
+<p>Under the wind tab, set the size and distance. For me with a high res display size is 200 spacing 170 set on max opacity.</p>
+</li>
+</ol>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="_images/wind-atlas-spacing-size-on-high-res-screens.jpg" alt="wind atlas spacing size on high res screens">
+</div>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="_images/wind-atlas-settings.jpg" alt="wind atlas settings">
+</div>
+</div>
+<div class="paragraph">
+<p>Nice display which shows what you need to know on the macro scale.</p>
+</div>
 </div>
 </div>
 </div>
@@ -439,7 +448,7 @@ Spacing:60.</p>
      Sources: https://gitlab.com/leamas/antora-ui-default
   </p>
 </footer>
-<script src="../../_/js/site.js"></script>
-<script async src="../../_/js/vendor/highlight.js"></script>
+<script src="../_/js/site.js"></script>
+<script async src="../_/js/vendor/highlight.js"></script>
   </body>
 </html>
