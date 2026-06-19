@@ -24,14 +24,35 @@
  ***************************************************************************
  */
 
+#pragma once
 #include <list>
 #include <map>
 #include <vector>
+#include <wx/colour.h>
 
 #include "zuFile.h"
 
 #include "IsoBarMap.h"
 #include "pidc.h"
+#include "DownloadManager.hpp"
+#include "ManifestEntry.hpp"
+
+std::vector<DownloadFileEntry>
+ConvertManifest(const std::vector<ManifestEntry>& manifest);
+
+struct CycloneFilterParams {
+    int statemask;
+    int minwindspeed;
+    int maxpressure;
+    wxDateTime startDate;
+    wxDateTime endDate;
+
+    bool allowElNino;
+    bool allowLaNina;
+    bool allowNeutral;
+    bool allowNotAvailable;
+};
+
 
 class PlugIn_ViewPort;
 enum Coord {U, V, MAG, DIRECTION};
@@ -143,6 +164,7 @@ struct Cyclone
 //    Climatology Overlay Specification
 //----------------------------------------------------------------------------------------------------------
 
+
 class ClimatologyOverlay {
 public:
     ClimatologyOverlay( void )
@@ -161,6 +183,8 @@ public:
 
     int m_width, m_height;
     double m_latoff, m_lonoff;
+
+
 };
 
 //----------------------------------------------------------------------------------------------------------
@@ -169,7 +193,7 @@ public:
 
 class ClimatologyDialog;
 class wxGLContext;
-class ClimatologyOverlayFactory;
+class ClimatologyOverlayFactory;   // ← REQUIRED
 
 class ClimatologyIsoBarMap : public IsoBarMap
 {
@@ -197,10 +221,14 @@ enum {WIND_SETTING, CURRENT_SETTING, PRESSURE_SETTING, SEATEMP_SETTING,
       AIRTEMP_SETTING, CLOUD_SETTING, PRECIPITATION_SETTING, RELHUMIDIY_SETTING,
       LIGHTNING_SETTING, SEADEPTH_SETTING, CYCLONE_SETTING};
 
-class ClimatologyOverlayFactory {
+class ClimatologyOverlayFactory : public wxEvtHandler {
 public:
     ClimatologyOverlayFactory( ClimatologyDialog &dlg );
     ~ClimatologyOverlayFactory();
+	
+	friend class CycloneLoaderThread;   
+	
+	void OnDownloadComplete(wxCommandEvent& event);  
 
     void GetDateInterpolation(const wxDateTime *cdate,
                               int &month, int &nmonth, double &dpos);
@@ -214,14 +242,14 @@ public:
                               double lat, double lon,
                               double *directions, double *speeds,
                               double &gale, double &calm);
+	bool HasDataFor(int setting, int month);
 
     double GetMin(int setting);
     double GetMax(int setting);
 
     double getValueMonth(enum Coord coord, int setting, double lat, double lon, int month);
     double getValue(enum Coord coord, int setting, double lat, double lon, wxDateTime *date);
-    double getCurValue(enum Coord coord, int setting, double lat, double lon)
-    { return getValue(coord, setting, lat, lon, 0); }
+	double getCurValue(enum Coord coord, int setting, double lat, double lon);
     double getCurCalibratedValue(enum Coord coord, int setting, double lat, double lon);
     double getCalibratedValueMonth(enum Coord coord, int setting, double lat, double lon, int month);
 
@@ -232,8 +260,11 @@ public:
     wxSemaphore m_cyclone_cache_semaphore;
     std::map<int, std::list<CycloneState*> > m_cyclone_cache;
 
+    void Load();
     void BuildCycloneCache();
     bool RenderOverlay( piDC &dc, PlugIn_ViewPort &vp );
+	void RenderGLOverlay(wxGLContext *pcontext, PlugIn_ViewPort *vp);
+	void UpdateCycloneFilterFromUI();
 
     static wxColour GetGraphicColor(int setting, double val_in);
 
@@ -244,8 +275,9 @@ public:
     bool m_bCompletedLoading; // finished loading climatology data without abort
 
 private:
-    void Load();
-    void LoadInternal(wxGenericProgressDialog *progressdialog);
+	DownloadManager* m_downloadManager = nullptr;
+
+	void LoadInternal(wxGenericProgressDialog *progressdialog);
     void Free();
 
     void ReadWindData(int month, wxString filename);
@@ -263,7 +295,7 @@ private:
     void ReadSeaDepthData(wxString filename);
     bool ReadCycloneData(wxString filename, std::list<Cyclone*> &cyclones, bool south=false);
     bool ReadElNinoYears(wxString filename);
-
+	bool ValidateCycloneFiles();
     void DrawLine( double x1, double y1, double x2, double y2,
                    const wxColour &color, double width );
     void DrawCircle( double x, double y, double r, const wxColour &color, double width );
@@ -279,6 +311,7 @@ private:
     void RenderWindAtlas(PlugIn_ViewPort &vp);
     void RenderCycloneSegment(CycloneState &ss, PlugIn_ViewPort &vp, int dayspan);
     void RenderCyclones(PlugIn_ViewPort &vp);
+	CycloneFilterParams m_cycloneParams;
 
     bool CreateGLTexture(ClimatologyOverlay &O, int setting, int month, PlugIn_ViewPort &vp);
     void DrawGLTexture( ClimatologyOverlay &O1, ClimatologyOverlay &O2,
@@ -312,9 +345,23 @@ private:
     int m_cyclonesDisplayList;
     long m_cyclone_drawn_counter;
 
-    std::list<Cyclone*> m_wpa, m_epa, m_spa, m_atl, m_she, m_nio;
+    // Cyclone basin lists
+	std::list<Cyclone*> m_epa, m_wpa, m_spa, m_atl, m_she, m_nio;
+	
+	// El Nino Years
+	std::map<int, ElNinoYear> m_ElNinoYears;
+	
+	// ------------------------------
+	// Background cyclone loader state
+	// ------------------------------
+	
+	bool m_cycloneReady = false;
 
-    std::map<int, ElNinoYear> m_ElNinoYears;
+	// Pointer to dialog for posting events
+	ClimatologyDialog* m_pClimatologyDialog = nullptr;
+
+	// Background loader entry point
+	void LoadCycloneDataBackground(std::function<void(const wxString&)> sendProgress);
 
     wxString m_sFailedMessage;
 };

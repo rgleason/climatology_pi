@@ -24,21 +24,19 @@
  ***************************************************************************
  */
 
-#ifndef _CLIMATOLOGYPI_H_
-#define _CLIMATOLOGYPI_H_
+#ifndef _CLIMATOLOGY_PI_PLUGIN_H_
+#define _CLIMATOLOGY_PI_PLUGIN_H_
 
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 
 #include "version.h"
-
 #define ABOUT_AUTHOR_URL "http://seandepagnier.users.sourceforge.net"
-
 #include "ocpn_plugin.h"
-
 #include "json/json.h"
-
 #include "defs.h"
+#include "DownloadManager.hpp"
+#include "DownloadFileEntry.hpp"
 
 wxString ClimatologyDataDirectory();
 
@@ -53,13 +51,17 @@ wxString ClimatologyDataDirectory();
 extern QString qtStyleSheet;
 #endif
 
+#define ID_CYCLONE_READY 9001
+#define ID_CYCLONE_PROGRESS 9002
+
+
 //----------------------------------------------------------------------------------------------------------
 //    The PlugIn Class Definition
 //----------------------------------------------------------------------------------------------------------
 
 #define CLIMATOLOGY_TOOL_POSITION    -1          // Request default positioning of toolbar tool
 
-class climatology_pi : public opencpn_plugin_118
+class climatology_pi : public opencpn_plugin_120
 {
 public:
       climatology_pi(void *ppimgr);
@@ -107,17 +109,23 @@ public:
 
       void OnClimatologyDialogClose();
       void SendTimelineMessage(wxDateTime time);
+	  void OnDownloadComplete(wxCommandEvent& event);
 
 private:
       void FreeData();
+	  
+	  std::unique_ptr<DownloadManager> m_downloadManager;
+	  ClimatologyDialog* m_pClimatologyDialog = nullptr;
 
       bool LoadConfig(void);
       bool SaveConfig(void);
+	  bool m_cycloneReady = false;
+
 
       wxFileConfig     *m_pconfig;
       wxWindow         *m_parent_window;
-
-      ClimatologyDialog       *m_pClimatologyDialog;
+      void BootstrapDataDirectory();
+	  wxString m_plugin_dir;
 
       int              m_display_width, m_display_height;
       int              m_leftclick_tool_id;
@@ -128,4 +136,4 @@ private:
 };
 
 extern ClimatologyOverlayFactory *g_pOverlayFactory;
-#endif
+#endif // CLIMATOLOGY_PI_PLUGIN_H

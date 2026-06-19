@@ -35,6 +35,7 @@
 #include <wx/progdlg.h>
 #include <wx/fileconf.h>
 #include <wx/glcanvas.h>
+#include <wx/stattext.h>
 
 #ifdef __OCPN__ANDROID__
 #include <wx/qt/private/wxQtGesture.h>
@@ -61,19 +62,21 @@ public:
     void OnEvtPanGesture( wxQT_PanGestureEvent &event);
 #endif
     void Init();
-    void UpdateTrackingControls();
+	void UpdateTrackingControls();
     void PopulateTrackingControls();
     void RefreshRedraw();
     void SetCursorLatLon(double lat, double lon);
+	void EnableAllControls(bool enable);
     bool SettingEnabled(int setting);
     void DisableSetting(int setting);
 
     void FitLater() { m_fittimer.Start(100, true); }
     void Save();
-
+	bool Show(bool show);
+	
+	wxStaticText* m_tStatus;
     ClimatologyConfigDialog *m_cfgdlg;
     climatology_pi *pPlugIn;
-    bool Show(bool show);
 
 private:
     wxCheckBox *GetSettingControl(int setting);
@@ -92,17 +95,17 @@ private:
     void OnNow( wxCommandEvent& event );
     void OnUpdateDisplay( wxCommandEvent& event );
     void OnConfig( wxCommandEvent& event );
-
+	void OnCycloneReady(wxCommandEvent& event);
+	void OnCycloneProgress(wxCommandEvent& event);
+	
     void OnClose( wxCloseEvent& event );
     void OnCBAny( wxCommandEvent& event );
-
     void OnFitTimer( wxTimerEvent & ) { Fit(); }
 
     void Now();
-    
     wxWindow *pParent;
 
-    wxPoint m_startPos, m_startMouse;
+	wxPoint m_startPos, m_startMouse;
     double m_cursorlat, m_cursorlon;
 
     wxTimer m_fittimer;
