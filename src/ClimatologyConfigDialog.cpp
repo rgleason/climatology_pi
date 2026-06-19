@@ -114,6 +114,33 @@ double ClimatologyOverlaySettings::CalibrationFactor(int setting)
     return 1;
 }
 
+void ClimatologyOverlayFactory::UpdateCycloneFilterFromUI()
+{
+    CycloneFilterParams p;
+
+    p.statemask = 0;
+    p.statemask |= 1 * m_dlg.m_cfgdlg->m_cbTropical->GetValue();
+    p.statemask |= 2 * m_dlg.m_cfgdlg->m_cbSubTropical->GetValue();
+    p.statemask |= 4 * m_dlg.m_cfgdlg->m_cbExtraTropical->GetValue();
+    p.statemask |= 8 * m_dlg.m_cfgdlg->m_cbRemanent->GetValue();
+
+    p.minwindspeed = m_dlg.m_cfgdlg->m_sMinWindSpeed->GetValue();
+    p.maxpressure  = m_dlg.m_cfgdlg->m_sMaxPressure->GetValue();
+
+#ifndef __OCPN__ANDROID__
+    p.startDate = m_dlg.m_cfgdlg->m_dPStart->GetValue();
+    p.endDate   = m_dlg.m_cfgdlg->m_dPEnd->GetValue();
+#endif
+
+    p.allowElNino      = m_dlg.m_cfgdlg->m_cbElNino->GetValue();
+    p.allowLaNina      = m_dlg.m_cfgdlg->m_cbLaNina->GetValue();
+    p.allowNeutral     = m_dlg.m_cfgdlg->m_cbNeutral->GetValue();
+    p.allowNotAvailable= m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue();
+
+    m_cycloneParams = p;
+}
+
+
 void ClimatologyOverlaySettings::Load()
 {
     /* read settings here */
@@ -476,8 +503,10 @@ void ClimatologyConfigDialog::OnUpdateIsobar()
 
 void ClimatologyConfigDialog::OnUpdateCyclones()
 {
-    g_pOverlayFactory->BuildCycloneCache();
-    OnUpdate();
+	g_pOverlayFactory->UpdateCycloneFilterFromUI();
+	g_pOverlayFactory->BuildCycloneCache();
+	OnUpdate();
+
 }
 
 void ClimatologyConfigDialog::OnPaintKey( wxPaintEvent& event )
