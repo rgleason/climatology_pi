@@ -30,20 +30,66 @@
 #ifndef  WX_PRECOMP
   #include "wx/wx.h"
   #include <wx/glcanvas.h>
-#endif //precompiled headers
+#endif 
 
 #include <wx/treectrl.h>
 #include <wx/fileconf.h>
+#include <wx/log.h>
+#include <wx/filename.h>
+#include <wx/log.h>
 
-#include "climatology_pi.h"
+#include "ocpn_plugin.h"
 #include "icons.h"
+#include "climatology_pi.h"
+#include "ClimatologyOverlayFactory.h"
 #include "ClimatologyDialog.h"
+#include "ManifestLoader.hpp"
+#include "DownloadManager.hpp"
+#include "DownloadFileEntry.hpp"
+#include <curl/curl.h>
+
+
+
+#ifdef CLIMATOLOGY_BUNDLED_CURL
+#include <windows.h>
+
+static bool LoadBundledCurl()
+{
+    wxString pluginDir = GetPluginDataDir("climatology_pi");
+    wxFileName curlDll(pluginDir, "libcurl.dll");
+
+    if (!curlDll.FileExists()) {
+        wxLogMessage("Climatology: bundled libcurl.dll not found at %s",
+                     curlDll.GetFullPath());
+        return false;
+    }
+
+    HMODULE hCurl = LoadLibraryW(curlDll.GetFullPath().wc_str());
+    if (!hCurl) {
+        wxLogMessage("Climatology: LoadLibrary failed for %s",
+                     curlDll.GetFullPath());
+        return false;
+    }
+
+    wxLogMessage("Climatology: bundled libcurl.dll loaded from %s",
+                 curlDll.GetFullPath());
+    return true;
+}
+#endif
+
+void Climatology_InitCurl()
+{
+#ifdef CLIMATOLOGY_BUNDLED_CURL
+    LoadBundledCurl();
+#else
+    wxLogMessage("Climatology: using system curl");
+#endif
+}
 
 
 ClimatologyOverlayFactory *g_pOverlayFactory = NULL;
 
 // the class factories, used to create and destroy instances of the PlugIn
-
 extern "C" DECL_EXP opencpn_plugin* create_pi(void *ppimgr)
 {
     return new climatology_pi(ppimgr);
@@ -67,21 +113,21 @@ wxString ClimatologyDataDirectory()
     return dir.GetFullPath();
 }
 
-
-
 climatology_pi::climatology_pi(void *ppimgr)
-      :opencpn_plugin_118(ppimgr)
+    : opencpn_plugin_120(ppimgr)
 {
-      m_pClimatologyDialog = nullptr;
+    m_pClimatologyDialog = nullptr;
 
-      // Create the PlugIn icons
-      initialize_images();
+    // Plugin installation directory (icons, metadata, curl DLL, cacert.pem)
+    m_plugin_dir = GetPluginDataDir("climatology_pi");
 
-      //original technique using images in file  icon.cpp
-      s_climatology_pi = this;
+    // Create the PlugIn icons
+    initialize_images();
 
-    // Build the full path to the panel icon
-    wxFileName fn(GetPluginDataDir("climatology_pi"), "");
+    s_climatology_pi = this;
+
+    // Load panel icon from <plugin_dir>/UserIcons/climatology_panel.png
+    wxFileName fn(m_plugin_dir, "");
     fn.AppendDir("UserIcons");
     fn.SetFullName("climatology_panel.png");
 
@@ -89,18 +135,19 @@ climatology_pi::climatology_pi(void *ppimgr)
 
     wxInitAllImageHandlers();
 
-    wxLogDebug(wxString("Using icon path: ") + path);
+    wxLogDebug("Using icon path: " + path);
     if (!wxImage::CanRead(path)) {
         wxLogDebug("Initiating image handlers.");
         wxInitAllImageHandlers();
     }
+
     wxImage panelIcon(path);
     if (panelIcon.IsOk())
         m_panelBitmap = wxBitmap(panelIcon);
     else
         wxLogWarning("Climatology panel icon has NOT been loaded");
-    // End 
 }
+
 
 climatology_pi::~climatology_pi()
 {
@@ -110,86 +157,119 @@ climatology_pi::~climatology_pi()
 
 int climatology_pi::Init()
 {
-      AddLocaleCatalog( _T("opencpn-climatology_pi") );
+    // --- 1. Initialize curl global state FIRST ---
+    curl_global_init(CURL_GLOBAL_DEFAULT);
 
-      // Set some default private member parameters
-      m_climatology_dialog_x = 0;
-      m_climatology_dialog_y = 0;
-      m_climatology_dialog_sx = 200;
-      m_climatology_dialog_sy = 400;
+    // --- 2. Load bundled curl BEFORE any curl_easy_init() ---
+    Climatology_InitCurl();
 
-      ::wxDisplaySize(&m_display_width, &m_display_height);
+    // --- 3. Localization ---
+    AddLocaleCatalog(_T("opencpn-climatology_pi"));
 
-      //    Get a pointer to the opencpn configuration object
-      m_pconfig = GetOCPNConfigObject();
+    // --- 4. UI and plugin setup ---
+    m_climatology_dialog_x = 0;
+    m_climatology_dialog_y = 0;
+    m_climatology_dialog_sx = 200;
+    m_climatology_dialog_sy = 400;
 
-      // Get a pointer to the opencpn display canvas, to use as a parent for the  dialog
-      m_parent_window = GetOCPNCanvasWindow();
+    ::wxDisplaySize(&m_display_width, &m_display_height);
 
-      //    This PlugIn needs a toolbar icon, so request its insertion if enabled locally
-
+    m_pconfig = GetOCPNConfigObject();
+    m_parent_window = GetOCPNCanvasWindow();
 
 #ifdef PLUGIN_USE_SVG
-      m_leftclick_tool_id = InsertPlugInToolSVG( _T( "Climatology" ),
-	  _svg_climatology, _svg_climatology, _svg_climatology_toggled,
-	  wxITEM_CHECK, _("Climatology"), _T( "") , NULL,
-	  CLIMATOLOGY_TOOL_POSITION, 0, this);
+    m_leftclick_tool_id = InsertPlugInToolSVG(
+        _T("Climatology"),
+        _svg_climatology, _svg_climatology, _svg_climatology_toggled,
+        wxITEM_CHECK, _("Climatology"), _T(""), NULL,
+        CLIMATOLOGY_TOOL_POSITION, 0, this);
 #else
-      m_leftclick_tool_id  = InsertPlugInTool( _T(""), _img_climatology,
-      _img_climatology, wxITEM_NORMAL, _("Climatology"), _T(""), NULL,
-	  CLIMATOLOGY_TOOL_POSITION, 0, this);
+    m_leftclick_tool_id = InsertPlugInTool(
+        _T(""), _img_climatology, _img_climatology,
+        wxITEM_NORMAL, _("Climatology"), _T(""), NULL,
+        CLIMATOLOGY_TOOL_POSITION, 0, this);
 #endif
-      SendClimatology(true);
 
-      return (WANTS_OVERLAY_CALLBACK |
-           WANTS_OPENGL_OVERLAY_CALLBACK |
-           WANTS_CURSOR_LATLON       |
-           WANTS_TOOLBAR_CALLBACK    |
-           INSTALLS_TOOLBAR_TOOL     |
-           WANTS_CONFIG              |
-           WANTS_PLUGIN_MESSAGING
-            );
+    SendClimatology(true);
+
+    // Ensure plugin data directory exists
+    BootstrapDataDirectory();
+	
+    // Load manifest.json
+    wxString manifestPath = m_plugin_dir + "/manifest.json";
+
+    ManifestLoader loader(manifestPath.ToStdString());
+    std::vector<ManifestEntry> manifestEntries;
+
+    if (!loader.Load(manifestEntries)) {
+        wxLogWarning("Climatology: manifest.json failed to load");
+        return (WANTS_OVERLAY_CALLBACK |
+                WANTS_OPENGL_OVERLAY_CALLBACK |
+                WANTS_CURSOR_LATLON |
+                WANTS_TOOLBAR_CALLBACK |
+                INSTALLS_TOOLBAR_TOOL |
+                WANTS_CONFIG |
+                WANTS_PLUGIN_MESSAGING);
+    }
+
+	// Convert manifest entries into DownloadFileEntry list (build full URLs)
+	std::vector<DownloadFileEntry> files = ConvertManifest(manifestEntries);
+
+    // Create DownloadManager
+    m_downloadManager = std::make_unique<DownloadManager>(
+        m_parent_window,
+        ClimatologyDataDirectory()
+    );
+
+    // Give it the file list
+    m_downloadManager->SetManifest(files);
+
+    // Bind completion event
+    m_parent_window->Bind(
+        EVT_DM_COMPLETE,
+        &climatology_pi::OnDownloadComplete,
+        this
+    );
+
+    // Start background download
+    m_downloadManager->StartBackgroundDownload(true);
+
+    return (WANTS_OVERLAY_CALLBACK |
+            WANTS_OPENGL_OVERLAY_CALLBACK |
+            WANTS_CURSOR_LATLON |
+            WANTS_TOOLBAR_CALLBACK |
+            INSTALLS_TOOLBAR_TOOL |
+            WANTS_CONFIG |
+            WANTS_PLUGIN_MESSAGING);
 }
+
 
 bool climatology_pi::DeInit()
 {
+	curl_global_cleanup();
     SendClimatology(false);
     FreeData();
     RemovePlugInTool(m_leftclick_tool_id);
-
     return true;
 }
 
-int climatology_pi::GetAPIVersionMajor()
-{
-      return OCPN_API_VERSION_MAJOR;
-}
+int climatology_pi::GetAPIVersionMajor() 
+{ return OCPN_API_VERSION_MAJOR; }
 
-int climatology_pi::GetAPIVersionMinor()
-{
-      return OCPN_API_VERSION_MINOR;
-}
+int climatology_pi::GetAPIVersionMinor() 
+{ return OCPN_API_VERSION_MINOR; }
 
 int climatology_pi::GetPlugInVersionMajor()
-{
-      return PLUGIN_VERSION_MAJOR;
-}
+{ return PLUGIN_VERSION_MAJOR; }
 
 int climatology_pi::GetPlugInVersionMinor()
-{
-      return PLUGIN_VERSION_MINOR;
-}
+{  return PLUGIN_VERSION_MINOR; }
 
 int climatology_pi::GetPlugInVersionPatch()
-{
-      return PLUGIN_VERSION_PATCH;
-}
+{ return PLUGIN_VERSION_PATCH; }
 
 int climatology_pi::GetPlugInVersionPost()
-{
-      return PLUGIN_VERSION_TWEAK;
-}
-
+{ return PLUGIN_VERSION_TWEAK; }
 
 /*  Converts  icon.cpp file to an image. Original process
 wxBitmap *climatology_pi::GetPlugInBitmap()
@@ -198,35 +278,26 @@ wxBitmap *climatology_pi::GetPlugInBitmap()
 }
 */
 
-// Shipdriver uses the climatology_panel.png file to make the bitmap.
+// Uses climatology_panel.png file to make the bitmap.
 wxBitmap *climatology_pi::GetPlugInBitmap()  { return &m_panelBitmap; }
-// End of shipdriver process
 
 wxString climatology_pi::GetCommonName()
-{
-	      return _T(PLUGIN_COMMON_NAME);
-}
+{ return _T(PLUGIN_COMMON_NAME); }
 
 wxString climatology_pi::GetShortDescription()
-{
-    return _(PLUGIN_SHORT_DESCRIPTION);
-}
-
+{ return _(PLUGIN_SHORT_DESCRIPTION); }
 
 wxString climatology_pi::GetLongDescription()
-{
-    return _(PLUGIN_LONG_DESCRIPTION);
-
-}
+{ return _(PLUGIN_LONG_DESCRIPTION); }
 
 void climatology_pi::CreateOverlayFactory()
 {
-    if(m_pClimatologyDialog)
+    // If dialog already exists, nothing to do
+    if (m_pClimatologyDialog)
         return;
 
-    //    And load the configuration items
+    // Create dialog FIRST
     LoadConfig();
-
     m_pClimatologyDialog = new ClimatologyDialog(m_parent_window, this);
     m_pClimatologyDialog->Move(wxPoint(m_climatology_dialog_x, m_climatology_dialog_y));
 
@@ -234,16 +305,26 @@ void climatology_pi::CreateOverlayFactory()
     icon.CopyFromBitmap(*_img_climatology);
     m_pClimatologyDialog->SetIcon(icon);
 
-    // Create the drawing factory
-    g_pOverlayFactory = new ClimatologyOverlayFactory( *m_pClimatologyDialog );
-
-    if(g_pOverlayFactory->m_bCompletedLoading) {
-        SendClimatology(true);
-        m_pClimatologyDialog->UpdateTrackingControls();
-        m_pClimatologyDialog->FitLater(); // buggy wx
+    // Now create the overlay factory
+    if (!g_pOverlayFactory) {
+        g_pOverlayFactory = new ClimatologyOverlayFactory(*m_pClimatologyDialog);
     }
+
+    // If data is still loading, disable controls and show status
+	if (!g_pOverlayFactory->m_bCompletedLoading) {
+    m_pClimatologyDialog->EnableAllControls(false);
+    m_pClimatologyDialog->m_tStatus->SetLabel("Loading climatology data...");
+    m_pClimatologyDialog->Show(true);   // ⭐ keep dialog visible
+    return;
+	}
+
+    // Data is already loaded and ready — update UI
+    SendClimatology(true);
+    m_pClimatologyDialog->UpdateTrackingControls();
+    m_pClimatologyDialog->FitLater();
     m_pClimatologyDialog->Hide();
 }
+
 
 void climatology_pi::SetDefaults(void)
 {
@@ -252,6 +333,13 @@ void climatology_pi::SetDefaults(void)
 int climatology_pi::GetToolbarToolCount(void)
 {
       return 1;
+}
+
+void climatology_pi::BootstrapDataDirectory()
+{
+    // Ensure the plugin's writable data directory exists
+    wxString dataDir = ClimatologyDataDirectory();
+    wxFileName::Mkdir(dataDir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
 }
 
 static bool ClimatologyData(int setting, wxDateTime &date, double lat, double lon,
@@ -336,18 +424,21 @@ bool climatology_pi::RenderGLOverlay(wxGLContext *pcontext, PlugIn_ViewPort *vp)
        !g_pOverlayFactory)
         return false;
 
-    piDC pidc;
-    glEnable( GL_BLEND );
-    pidc.SetVP(vp);
+    // No piDC here anymore, no direct RenderOverlay call
+    g_pOverlayFactory->RenderGLOverlay(pcontext, vp);
 
-    g_pOverlayFactory->RenderOverlay ( pidc, *vp );
+
     return true;
 }
+
 
 void climatology_pi::SetCursorLatLon(double lat, double lon)
 {
     if(m_pClimatologyDialog)
         m_pClimatologyDialog->SetCursorLatLon(lat, lon);
+	
+	wxLogMessage("Climatology: SetCursorLatLon plugin: lat=%f lon=%f dlg=%p",
+             lat, lon, m_pClimatologyDialog);
 }
 
 void climatology_pi::SendClimatology(bool valid)
@@ -377,8 +468,48 @@ void climatology_pi::SetPluginMessage(wxString &message_id, wxString &message_bo
     }
 }
 
+void climatology_pi::OnDownloadComplete(wxCommandEvent& event)
+{
+    wxLogMessage("Climatology_pi: Downloads complete — loading data");
+
+    // Unbind event
+    m_parent_window->Unbind(EVT_DM_COMPLETE,
+        &climatology_pi::OnDownloadComplete, this);
+
+    // Clean up download manager
+    m_downloadManager.reset();
+
+    // Ensure dialog/factory exist
+    if (!m_pClimatologyDialog)
+        CreateOverlayFactory();
+
+    if (!g_pOverlayFactory)
+        g_pOverlayFactory = new ClimatologyOverlayFactory(*m_pClimatologyDialog);
+
+    // Load climatology data from disk
+    g_pOverlayFactory->Load();
+
+    if (!g_pOverlayFactory->m_bCompletedLoading) {
+        wxLogMessage("Climatology_pi: Data load failed");
+        if (m_pClimatologyDialog) {
+            m_pClimatologyDialog->EnableAllControls(false);
+            m_pClimatologyDialog->m_tStatus->SetLabel("Climatology data load failed.");
+        }
+        return;
+    }
+
+    // Success
+    if (m_pClimatologyDialog) {
+        m_pClimatologyDialog->EnableAllControls(true);
+        m_pClimatologyDialog->m_tStatus->SetLabel("Climatology data loaded.");
+        m_pClimatologyDialog->UpdateTrackingControls();
+    }
+
+    wxLogMessage("Climatology_pi: Data load complete");
+}
+
 // -------------------------------------------------------
-// GRIBMELINE is a misnomer
+// GRIBTIMELINE is a misnomer
 void climatology_pi::SendTimelineMessage(wxDateTime time)
 {
     Json::Value v;
@@ -447,7 +578,53 @@ bool climatology_pi::SaveConfig(void)
     return true;
 }
 
+
 void climatology_pi::SetColorScheme(PI_ColorScheme cs)
 {
     DimeWindow(m_pClimatologyDialog);
+}
+
+extern "C" DECL_EXP int GetAPIVersionMajor()
+{
+    return OCPN_API_VERSION_MAJOR;   // 1
+}
+
+extern "C" DECL_EXP int GetAPIVersionMinor()
+{
+    return OCPN_API_VERSION_MINOR;   // 20
+}
+
+extern "C" DECL_EXP int GetPlugInVersionMajor()
+{
+    return PLUGIN_VERSION_MAJOR;     // 1
+}
+
+extern "C" DECL_EXP int GetPlugInVersionMinor()
+{
+    return PLUGIN_VERSION_MINOR;     // 6
+}
+
+extern "C" DECL_EXP int GetPlugInVersionPatch()
+{
+    return PLUGIN_VERSION_PATCH;     // 38
+}
+
+extern "C" DECL_EXP int GetPlugInVersionPost()
+{
+    return PLUGIN_VERSION_TWEAK;     // 2
+}
+
+extern "C" DECL_EXP const char* GetCommonName()
+{
+    return PLUGIN_COMMON_NAME;       // "Climatology"
+}
+
+extern "C" DECL_EXP const char* GetShortDescription()
+{
+    return PLUGIN_SHORT_DESCRIPTION;
+}
+
+extern "C" DECL_EXP const char* GetLongDescription()
+{
+    return PLUGIN_LONG_DESCRIPTION;
 }

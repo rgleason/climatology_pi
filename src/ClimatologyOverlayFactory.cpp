@@ -27,7 +27,7 @@
 
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
-
+#include <wx/event.h>
 
 #ifdef __WXOSX__
 # include <OpenGL/OpenGL.h>
@@ -51,9 +51,55 @@
 #include "GLES2/gl2.h"
 #endif
 
-#include "climatology_pi.h"
 //#include "gldefs.h"
 #include "icons.h"
+#include "climatology_pi.h"
+#include "ClimatologyOverlayFactory.h"
+#include "ManifestLoader.hpp"
+#include "DownloadManager.hpp"
+
+class CycloneLoaderThread : public wxThread
+{
+public:
+    CycloneLoaderThread(ClimatologyOverlayFactory* parent)
+        : wxThread(wxTHREAD_DETACHED), m_parent(parent) {}
+
+private:
+    ClimatologyOverlayFactory* m_parent;
+
+    virtual ExitCode Entry() override;
+};
+
+
+std::vector<DownloadFileEntry>
+ConvertManifest(const std::vector<ManifestEntry>& manifest)
+{
+    std::vector<DownloadFileEntry> out;
+
+	const std::string base =
+    "https://raw.githubusercontent.com/rgleason/climatology_pi_data/master/";
+    wxLogMessage("ConvertManifest: Using base URL = %s", base);
+
+    for (const auto& m : manifest)
+    {
+        DownloadFileEntry d;
+        d.filename    = m.filename;
+        d.description = m.description;
+        d.size        = m.size;
+        d.checksum    = m.checksum;
+        d.required    = m.required;
+
+        d.url = base + m.filename;
+
+        if (d.size == 0)
+            d.required = true;
+
+        out.push_back(d);
+    }
+
+    return out;
+}
+
 
 #define FAILED_FILELIST_MSG_LEN 150
 
@@ -114,6 +160,8 @@ double deg2rad(double degrees)
   return M_PI * degrees / 180.0;
 }
 
+
+
 ClimatologyOverlay::~ClimatologyOverlay()
 {
     if(m_iTexture)
@@ -130,107 +178,120 @@ double ClimatologyIsoBarMap::CalcParameter(double lat, double lon)
 }
 
 #define CYCLONE_CACHE_SEMAPHORE_COUNT 4
-ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
-    : //m_bUpdateCyclones(true),
-    m_cyclone_cache_semaphore(CYCLONE_CACHE_SEMAPHORE_COUNT),
-    m_bCompletedLoading(false),
-    m_dlg(dlg), m_Settings(dlg.m_cfgdlg->m_Settings),
-    m_cyclonesDisplayList(0), m_cyclone_drawn_counter(0)
+ClimatologyOverlayFactory::ClimatologyOverlayFactory(ClimatologyDialog &dlg)
+    : m_cyclone_cache_semaphore( CYCLONE_CACHE_SEMAPHORE_COUNT),
+      m_bCompletedLoading(false),
+      m_dlg(dlg),
+      m_Settings(dlg.m_cfgdlg->m_Settings),
+      m_cyclonesDisplayList(0),
+      m_cyclone_drawn_counter(0)
 {
-    // make sure the user data directory exists
+	wxLogMessage("Climatology_pi: dlg.m_cfgdlg = %p", dlg.m_cfgdlg);
+	
+	// REQUIRED for background thread event posting
+    m_pClimatologyDialog = &dlg;
+
+    // Ensure data directory exists
     wxFileName::Mkdir(ClimatologyDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
-    for(int m=0; m<13; m++) {
+
+    for (int m = 0; m < 13; m++) {
         m_WindData[m] = NULL;
         m_CurrentData[m] = NULL;
     }
 
+    // Initialize timeline
     m_CurrentTimeline = wxDateTime::Now();
-    /* use a year without a leap year */
-    if(m_CurrentTimeline.IsLeapYear() &&
-       m_CurrentTimeline.GetMonth() == wxDateTime::Feb &&
-       m_CurrentTimeline.GetDay() == 29)
+    if (m_CurrentTimeline.IsLeapYear() &&
+        m_CurrentTimeline.GetMonth() == wxDateTime::Feb &&
+        m_CurrentTimeline.GetDay() == 29)
         m_CurrentTimeline.SetDay(28);
-
     m_CurrentTimeline.SetYear(1999);
 
     m_bAllTimes = false;
+	
+	
+    // ------------------------------------------------------------
+    // 1. Initialize DownloadManager
+    // ------------------------------------------------------------
+    m_downloadManager = new DownloadManager(&m_dlg, ClimatologyDataDirectory());
+	
+	// ------------------------------------------------------------
+	// 2. Convert ManifestEntry → DownloadFileEntry
+	// ------------------------------------------------------------
+	std::vector<ManifestEntry> manifestEntries;
+	std::vector<DownloadFileEntry> files = ConvertManifest(manifestEntries);
 
+	// ------------------------------------------------------------
+	// 3. Pass manifest to Downloadmanager
+	// ------------------------------------------------------------
+
+    m_downloadManager->SetManifest(files);
+
+    // ------------------------------------------------------------
+    // 4. Local data present? → Load immediately
+    // ------------------------------------------------------------
+	if (m_downloadManager->AllRequiredAvailable()) {
+		wxLogMessage("Climatology_pi: All climatology data verified — loading now");
+
+		Load();   // Load immediately; Load() decides if we’re “complete”
+
+		if (!m_bCompletedLoading) {
+			wxLogMessage("Climatology_pi: Data load failed — some files corrupt or missing");
+			m_dlg.m_tStatus->SetLabel("Climatology data load failed");
+			m_dlg.EnableAllControls(false);
+			return;
+		}
+
+		m_dlg.m_tStatus->SetLabel("Climatology data loaded");
+		m_dlg.EnableAllControls(true);
+		m_dlg.UpdateTrackingControls();
+
+		return;
+	}
+
+    // ------------------------------------------------------------
+    // 5. Otherwise → start background download
+    // ------------------------------------------------------------
+    wxLogMessage("Climatology_pi: Missing or corrupt data — starting download manager");
+    m_dlg.Bind(EVT_DM_COMPLETE, &ClimatologyOverlayFactory::OnDownloadComplete, this);
+    m_downloadManager->StartBackgroundDownload(true);
+
+    // UI stays disabled until OnDownloadComplete()
+}
+
+
+void ClimatologyOverlayFactory::OnDownloadComplete(wxCommandEvent& event)
+{
+    wxLogMessage("Climatology_pi: Download manager completed — starting data load");
+
+    // Unbind to avoid duplicate calls
+    Unbind(EVT_DM_COMPLETE, &ClimatologyOverlayFactory::OnDownloadComplete, this);
+
+    // Run the loader
     Load();
 
-    if(m_FailedFiles.size()) {
-        wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
-        if( m_sFailedMessage.Len() > FAILED_FILELIST_MSG_LEN )
-            failed_msg.Append("...\n\n");
-        wxMessageDialog mdlg(&m_dlg,
-                             _("Some Data Failed to load:\n")
-                             + failed_msg +
-                             _("Would you like to try to download?"),
-                             _("Climatology"), wxYES | wxNO | wxICON_WARNING);
-        if(mdlg.ShowModal() == wxID_YES) {
-            int i = 0;
-            bool failed = false;
-            wxString path = ClimatologyDataDirectory();
-        
-            wxString servers[] = {"https://github.com"};
-            int servercount = ((sizeof servers) / (sizeof *servers));
-            wxString url = "/seandepagnier/climatology_pi_data/blob/master/";
-
-            for(std::list<wxString>::iterator it = m_FailedFiles.begin();
-                it != m_FailedFiles.end(); it++ ) {
-                wxString fn = *it;
-                if(!fn.EndsWith(".txt"))
-                    fn += ".gz"; // download gzipped file
-                int j;
-                for(j=0; j<servercount; j++) {
-                    int ind = (i+j)%servercount;
-                    wxString urlpath = servers[ind] + url;
-                
-                    _OCPN_DLStatus status = OCPN_downloadFile(
-                        urlpath + fn + "?raw=true",
-                        path+fn, _("downloading climatology data file"),
-                        wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
-                        *_img_climatology, GetOCPNCanvasWindow(),
-                        OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
-                        OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
-                        OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE, 20);
-                    if(status == OCPN_DL_NO_ERROR)
-                        break;
-                    if(status == OCPN_DL_ABORTED)
-                        return;
-                }
-                if(j == servercount)
-                    failed = true;
-            }
-
-            if(failed) {
-                wxMessageDialog mdlg(&m_dlg,
-                                     _("Some Data Failed to download.\n"
-                                       "Climatology data incomplete"),
-                                     _("Climatology"), wxOK | wxICON_WARNING);
-                mdlg.ShowModal();
-            } else {
-                Load();
-                if(m_FailedFiles.size()) {
-                    wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
-                    wxMessageDialog mdlg(&m_dlg,
-                                         _("Some Data Failed to load.") +"\n"
-                                           + failed_msg + "...\n" +
-                                         _("Climatology data incomplete."),
-                                         _("Climatology"), wxOK | wxICON_WARNING);
-                    mdlg.ShowModal();
-                }
-            }
-        }
+    if (!m_bCompletedLoading) {
+        wxLogMessage("Climatology_pi: Data load failed — some files corrupt or missing");
+        m_dlg.m_tStatus->SetLabel("Climatology data load failed");
+        m_dlg.EnableAllControls(false);
+        return;
     }
 
-    if(!m_FailedFiles.size())
-        m_bCompletedLoading = true;
+    m_dlg.m_tStatus->SetLabel("Climatology data loaded");
+    m_dlg.EnableAllControls(true);
+    m_dlg.UpdateTrackingControls();
 }
 
-ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
+
+bool ClimatologyOverlayFactory::ValidateCycloneFiles()
 {
-    Free();
+    return !m_epa.empty() || !m_wpa.empty() || !m_spa.empty() ||
+           !m_atl.empty() || !m_nio.empty() || !m_she.empty();
 }
+
+
+ClimatologyOverlayFactory::~ClimatologyOverlayFactory() = default;
+
 
 void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
                                                      int &month, int &nmonth, double &dpos)
@@ -528,154 +589,269 @@ void ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog *progressdi
     /* load wind */
     for(int month = 0; month < 12; month++) {
         wxString filename = wxString::Format("wind"+fmt, month+1);
-        if(progressdialog && !progressdialog->Update(month, filename))
-            return;
+		 if(progressdialog && !progressdialog->Update(month, filename)) {
+			wxLogWarning("Climatology: Progress dialog aborted update step");
+			continue;
+		}
         ReadWindData(month, filename);
     }
 
-    if(progressdialog && !progressdialog->Update(12, _("averaging wind")))
-        return;
-    AverageWindData();
+	/* averaging wind */
+	if(progressdialog && !progressdialog->Update(12, _("averaging wind"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// continue;  <-- but this is not in a loop, so just fall through
+	}
+	AverageWindData();
 
-    /* load current */
-    for(int month = 0; month < 12; month++) {
-        wxString filename = wxString::Format("current"+fmt, month+1);
-        if(progressdialog && !progressdialog->Update(month+13, filename))
-            return;
-        ReadCurrentData(month, filename);
-    }
+	/* load current */
+	for(int month = 0; month < 12; month++) {
+		wxString filename = wxString::Format("current"+fmt, month+1);
 
-    if(progressdialog && !progressdialog->Update(25, _("averaging current")))
-        return;
+		if(progressdialog && !progressdialog->Update(month+13, filename)) {
+			wxLogWarning("Climatology: Progress dialog aborted update step");
+			continue;   // <-- DO NOT RETURN
+		}
 
-    AverageCurrentData();
+		ReadCurrentData(month, filename);
+	}
 
-    /* load sea level pressure and sea surface temperature */
-    if(progressdialog && !progressdialog->Update(26, _("sea level presure")))
-        return;
-    ReadSeaLevelPressureData("sealevelpressure");
-    
-    if(progressdialog && !progressdialog->Update(27, _("sea surface tempertature")))
-        return;
-    ReadSeaSurfaceTemperatureData("seasurfacetemperature");
+	/* averaging current */
+	if(progressdialog && !progressdialog->Update(25, _("averaging current"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// DO NOT RETURN — just continue
+	}
 
-    if(progressdialog && !progressdialog->Update(28, _("air tempertature")))
-        return;
-    ReadAirTemperatureData("airtemperature");
+	AverageCurrentData();
 
-    if(progressdialog && !progressdialog->Update(28, _("cloud cover")))
-        return;
-    ReadCloudData("cloud");
+	if (!m_CurrentData[0]) {
+		wxLogWarning("Climatology: Averaged current data missing or invalid");
+	}
 
-    if(progressdialog && !progressdialog->Update(29, _("precipitation")))
-        return;
-    ReadPrecipitationData("precipitation");
+	/* load sea level pressure and sea surface temperature */
+	if(progressdialog && !progressdialog->Update(26, _("sea level presure"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// do NOT return
+	}
+	ReadSeaLevelPressureData("sealevelpressure");
 
-    if(progressdialog && !progressdialog->Update(30, _("relative humidity")))
-        return;
-    ReadRelativeHumidityData("relativehumidity");
+	if(progressdialog && !progressdialog->Update(27, _("sea surface tempertature"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadSeaSurfaceTemperatureData("seasurfacetemperature");
+
+	if(progressdialog && !progressdialog->Update(28, _("air tempertature"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadAirTemperatureData("airtemperature");
+
+	if(progressdialog && !progressdialog->Update(29, _("cloud cover"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadCloudData("cloud");
+
+	if(progressdialog && !progressdialog->Update(30, _("precipitation"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadPrecipitationData("precipitation");
+
+	if(progressdialog && !progressdialog->Update(31, _("relative humidity"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadRelativeHumidityData("relativehumidity");
 
     /* load lightning */
-    if(progressdialog && !progressdialog->Update(30, _("lightning")))
-        return;
-    ReadLightningData("lightning");
+	if(progressdialog && !progressdialog->Update(32, _("lightning"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// do NOT return
+	}
+	ReadLightningData("lightning");
 
     /* load sea depth */
-    if(progressdialog && !progressdialog->Update(30, _("sea depth")))
-        return;
-    ReadSeaDepthData("seadepth");
+	if(progressdialog && !progressdialog->Update(33, _("sea depth"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	ReadSeaDepthData("seadepth");
 
+
+
+#if 0
+// moved to background thread
     /* load cyclone tracks */
     bool allcyclone = true;
-    if(progressdialog && !progressdialog->Update(30, _("cyclone (east pacific)")))
-        return;
-    if(!ReadCycloneData("cyclone-epa", m_epa))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(34, _("cyclone (east pacific)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// do NOT return
+	}
+	if(!ReadCycloneData("cyclone-epa", m_epa))
+		allcyclone = false;
 
-    if(progressdialog && !progressdialog->Update(31, _("cyclone (west pacific)")))
-        return;
-    if(!ReadCycloneData("cyclone-wpa", m_wpa))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(35, _("cyclone (west pacific)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	if(!ReadCycloneData("cyclone-wpa", m_wpa))
+		allcyclone = false;
 
-    if(progressdialog && !progressdialog->Update(32, _("cyclone (south pacific)")))
-        return;
-    if(!ReadCycloneData("cyclone-spa", m_spa, true))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(36, _("cyclone (south pacific)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	if(!ReadCycloneData("cyclone-spa", m_spa, true))
+		allcyclone = false;
 
-    if(progressdialog && !progressdialog->Update(33, _("cyclone (atlantic)")))
-        return;
-    if(!ReadCycloneData("cyclone-atl", m_atl))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(37, _("cyclone (atlantic)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	if(!ReadCycloneData("cyclone-atl", m_atl))
+		allcyclone = false;
 
-    if(progressdialog && !progressdialog->Update(34, _("cyclone (north indian)")))
-        return;
-    if(!ReadCycloneData("cyclone-nio", m_nio))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(38, _("cyclone (north indian)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	if(!ReadCycloneData("cyclone-nio", m_nio))
+		allcyclone = false;
 
-    if(progressdialog && !progressdialog->Update(35, _("cyclone (south indian)")))
-        return;
-    if(!ReadCycloneData("cyclone-she", m_she, true))
-        allcyclone = false;
+	if(progressdialog && !progressdialog->Update(39, _("cyclone (south indian)"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+	}
+	if(!ReadCycloneData("cyclone-she", m_she, true))
+		allcyclone = false;
 
-    if(allcyclone)
-        m_dlg.m_cbCyclones->Enable();
+	if(progressdialog && !progressdialog->Update(40, _("el nino years"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// do NOT return
+	}
 
-    if(progressdialog && !progressdialog->Update(36, _("el nino years")))
-        return;
+	if(!ReadElNinoYears("elnino_years.txt")) {
+		m_dlg.m_cfgdlg->m_cbElNino->Disable();
+		m_dlg.m_cfgdlg->m_cbLaNina->Disable();
+		m_dlg.m_cfgdlg->m_cbNeutral->Disable();
+	}
 
-    if(!ReadElNinoYears("elnino_years.txt")) {
-        m_dlg.m_cfgdlg->m_cbElNino->Disable();
-        m_dlg.m_cfgdlg->m_cbLaNina->Disable();
-        m_dlg.m_cfgdlg->m_cbNeutral->Disable();
-    }
+	if(progressdialog && !progressdialog->Update(41, _("cyclone cache"))) {
+		wxLogWarning("Climatology: Progress dialog aborted update step");
+		// do NOT return
+	}
+	BuildCycloneCache();
+		
+#endif
 
-    if(progressdialog && !progressdialog->Update(37, _("cyclone cache")))
-        return;
-    BuildCycloneCache();
+	// CYCLONE LOADING DISABLED AT STARTUP
+	// Cyclones will be loaded later in a background thread.
+
+	wxLogMessage("Climatology: Skipping cyclone loading at startup");
+	m_cycloneReady = false;
+
+	// Skip cyclone loading and El Niño years for now.
+	// They will be loaded asynchronously.
+	return;
 }
 
 void ClimatologyOverlayFactory::Load()
 {
-    Free();
-    m_sFailedMessage = "";
+    m_sFailedMessage.clear();
     m_FailedFiles.clear();
-    
-    wxGenericProgressDialog *progressdialog = nullptr;
-    progressdialog = new wxGenericProgressDialog( _("Climatology"), wxString(), 38, &m_dlg,
-                                     wxPD_CAN_ABORT | wxPD_ELAPSED_TIME );
+
+    wxGenericProgressDialog* progressdialog =
+        new wxGenericProgressDialog(_("Climatology"), wxString(), 38, &m_dlg,
+            wxPD_CAN_ABORT | wxPD_ELAPSED_TIME);
+
     LoadInternal(progressdialog);
     progressdialog->Destroy();
-}
 
-void ClimatologyOverlayFactory::Free()
-{
-#if 0
-    for(int i=0; i<ClimatologyOverlaySettings::SETTINGS_COUNT; i++)
-        for(int m=0; m<13; m++)
-            delete m_Settings.Settings[i].m_pIsobars[m];
-#endif
+    // Default: loading failed
+    m_bCompletedLoading = false;
 
-    // free wind data
-    for(int m=0; m<13; m++) {
-        delete m_WindData[m];
-        m_WindData[m] = NULL;
-        delete m_CurrentData[m];
-        m_CurrentData[m] = NULL;
-    }
-    
-    // free cyclones
-    std::list<Cyclone*> *cyclones[6] = {&m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
-    for(int i=0; i < 6; i++) {
-        for(std::list<Cyclone*>::iterator it = cyclones[i]->begin(); it != cyclones[i]->end(); it++) {
-            Cyclone *s = *it;
-            for(std::list<CycloneState*>::iterator it2 = s->states.begin(); it2 != s->states.end(); it2++)
-                delete *it2;
-            delete s;
+    // Change this - Only consider success if no file failures
+    // Filter out cyclone failures — they are optional
+		bool onlyOptionalFailures = true;
+		for (auto& f : m_FailedFiles) {
+			if (!f.StartsWith("cyclone") && !f.StartsWith("elnino")) {
+				onlyOptionalFailures = false;
+				break;
+			}
+		}
+
+		if (onlyOptionalFailures) {
+
+        bool ok = true;
+
+        // Validate wind data require all 12 months
+        for (int m = 0; m < 12; ++m) {
+            if (!m_WindData[m]) {
+                wxLogWarning("Climatology: Missing wind data for month %d", m);
+                ok = false;
+                break;
+            }
         }
-        cyclones[i]->clear();
+		// Validate current data: require all 12 months
+		for (int m = 0; m < 12; ++m) {
+			if (!m_CurrentData[m]) {
+				wxLogWarning("Climatology: Missing current data for month %d", m + 1);
+				ok = false;
+				break;
+			}
+		}
+		// Validate single-file datasets (require at least one month loaded)
+		if (!m_slp[0]) {
+			wxLogWarning("Climatology: Missing sea level pressure data");
+			ok = false;
+		}
+
+		if (!m_sst[0]) {
+			wxLogWarning("Climatology: Missing sea surface temperature data");
+			ok = false;
+		}
+
+		if (!m_at[0]) {
+			wxLogWarning("Climatology: Missing air temperature data");
+			ok = false;
+		}
+
+		if (!m_cld[0]) {
+			wxLogWarning("Climatology: Missing cloud cover data");
+			ok = false;
+		}
+
+		if (!m_precip[0]) {
+			wxLogWarning("Climatology: Missing precipitation data");
+			ok = false;
+		}
+
+		if (!m_rhum[0]) {
+			wxLogWarning("Climatology: Missing relative humidity data");
+			ok = false;
+		}
+
+		if (!m_lightn[0]) {
+			wxLogWarning("Climatology: Missing lightning data");
+			ok = false;
+		}
+
+		// Sea depth is always allocated, so no null check needed
+
+        // Validate cyclone data (optional dataset)
+        if (!ValidateCycloneFiles()) {
+            wxLogWarning("Climatology: No cyclone data loaded");
+            // Do NOT set ok = false; cyclones are optional
+        }
+        // TODO: validate other datasets here (cyclones, currents, etc.)
+
+        m_bCompletedLoading = ok;
+		
+		// ⭐ START BACKGROUND CYCLONE LOADER HERE ⭐
+		if (ok) {
+			// ⭐ Snapshot all UI filter values on the main thread
+			UpdateCycloneFilterFromUI();
+
+			wxLogMessage("Climatology: Starting background cyclone loader thread");
+			auto* t = new CycloneLoaderThread(this);
+			if (t->Run() != wxTHREAD_NO_ERROR) {
+				wxLogWarning("Climatology: Failed to start cyclone loader thread");
+				delete t;
+			}
+		}
     }
-    m_cyclone_cache.clear();
 }
+
 
 void ClimatologyOverlayFactory::ReadWindData(int month, wxString filename)
 {
@@ -915,17 +1091,25 @@ havedata:
         }
 }
 
+
 ZUFILE *ClimatologyOverlayFactory::OpenClimatologyDataFile(wxString filename)
 {
-    ZUFILE *f = NULL;
     wxString path = ClimatologyDataDirectory();
-    if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyDataDirectory();
-        if(!(f = TryOpenFile(path + filename)))
-            m_FailedFiles.push_back(filename);
-    }
+
+    // Ensure trailing slash
+    if (!path.EndsWith("/") && !path.EndsWith("\\"))
+        path += wxFileName::GetPathSeparator();
+
+    wxString full = path + filename;
+
+    ZUFILE *f = TryOpenFile(full);
+    if(!f)
+        m_FailedFiles.push_back(filename);
+
     return f;
 }
+
+
 
 void ClimatologyOverlayFactory::ReadSeaLevelPressureData(wxString filename)
 {
@@ -1180,21 +1364,34 @@ void ClimatologyOverlayFactory::ReadSeaDepthData(wxString filename)
     zu_close(f);
 }
 
-bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyclone*> &cyclones, bool south)
+bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename,
+                                                std::list<Cyclone*> &cyclones,
+                                                bool south)
 {
     ZUFILE *f;
     wxString path = ClimatologyDataDirectory();
-    if(!(f = TryOpenFile(path + filename))) {
-        path = ClimatologyDataDirectory();
-        if(!(f = TryOpenFile(path + filename)))
+
+    // 1. Prefer decompressed file
+    wxString decompressed = path + filename;
+    if (wxFileExists(decompressed)) {
+        wxLogMessage("Climatology: using existing decompressed cyclone file %s", decompressed);
+        f = zu_open(decompressed.mb_str(), "rb");
+        if (!f)
             goto missing;
+        goto parse;
     }
 
+    // 2. Otherwise fall back to TryOpenFile (handles .gz)
+    if (!(f = TryOpenFile(path + filename)))
+        goto missing;
+
+parse:
     wxUint16 lyear, llastmonth;
     Cyclone *cyclone;
-    while(zu_read(f, &lyear, sizeof lyear)==sizeof lyear) {
+
+    while (zu_read(f, &lyear, sizeof lyear) == sizeof lyear) {
 #ifdef __MSVC__
-        if(lyear < 1972)
+        if (lyear < 1972)
             lyear = 1972;
 #endif
         cyclone = new Cyclone;
@@ -1204,17 +1401,18 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
         wxUint16 press;
         CycloneState::State lastcyclonestate = CycloneState::UNKNOWN;
         CycloneDateTime lastdatetime(1, 1, 1900, 0);
-        wxInt16 lastlat=-10000, lastlon=-10000;
-        for(;;) {
+        wxInt16 lastlat = -10000, lastlon = -10000;
+
+        for (;;) {
             signed char state;
-            if(zu_read(f, &state, sizeof state) != sizeof state)
+            if (zu_read(f, &state, sizeof state) != sizeof state)
                 goto corrupted;
 
-            if(state == -128)
+            if (state == -128)
                 break;
 
             CycloneState::State cyclonestate;
-            switch(state) {
+            switch (state) {
             case '*': cyclonestate = CycloneState::TROPICAL; break;
             case 'S': cyclonestate = CycloneState::SUBTROPICAL; break;
             case 'E': cyclonestate = CycloneState::EXTRATROPICAL; break;
@@ -1225,46 +1423,51 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
             }
 
             char lday, lmonth;
-            if(zu_read(f, &lday, sizeof lday) != sizeof lday ||
-               zu_read(f, &lmonth, sizeof lmonth) != sizeof lmonth)
+            if (zu_read(f, &lday, sizeof lday) != sizeof lday ||
+                zu_read(f, &lmonth, sizeof lmonth) != sizeof lmonth)
                 goto corrupted;
 
-            if(lmonth < llastmonth)
+            if (lmonth < llastmonth)
                 lyear++;
             llastmonth = lmonth;
 
-            wxDateTime::Month month = (wxDateTime::Month)(lmonth-1);
-            int day = lday/4, hour = (lday%4)*6;
-            if(lmonth < 1 || lmonth > 12 ||
-               day < 1 || day > wxDateTime::GetNumberOfDays(month, lyear) ||
-               hour < 0 || hour >= 24)
+            wxDateTime::Month month = (wxDateTime::Month)(lmonth - 1);
+            int day = lday / 4, hour = (lday % 4) * 6;
+            if (lmonth < 1 || lmonth > 12 ||
+                day < 1 || day > wxDateTime::GetNumberOfDays(month, lyear) ||
+                hour < 0 || hour >= 24)
                 goto corrupted;
 
             wxInt16 lat, lon;
-            if(zu_read(f, &lat, sizeof lat) != sizeof lat ||
-               zu_read(f, &lon, sizeof lon) != sizeof lon)
+            if (zu_read(f, &lat, sizeof lat) != sizeof lat ||
+                zu_read(f, &lon, sizeof lon) != sizeof lon)
                 goto corrupted;
 
-            // make sure it's in range
-            if(std::abs((double)lat/10) >= 90 || (double)lon/10 > 15 || (double)lon/10 < -360)
+            if (std::abs((double)lat / 10) >= 90 ||
+                (double)lon / 10 > 15 ||
+                (double)lon / 10 < -360)
                 goto corrupted;
 
-            if(lastlat != -10000) {
-                cyclone->states.push_back
-                    (new CycloneState(lastcyclonestate, lastdatetime,
-                                      (south ? -1 : 1) * (double)lastlat/10, (double)lastlon/10,
-                                      (south ? -1 : 1) * (double)lat/10, (double)lon/10,
-                                      wk, press));
+            if (lastlat != -10000) {
+                cyclone->states.push_back(
+                    new CycloneState(lastcyclonestate, lastdatetime,
+                                     (south ? -1 : 1) * (double)lastlat / 10,
+                                     (double)lastlon / 10,
+                                     (south ? -1 : 1) * (double)lat / 10,
+                                     (double)lon / 10,
+                                     wk, press));
             }
 
             lastcyclonestate = cyclonestate;
             lastdatetime = CycloneDateTime(day, month, lyear, hour);
-            lastlat = lat, lastlon = lon;
-                
-            if(zu_read(f, &wk, sizeof wk) != sizeof wk ||
-               zu_read(f, &press, sizeof press) != sizeof press)
+            lastlat = lat;
+            lastlon = lon;
+
+            if (zu_read(f, &wk, sizeof wk) != sizeof wk ||
+                zu_read(f, &press, sizeof press) != sizeof press)
                 goto corrupted;
         }
+
         cyclones.push_back(cyclone);
     }
 
@@ -1277,6 +1480,7 @@ corrupted:
     wxLogMessage(climatology_pi + _("cyclone data corrupt: ") + filename
                  + wxString::Format(" at %ld", zu_tell(f)));
     zu_close(f);
+
 missing:
     m_FailedFiles.push_back(filename);
     return false;
@@ -1286,94 +1490,106 @@ void ClimatologyOverlayFactory::BuildCycloneCache()
 {
     std::list<Cyclone*> *cyclones[6] = {&m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
 
-    /* make sure we have all the cyclone theatres */
-    for(int i=0; i < 6; i++)
-        if(cyclones[i]->empty())
+    // make sure we have all the cyclone theatres
+    for (int i = 0; i < 6; i++)
+        if (cyclones[i]->empty())
             return;
 
-    int statemask = 0;
-    statemask |= 1*m_dlg.m_cfgdlg->m_cbTropical->GetValue();
-    statemask |= 2*m_dlg.m_cfgdlg->m_cbSubTropical->GetValue();
-    statemask |= 4*m_dlg.m_cfgdlg->m_cbExtraTropical->GetValue();
-    statemask |= 8*m_dlg.m_cfgdlg->m_cbRemanent->GetValue();
+    // use cached filter params instead of UI
+    int statemask     = m_cycloneParams.statemask;
+    int minwindspeed  = m_cycloneParams.minwindspeed;
+    int maxpressure   = m_cycloneParams.maxpressure;
+    wxDateTime start  = m_cycloneParams.startDate;
+    wxDateTime end    = m_cycloneParams.endDate;
 
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
+    bool allowElNino      = m_cycloneParams.allowElNino;
+    bool allowLaNina      = m_cycloneParams.allowLaNina;
+    bool allowNeutral     = m_cycloneParams.allowNeutral;
+    bool allowNotAvailable= m_cycloneParams.allowNotAvailable;
+
+    for (int i = 0; i < CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
         m_cyclone_cache_semaphore.Wait();
-
-    int minwindspeed = m_dlg.m_cfgdlg->m_sMinWindSpeed->GetValue();
-    int maxpressure = m_dlg.m_cfgdlg->m_sMaxPressure->GetValue();
 
     m_cyclone_cache.clear();
     wxStopWatch sw;
 
-    for(int i=0; i < 6; i++) {
-        for(std::list<Cyclone*>::iterator it = cyclones[i]->begin(); it != cyclones[i]->end(); it++) {
+    for (int i = 0; i < 6; i++) {
+        for (std::list<Cyclone*>::iterator it = cyclones[i]->begin();
+             it != cyclones[i]->end(); ++it) {
+
             Cyclone *s = *it;
 
-            for(std::list<CycloneState*>::iterator it2 = s->states.begin(); it2 != s->states.end(); it2++) {
-                if((*it2)->windknots < minwindspeed)
+            for (std::list<CycloneState*>::iterator it2 = s->states.begin();
+                 it2 != s->states.end(); ++it2) {
+
+                CycloneState* st = *it2;
+
+                if (st->windknots < minwindspeed)
                     continue;
 
-                if((*it2)->pressure > maxpressure)
+                if (st->pressure > maxpressure)
                     continue;
 
-                /* rebuild cache for these? */
-#ifndef __OCPN__ANDROID__                
-                wxDateTime dt = (*it2)->datetime.DateTime();
-                //wxLogMessage(climatology_pi + "   " + dt.Format() + ", " + m_dlg.m_cfgdlg->m_dPStart->GetValue().Format());
-                if((dt < m_dlg.m_cfgdlg->m_dPStart->GetValue()) ||
-                   (dt > m_dlg.m_cfgdlg->m_dPEnd->GetValue()))
+#ifndef __OCPN__ANDROID__
+                wxDateTime dt = st->datetime.DateTime();
+                if ((dt < start) || (dt > end))
                     continue;
 #endif
-                /* el nino test */
-                int year = (*it2)->datetime.year;
+                // el nino test
+                int year = st->datetime.year;
                 std::map<int, ElNinoYear>::iterator ipt = m_ElNinoYears.find(year);
                 if (ipt == m_ElNinoYears.end()) {
-                    if(!m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue() && m_ElNinoYears.size())
+                    if (!allowNotAvailable && !m_ElNinoYears.size())
                         continue;
                 } else {
-                    ElNinoYear elninoyear = m_ElNinoYears[year];
-                    int month = (*it2)->datetime.month;
+                    ElNinoYear elninoyear = ipt->second;
+                    int month = st->datetime.month;
                     double value = elninoyear.months[month];
-        
-                    if(isnan(value)) {
-                        if(!m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue())
+
+                    if (isnan(value)) {
+                        if (!allowNotAvailable)
                             continue;
                     } else {
-                        if(value >= .5) {
-                            if(!m_dlg.m_cfgdlg->m_cbElNino->GetValue())
+                        if (value >= .5) {
+                            if (!allowElNino)
                                 continue;
-                        } else if(value <= -.5) {
-                            if(!m_dlg.m_cfgdlg->m_cbLaNina->GetValue())
+                        } else if (value <= -.5) {
+                            if (!allowLaNina)
                                 continue;
-                        } else if(!m_dlg.m_cfgdlg->m_cbNeutral->GetValue())
+                        } else if (!allowNeutral)
                             continue;
                     }
                 }
 
-                if(!((1<<(*it2)->state) & statemask))
+                if (!((1 << st->state) & statemask))
                     continue;
 
                 int lon[2], lat[2];
-                for(int j = 0; j<2; j++) {
-                    lon[j] = (*it2)->lon[0] < 15 ? (*it2)->lon[j] : (*it2)->lon[j] - 360;
-                    lat[j] = (*it2)->lat[j];
+                for (int j = 0; j < 2; j++) {
+                    lon[j] = st->lon[0] < 15 ? st->lon[j] : st->lon[j] - 360;
+                    lat[j] = st->lat[j];
                 }
 
-                for(int loni = wxMin(lon[0], lon[1]); loni <= wxMax(lon[0], lon[1]); loni++)
-                    for(int lati = wxMin(lat[0], lat[1]); lati <= wxMax(lat[0], lat[1]); lati++) {
-                        int hash = (loni * 180 + lati)*12 + (*it2)->datetime.month;
-                        m_cyclone_cache[hash].push_back(*it2);
+                for (int loni = wxMin(lon[0], lon[1]); loni <= wxMax(lon[0], lon[1]); loni++)
+                    for (int lati = wxMin(lat[0], lat[1]); lati <= wxMax(lat[0], lat[1]); lati++) {
+                        int hash = (loni * 180 + lati)*12 + st->datetime.month;
+                        m_cyclone_cache[hash].push_back(st);
                     }
             }
         }
     }
 
-    wxLogMessage(climatology_pi + _("cyclone cache time ") + wxString::Format("%ld ms", sw.Time()));
-    
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
+    wxLogMessage(climatology_pi + _("cyclone cache time ") +
+                 wxString::Format("%ld ms", sw.Time()));
+
+    for (int i = 0; i < CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
         m_cyclone_cache_semaphore.Post();
+
+    if (m_cyclone_cache.empty()) {
+        wxLogWarning("Climatology: Cyclone cache is empty after filtering");
+    }
 }
+
 
 static double strtod_nan(const char *str)
 {
@@ -1420,35 +1636,105 @@ missing:
     return false;
 }
 
+bool ClimatologyOverlayFactory::HasDataFor(int setting, int month)
+{
+    switch (setting) {
+    case ClimatologyOverlaySettings::WIND:
+        return m_WindData[month] != NULL;
+
+    case ClimatologyOverlaySettings::CURRENT:
+        return m_CurrentData[month] != NULL;
+
+    case ClimatologyOverlaySettings::SLP:
+        return m_slp[month] != NULL;
+
+    case ClimatologyOverlaySettings::SST:
+        return m_sst[month] != NULL;
+
+    case ClimatologyOverlaySettings::AT:
+        return m_at[month] != NULL;
+
+    case ClimatologyOverlaySettings::CLOUD:
+        return m_cld[month] != NULL;
+
+    case ClimatologyOverlaySettings::PRECIPITATION:
+        return m_precip[month] != NULL;
+
+    case ClimatologyOverlaySettings::RELATIVE_HUMIDITY:
+        return m_rhum[month] != NULL;
+
+    case ClimatologyOverlaySettings::LIGHTNING:
+        return m_lightn[month] != NULL;
+
+    case ClimatologyOverlaySettings::SEADEPTH:
+        // m_seadepth is a fixed array, always allocated.
+        // If you later add a "loaded" flag, check it here.
+        return true;
+
+// Not in the enum. Handled separately is vector.
+//   case ClimatologyOverlaySettings::CYCLONES:
+//        return !m_epa.empty() || !m_wpa.empty() || !m_spa.empty() ||
+//               !m_atl.empty() || !m_nio.empty() || !m_she.empty();
+
+    default:
+        return false;
+    }
+}
+
+void ClimatologyOverlayFactory::RenderGLOverlay(wxGLContext *pcontext,
+                                                PlugIn_ViewPort *vp)
+{
+    if (!m_bCompletedLoading)
+        return;
+
+    glEnable(GL_BLEND);
+
+    piDC pidc;
+    pidc.SetVP(vp);
+
+    RenderOverlay(pidc, *vp);
+}
+
+
+
+
 bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
                                                 int setting, int month,
                                                 PlugIn_ViewPort &vp)
 {
-    if(!texture_format)
+    if (!texture_format)
         return false;
 
-    double s;
+    double s = 1.0;
     double latoff = 0, lonoff = 0;
-    switch(setting) {
-    case ClimatologyOverlaySettings::WIND:   
-        s = m_WindData[month]->longitudes / 360;
-        latoff = 90.0/m_WindData[month]->latitudes;
-        lonoff = 180.0/m_WindData[month]->longitudes;
+
+    switch (setting) {
+    case ClimatologyOverlaySettings::WIND: {
+        auto* data = m_WindData[month];
+        if (!data)
+            return false;
+
+        s = data->longitudes / 360.0;
+        latoff = 90.0 / data->latitudes;
+        lonoff = 180.0 / data->longitudes;
         break;
+    }
+
     case ClimatologyOverlaySettings::CURRENT: s = 3;  break;
     case ClimatologyOverlaySettings::SLP:     s = .5; break;
     case ClimatologyOverlaySettings::AT:      s = .5; break;
     case ClimatologyOverlaySettings::CLOUD:   s = .5; break;
-    default: s=1;
+    default: s = 1;
     }
 
     wxProgressDialog *progressdialog = nullptr;
     wxDateTime start = wxDateTime::Now();
 
-    int width = s*360+1;
-    int height = s*360;
+    int width = s * 360 + 1;
+    int height = s * 360;
 
-    unsigned char *data = new unsigned char[width*height*4];
+    unsigned char *data = new unsigned char[width * height * 4];
+
 
     for(int x = 0; x < width; x++) {
         if(x % 40 == 0) {
@@ -2069,23 +2355,55 @@ double ClimatologyOverlayFactory::getValue(enum Coord coord, int setting,
     double v1 = getValueMonth(coord, setting, lat, lon, month);
     double v2 = getValueMonth(coord, setting, lat, lon, nmonth);
 
-    if(coord == DIRECTION) {
-        if(v1 - v2 > 180) v1 -= 360;
-        if(v2 - v1 > 180) v2 -= 360;
-        return positive_degrees(dpos * v1 + (1-dpos) * v2);
+    // ------------------------------------------------------------
+    // Missing data?  Return NAN immediately.
+    // ------------------------------------------------------------
+    if (isnan(v1) || isnan(v2))
+        return NAN;
+
+    // ------------------------------------------------------------
+    // Direction interpolation (circular wrap-around)
+    // ------------------------------------------------------------
+    if (coord == DIRECTION) {
+        if (v1 - v2 > 180) v1 -= 360;
+        if (v2 - v1 > 180) v2 -= 360;
+        return positive_degrees(dpos * v1 + (1 - dpos) * v2);
     }
 
-    return dpos * v1 + (1-dpos) * v2;
+    // ------------------------------------------------------------
+    // Linear interpolation for scalar values
+    // ------------------------------------------------------------
+    return dpos * v1 + (1 - dpos) * v2;
 }
 
-double ClimatologyOverlayFactory::getCurCalibratedValue(enum Coord coord, int setting, double lat, double lon)
+double ClimatologyOverlayFactory::getCurValue(enum Coord coord, int setting,
+                                              double lat, double lon)
 {
-    double v = getCurValue(coord, setting, lat, lon);
-    if(coord == DIRECTION)
-        return v;
+    if (!m_bCompletedLoading)
+        return NAN;
 
-    return m_dlg.m_cfgdlg->m_Settings.CalibrateValue(setting, v);
+    if (isnan(lat) || isnan(lon))
+        return NAN;
+
+    int month = m_CurrentTimeline.GetMonth();
+
+    switch (setting) {
+
+    case ClimatologyOverlaySettings::WIND:
+        if (!m_WindData[month])
+            return NAN;
+        return m_WindData[month]->InterpWind(coord, lat, lon);
+
+    case ClimatologyOverlaySettings::CURRENT:
+        if (!m_CurrentData[month])
+            return NAN;
+        return m_CurrentData[month]->InterpCurrent(coord, lat, lon);
+
+    default:
+        return NAN;
+    }
 }
+
 
 double ClimatologyOverlayFactory::getCalibratedValueMonth(enum Coord coord, int setting, double lat, double lon, int month)
 {
@@ -2230,8 +2548,13 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
     return 0;
 }
 
+
+
 void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &vp)
 {
+    if (!m_bCompletedLoading)
+        return;
+	
     if(!m_Settings.Settings[setting].m_bOverlayMap)
         return;
 
@@ -2249,48 +2572,64 @@ void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &
         dpos = 1;
     }
 
-    ClimatologyOverlay &O1 = m_pOverlay[month][setting];
-    ClimatologyOverlay &O2 = m_pOverlay[nmonth][setting];
+	ClimatologyOverlay &O1 = m_pOverlay[month][setting];
+	ClimatologyOverlay &O2 = m_pOverlay[nmonth][setting];
 
-    if( !m_dc->GetDC() )
-    {
-        if( !O1.m_iTexture )
-            CreateGLTexture( O1, setting, month, vp);
+	// ------------------------------------------------------------
+	// Validate that required data exists for both months
+	// ------------------------------------------------------------
+	if (!HasDataFor(setting, month) || !HasDataFor(setting, nmonth)) {
+		wxLogMessage("Climatology: Missing data for setting %d (months %d or %d)",
+					 setting, month, nmonth);
+		return;
+	}
 
-        if( !O2.m_iTexture )
-            CreateGLTexture( O2, setting, nmonth, vp);
+	if (!m_dc->GetDC())
+	{
+		// Create textures if needed
+		if (!O1.m_iTexture)
+			CreateGLTexture(O1, setting, month, vp);
 
-        DrawGLTexture( O1, O2, dpos, vp, m_Settings.Settings[setting].m_iOverlayTransparency/100.0 );
-    }
-    else
-    {
-        wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
+		if (!O2.m_iTexture)
+			CreateGLTexture(O2, setting, nmonth, vp);
 
-        wxMemoryDC mdc;
-        wxBitmap bm( 1000, 1000 );
-        mdc.SelectObject( bm );
-        mdc.Clear();
+		// Draw blended texture
+		DrawGLTexture(O1, O2, dpos, vp,
+					  m_Settings.Settings[setting].m_iOverlayTransparency / 100.0);
+	}
+	else
+	{
+		wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
 
-        wxFont font( 10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL );
+		wxMemoryDC mdc;
+		wxBitmap bm(1000, 1000);
+		mdc.SelectObject(bm);
+		mdc.Clear();
 
-        mdc.SetFont( font );
-        mdc.SetPen( *wxTRANSPARENT_PEN);
+		wxFont font(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+		mdc.SetFont(font);
+		mdc.SetPen(*wxTRANSPARENT_PEN);
+		mdc.SetBrush(wxColour(243, 47, 229));
 
-        mdc.SetBrush( wxColour(243, 47, 229 ) );
-        int w, h;
-        mdc.GetMultiLineTextExtent( msg, &w, &h );
-        h += 2;
-        int label_offset = 10;
-        int wdraw = w + ( label_offset * 2 );
-        mdc.DrawRectangle( 0, 0, wdraw, h );
+		int w, h;
+		mdc.GetMultiLineTextExtent(msg, &w, &h);
+		h += 2;
 
-        mdc.DrawLabel( msg, wxRect( label_offset, 0, wdraw, h ), wxALIGN_LEFT| wxALIGN_CENTRE_VERTICAL);
-        mdc.SelectObject( wxNullBitmap );
+		int label_offset = 10;
+		int wdraw = w + (label_offset * 2);
 
-        wxBitmap sbm = bm.GetSubBitmap( wxRect( 0, 0, wdraw, h ) );
-        int x = vp.pix_width, y = vp.pix_height;
-        m_dc->DrawBitmap( sbm, (x-wdraw)/2, y - ( GetChartbarHeight() + h ), false );
-    }
+		mdc.DrawRectangle(0, 0, wdraw, h);
+		mdc.DrawLabel(msg, wxRect(label_offset, 0, wdraw, h),
+					  wxALIGN_LEFT | wxALIGN_CENTRE_VERTICAL);
+
+		mdc.SelectObject(wxNullBitmap);
+
+		wxBitmap sbm = bm.GetSubBitmap(wxRect(0, 0, wdraw, h));
+		int x = vp.pix_width, y = vp.pix_height;
+
+		m_dc->DrawBitmap(sbm, (x - wdraw) / 2,
+						 y - (GetChartbarHeight() + h), false);
+	}
 }
 
 ZUFILE *ClimatologyOverlayFactory::TryOpenFile(wxString filename)
@@ -2312,7 +2651,9 @@ ZUFILE *ClimatologyOverlayFactory::TryOpenFile(wxString filename)
 
 void ClimatologyOverlayFactory::RenderNumber(wxPoint p, double v, const wxColour &color)
 {
-    wxString text;
+    if (!m_bCompletedLoading)
+        return; 
+	wxString text;	
     if(isnan(v))
         text = _("N/A");
     else
@@ -2327,7 +2668,9 @@ void ClimatologyOverlayFactory::RenderNumber(wxPoint p, double v, const wxColour
 
 void ClimatologyOverlayFactory::RenderIsoBars(int setting, PlugIn_ViewPort &vp)
 {
-recompute:
+	 if (!m_bCompletedLoading)
+        return;
+	recompute:
     if(!m_Settings.Settings[setting].m_bIsoBars)
         return;
 
@@ -2375,8 +2718,18 @@ recompute:
     pIsobars->Plot(m_dc, vp);
 }
 
+double ClimatologyOverlayFactory::getCurCalibratedValue(Coord c, int idx, double lat, double lon)
+{
+    wxDateTime date = m_CurrentTimeline;
+    return getValue(c, idx, lat, lon, &date);
+}
+
+
+
 void ClimatologyOverlayFactory::RenderNumbers(int setting, PlugIn_ViewPort &vp)
 {
+    if (!m_bCompletedLoading)
+        return;
     if(!m_Settings.Settings[setting].m_bNumbers)
         return;
 
@@ -2392,6 +2745,8 @@ void ClimatologyOverlayFactory::RenderNumbers(int setting, PlugIn_ViewPort &vp)
 
 void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPort &vp)
 {
+	if (!m_bCompletedLoading)
+        return;
     if(!m_Settings.Settings[setting].m_bDirectionArrows)
         return;
 
@@ -2432,6 +2787,10 @@ void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPo
                u = -u, v = -v;
 
             double mag = hypot(u, v);
+			
+			// Skip if missing or zero-length vector
+			if (isnan(u) || isnan(v) || isnan(mag) || mag == 0)
+				continue;
 
             double cstep, minv;
             if(setting == ClimatologyOverlaySettings::CURRENT) {
@@ -2481,6 +2840,8 @@ void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPo
 
 void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
 {
+    if (!m_bCompletedLoading)
+        return;
     if(!m_dlg.m_cfgdlg->m_cbWindAtlasEnable->GetValue())
         return;
 
@@ -2565,6 +2926,8 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
 void ClimatologyOverlayFactory::RenderCycloneSegment(CycloneState &ss, PlugIn_ViewPort &vp,
                                                      int dayspan)
 {
+    if (!m_bCompletedLoading)
+        return;
     if(ss.drawn_counter == m_cyclone_drawn_counter)
         return;
 
@@ -2607,6 +2970,12 @@ void ClimatologyOverlayFactory::RenderCycloneSegment(CycloneState &ss, PlugIn_Vi
 
 void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
 {
+	// Skip cyclone rendering if no cyclone data is loaded
+    if (m_cyclone_cache.empty())
+        return;
+	
+    if (!m_bCompletedLoading)
+        return;
     /* no cyclones ever existed between 10 and 20 longitude
        so use 15 east as the meridian to split the world on.. */
 //#define USE_DL
@@ -2756,6 +3125,8 @@ static void QueryGL()
 
 bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
 {
+    if (!m_bCompletedLoading)
+        return true;   // nothing to draw, but not an error	
     m_dc = &dc;
 
     if(!dc.GetDC()) {
@@ -2807,4 +3178,71 @@ bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
         glPopAttrib();
 #endif
     return true;
+}
+
+
+void ClimatologyOverlayFactory::LoadCycloneDataBackground(
+    std::function<void(const wxString&)> sendProgress)
+{
+    bool allcyclone = true;
+
+    sendProgress("Loading cyclone basin: East Pacific…");
+    if(!ReadCycloneData("cyclone-epa", m_epa))
+        allcyclone = false;
+
+    sendProgress("Loading cyclone basin: West Pacific…");
+    if(!ReadCycloneData("cyclone-wpa", m_wpa))
+        allcyclone = false;
+
+    sendProgress("Loading cyclone basin: South Pacific…");
+    if(!ReadCycloneData("cyclone-spa", m_spa, true))
+        allcyclone = false;
+
+    sendProgress("Loading cyclone basin: Atlantic…");
+    if(!ReadCycloneData("cyclone-atl", m_atl))
+        allcyclone = false;
+
+    sendProgress("Loading cyclone basin: North Indian…");
+    if(!ReadCycloneData("cyclone-nio", m_nio))
+        allcyclone = false;
+
+    sendProgress("Loading cyclone basin: South Indian…");
+    if(!ReadCycloneData("cyclone-she", m_she, true))
+        allcyclone = false;
+
+    sendProgress("Loading El Niño / La Niña years…");
+    if(!ReadElNinoYears("elnino_years.txt")) {
+        m_dlg.m_cfgdlg->m_cbElNino->Disable();
+        m_dlg.m_cfgdlg->m_cbLaNina->Disable();
+        m_dlg.m_cfgdlg->m_cbNeutral->Disable();
+    }
+
+    sendProgress("Building cyclone cache…");
+    BuildCycloneCache();
+
+    // Final message before READY event
+    sendProgress("Cyclone data ready.");
+}
+
+wxThread::ExitCode CycloneLoaderThread::Entry()
+{
+    wxLogMessage("Climatology: Background cyclone loading started");
+
+    auto sendProgress = [&](const wxString& msg) {
+        wxCommandEvent evt(wxEVT_COMMAND_MENU_SELECTED, ID_CYCLONE_PROGRESS);
+        evt.SetString(msg);
+        wxPostEvent(m_parent->m_pClimatologyDialog, evt);
+    };
+
+    m_parent->LoadCycloneDataBackground(sendProgress);
+
+    m_parent->m_cycloneReady = true;
+
+    sendProgress("Cyclone data ready.");
+
+    wxCommandEvent evt(wxEVT_COMMAND_MENU_SELECTED, ID_CYCLONE_READY);
+    wxPostEvent(m_parent->m_pClimatologyDialog, evt);
+
+    wxLogMessage("Climatology: Background cyclone loading completed");
+    return 0;
 }
