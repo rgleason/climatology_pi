@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # FE2 Testplugin
-# REKWITHDEBINFO VERSION
+# RelWithDebIinfo VERSION
 # Use "./build-win.sh" to run cmake.
 # Adjust this command for your setup and Plugin.
 # Requires wxWidgets setup
@@ -18,62 +18,113 @@
 # Which adds the metadata file to the tarball gz file.
 # Set local environment to find and use wxWidgets
 
-# Enable command tracing
+echo "RELWITHDEBINFO: Running THIS script at $(date)"
 
-set -x 
+# Determine plugin root
+PLUGIN_ROOT="/c/Users/fcgle/source/climatology_pi"
+BUILD_DIR="$PLUGIN_ROOT/build"
 
-# Confirm build exists and empty it and if no build directory create it.
+# Windows-style path for OpenCPN runtime
+OPENCPN_DIR="C:\Users\fcgle\source\opencpn\build\OpenCPN"
+# OPENCPN_DIR="C:\Users\fcgle\source\opencpn\build\RelWithDebInfo"
+OPENCPN_POSIX=$(cygpath "$OPENCPN_DIR")
 
-if [ -d "build" ]; then
-    echo "The 'build' directory exists, remove all build dir files."
-    rm -rf build/*
-	
-else
-    echo "The 'build' directory does not exist. Create the build directory"
-	mkdir build
-fi
+echo "OpenCPN POSIX path: $OPENCPN_POSIX"
+echo "Plugin root: $PLUGIN_ROOT"
+echo "Build dir:   $BUILD_DIR"
 
-# wxWidgets settings 
-set "wxDIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
-set "wxWIN=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
-set "wxWidgets_ROOT_DIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
-set "wxWidgets_LIB_DIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets\lib\vc_dll" 
-set "VCver=17" 
-set "VCstr=Visual Studio 17" 
+# Clean build directory
+rm -rf "$BUILD_DIR"
+mkdir "$BUILD_DIR"
+cd "$BUILD_DIR"
 
-# wxDIR=$WXWIN
-# wxWidgets_ROOT_DIR=$WXWIN
-# wxWidgets_LIB_DIR="$WXWIN/lib/vc14x_dll"
-# WXWIN="/home/fcgle/source/wxWidgets-3.2.2"
+# CMake configure
+# cmake -G "Visual Studio 17 2022" \
+#  -A Win32 \
+#  -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets \
+#  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+# -DCMAKE_INSTALL_PREFIX="C:/Users/fcgle/source/opencpn/build/RelWithDebInfo"\
+#  ..
+  
+cmake -G "Visual Studio 17 2022" \
+  -A Win32 \
+  -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_INSTALL_PREFIX="C:/Users/fcgle/source/opencpn/build/RelWithDebInfo"\
+  ..
+# Curl cmake statements not needed due to set(curl in CMakeLists.txt
+  
+# Build plugin package
+cmake --build . --config RelWithDebInfo --target package > Build-Output.txt
 
-# build the plugin with cmake
+# Install plugin assets
+cmake --build . --config RelWithDebInfo --target install
 
-cd build
-cmake -T v143 -A Win32 -DOCPN_TARGET=MSVC ..
-cmake --build . --target package --config relwithdebinfo >output.txt
-	
-# Bash script completes tarball prep adding metadata into it.
+# Add metadata + tarball
+bash "$BUILD_DIR/cloudsmith-upload.sh"
 
-bash ./cloudsmith-upload.sh
+# --- PATH DEFINITIONS (define once, use everywhere) ---
 
-# Find ${bold}"build/output.txt"${normal} file if the build is not successful.
+# Where MSVC/OpenCPN loads plugins at runtime
+PLUGIN_RUNTIME_ROOT="/c/Users/fcgle/source/opencpn/build/RelWithDebInfo/plugins"
+PLUGIN_RUNTIME_DIR="$PLUGIN_RUNTIME_ROOT/climatology_pi"
+
+# Where CMake installs the plugin
+PLUGIN_INSTALL_DIR="/c/Users/fcgle/source/opencpn/build/OpenCPN/plugins/climatology_pi"
+
+# --- CLEAN OLD RUNTIME PLUGIN ---
+
+echo "Cleaning old MSVC runtime plugin..."
+rm -f "$PLUGIN_RUNTIME_ROOT/climatology_pi.dll"
+rm -f "$PLUGIN_RUNTIME_ROOT/climatology_pi.pdb"
+rm -f "$PLUGIN_RUNTIME_ROOT/metadata.xml"
+rm -rf "$PLUGIN_RUNTIME_DIR"
+mkdir -p "$PLUGIN_RUNTIME_DIR"
+echo "Old MSVC plugin removed."
+
+# --- MIRROR NEW PLUGIN INTO RUNTIME ---
+#  None of this is needed now! We changed  to NOT TRUE
+#  -DCMAKE_INSTALL_PREFIX="C:/Users/fcgle/source/opencpn/build/RelWithDebInfo"\
+# NOT TRUE
+
+echo "Mirroring plugin into MSVC runtime..."
+
+# Copy DLL + PDB
+cp -uv ./RelWithDebInfo/*_pi.dll "$PLUGIN_RUNTIME_ROOT/"
+cp -uv ./RelWithDebInfo/*_pi.pdb "$PLUGIN_RUNTIME_ROOT/"
+
+# Copy metadata.xml
+cp -uv ./RelWithDebInfo/metadata.xml "$PLUGIN_RUNTIME_ROOT/"
+
+# Copy installed assets
+cp -ruv "$PLUGIN_INSTALL_DIR"/data "$PLUGIN_RUNTIME_DIR/"
+cp -ruv "$PLUGIN_INSTALL_DIR"/UserIcons "$PLUGIN_RUNTIME_DIR/"
+
+# Copy manifest.json last
+cp -uv "$PLUGIN_ROOT/manifest.json" "$PLUGIN_RUNTIME_DIR/"
+
+# Copy CA certificate bundle for curl
+cp -uv "$PLUGIN_ROOT/cacert.pem" "$PLUGIN_RUNTIME_DIR/"
+
+# Copy libcurl
+cp -uv "$PLUGIN_ROOT/win_curl/output32/bin/libcurl.dll" "$PLUGIN_RUNTIME_DIR/"
+
+echo "MSVC plugin install complete."
+
+# --- SHOW RESULTS ---
+ls -l *.gz *.xml metadata.xml 2>/dev/null
+echo ""
+echo "List plugin files now in OpenCPN plugin directory:"
+ls -l "$OPENCPN_POSIX/plugins/"*_pi.*
+
+
+# Find ${bold}"build/Build-Output.txt"${normal} file if the build is not successful.
+
 # Other examples below.
-
-# Copy .dll and .pdb files for debugging into MSVisualStudio Development Setup
-# Copy from 
-# C:\Users\fcgle\source\weather_routing_pi\build\relwithdebinfo   weather_routing_pi.dll and weather_routing_pi.pdb
-# into
-# C:\Users\fcgle\source\opencpn\build\RelWithDebInfo\plugins
-
-
 # cp -rv ./SourceFolder ./DestFolder
 # cp -r ./dist/* ./out
 #    -r - Copy all files and folders inside a directory
 #    -i - Ask before replacing files
 #    -u - Copy only if the source is newer
 #    -v - Verbose mode, show files being copied
-# copy ..\build\relwithdebinfo\weather_routing_pi.dll to  C:\Users\fcgle\source\opencpn\build\RelWithDebInfo\plugins
-# copy ..\build\relwithdebinfo\weather_routing_pi.pdb to  C:\Users\fcgle\source\opencpn\build\RelWithDebInfo\plugins
 
-cp -uv ./RelWithDebInfo/*_pi.dll C:/Users/fcgle/source/opencpn/build/RelWithDebInfo/plugins
-cp -uv ./RelWithDebInfo/*_pi.pdb C:/Users/fcgle/source/opencpn/build/RelWithDebInfo/plugins

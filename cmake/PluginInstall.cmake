@@ -11,13 +11,13 @@ if (OCPN_FLATPAK_CONFIG)
 endif (OCPN_FLATPAK_CONFIG)
 
 if (NOT APPLE)
-  target_link_libraries(${PACKAGE_NAME} ${wxWidgets_LIBRARIES} ${EXTRA_LIBS})
+  target_link_libraries(${PACKAGE_NAME} PRIVATE ${wxWidgets_LIBRARIES} ${EXTRA_LIBS})
 endif (NOT APPLE)
 
 if (WIN32)
   if (MSVC)
     # TARGET_LINK_LIBRARIES(${PACKAGE_NAME} gdiplus.lib glu32.lib)
-    target_link_libraries(${PACKAGE_NAME} ${OPENGL_LIBRARIES})
+	target_link_libraries(${PACKAGE_NAME} PRIVATE ${OPENGL_LIBRARIES})
     # add_subdirectory(libs/ocpn-api) target_link_libraries(${PACKAGE_NAME}
     # ocpn::api) message(STATUS "${CMLOC}Added ocpn-api for MSVC")
   endif (MSVC)
@@ -26,7 +26,7 @@ if (WIN32)
     # assuming wxwidgets is compiled with unicode, this is needed for mingw
     # headers
     add_definitions(" -DUNICODE")
-    target_link_libraries(${PACKAGE_NAME} ${OPENGL_LIBRARIES})
+	target_link_libraries(${PACKAGE_NAME} PRIVATE ${OPENGL_LIBRARIES})
     set(CMAKE_SHARED_LINKER_FLAGS "-L../buildwin")
     # add_subdirectory(libs/ocpn-api) target_link_libraries(${PACKAGE_NAME}
     # ocpn::api) message(STATUS "${CMLOC}Added ocpn-api for MINGW")

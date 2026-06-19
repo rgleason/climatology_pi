@@ -1,0 +1,46 @@
+[
+  { "filename": "wind01.gz", "description": "Wind January",   "checksum": "4d254bb01355ec90c35c83e34d86a8609fec20178a8bc9b92976a2d80f8f93a1", "size": 337760, "required": true },
+  { "filename": "wind02.gz", "description": "Wind February",  "checksum": "716416545c0839500372ee0c3b9e7ff6200327faaf7809afad45b01f6948d50e", "size": 344789, "required": true },
+  { "filename": "wind03.gz", "description": "Wind March",     "checksum": "16932ad1fe0793ad8d560004fe43d5f65f81ba8c869bea1196cff7392aee2a66", "size": 337863, "required": true },
+  { "filename": "wind04.gz", "description": "Wind April",     "checksum": "33d762814b2867f916ac3ad835d77eef9f087c9d4c190416850f1598c1328c67", "size": 337197, "required": true },
+  { "filename": "wind05.gz", "description": "Wind May",       "checksum": "cf547d4c6d9e3f808df18b890906443f342b50ce310b2d2ff70d741cebcaae28", "size": 332251, "required": true },
+  { "filename": "wind06.gz", "description": "Wind June",      "checksum": "b08be5db9e3a8a6deb22ec557007a72c3c74516202bee52a6761e4a65ee3bff7", "size": 319843, "required": true },
+  { "filename": "wind07.gz", "description": "Wind July",      "checksum": "2d02096d0007f964269d3539e5ba9d82f3ab60fb1dc6547fa2711fadad8890cd", "size": 318669, "required": true },
+  { "filename": "wind08.gz", "description": "Wind August",    "checksum": "78512d010bdad318183b6a36b4c52b48071d440e9f24f04770f4192b5c664f64", "size": 323355, "required": true },
+  { "filename": "wind09.gz", "description": "Wind September", "checksum": "0b985b9b530829b1de1592bad479d66fe49aad2be673f2aa9113830eb85b2f90", "size": 331840, "required": true },
+  { "filename": "wind10.gz", "description": "Wind October",   "checksum": "9910f7aeb1e56a53012d482ddd8e3e2d04e70c9f1824287dd71a18aa7bab10ff", "size": 329477, "required": true },
+  { "filename": "wind11.gz", "description": "Wind November",  "checksum": "5edc65ace831a6a9231461346ba84acc5b154d3a28f03454a06f98cd9753ce1e", "size": 330471, "required": true },
+  { "filename": "wind12.gz", "description": "Wind December",  "checksum": "022e2c0b2153355e0a40aba931008faa27237167fcb951da98525f955541b058", "size": 334349, "required": true },
+
+  { "filename": "current01.gz", "description": "Currents January",   "checksum": "f70928ada30409ad56b4914fe08d543ae13136ddf3972ac6fb7e93fe5d876a61", "size": 39261, "required": true },
+  { "filename": "current02.gz", "description": "Currents February",  "checksum": "d7a853cecbe834830e52531aa079475ada65d26b317bcd37aa14e4e2a5a58359", "size": 38599, "required": true },
+  { "filename": "current03.gz", "description": "Currents March",     "checksum": "749a8266cfba9785e568c27698ca260b7d407d35c2943f042fc159f5191dc2aa", "size": 36984, "required": true },
+  { "filename": "current04.gz", "description": "Currents April",     "checksum": "80e019e4f45953619bd05df8a69ae962f92d935baad176aefa370eac054f05d2", "size": 36439, "required": true },
+  { "filename": "current05.gz", "description": "Currents May",       "checksum": "8bcce8035b08dec4c32bfc00ac66bc257d359b812f40114b00253204e02a715a", "size": 38318, "required": true },
+  { "filename": "current06.gz", "description": "Currents June",      "checksum": "e5265ec687f83365a2734dfc3c93911210489eb189fd1e797bf90375d71f2314", "size": 41103, "required": true },
+  { "filename": "current07.gz", "description": "Currents July",      "checksum": "f6ff395f93c6861f87dedcc07bdab6b51a342cf806b50b4fb2edbbf94321f523", "size": 42390, "required": true },
+  { "filename": "current08.gz", "description": "Currents August",    "checksum": "1dce2b55d81a36fbcb0fa83590b16f3bf0f9e36662912356a293ff6fb9093a4c", "size": 40929, "required": true },
+  { "filename": "current09.gz", "description": "Currents September", "checksum": "7e098fd43709cf6b91aec1c6479d132553fc612487ab9167a73a6b55b5210215", "size": 40235, "required": true },
+  { "filename": "current10.gz", "description": "Currents October",   "checksum": "e4c16fa01d14312b0d3ca870b13322b027f63f0afb0afe58e3606886b94bed98", "size": 39586, "required": true },
+  { "filename": "current11.gz", "description": "Currents November",  "checksum": "168290ee2fb15029accd2a41631f342b617ce3c32519c4fcf13012e87a5ff274", "size": 39888, "required": true },
+  { "filename": "current12.gz", "description": "Currents December",  "checksum": "fa4edf5a224a5629457fcc20e0ba36604bf086fdf439b3b0351500c5fef562df", "size": 40720, "required": true },
+
+  { "filename": "airtemperature.gz",       "description": "Air Temperature",          "checksum": "0411f2599591524e15070646728d67b6bc0d603a78e46e2f5cf60872f524db02", "size": 68520,  "required": true },
+  { "filename": "cloud.gz",                "description": "Cloud Cover",              "checksum": "f7e65e609d37d1dd5887d44b8c9da97249f24d12962cd7f09df346e8839799ba", "size": 115422, "required": true },
+  { "filename": "precipitation.gz",        "description": "Precipitation",            "checksum": "73891af3496163654ece1641587c9e09f5683b015046efc494404918e4f62d75", "size": 50989,  "required": true },
+  { "filename": "relativehumidity.gz",     "description": "Relative Humidity",        "checksum": "742f53b59f8fdef3f2425768b35457015f27cd3d7e142edb54c8f878fdab705f", "size": 283711, "required": true },
+  { "filename": "sealevelpressure.gz",     "description": "Sea Level Pressure",       "checksum": "d8a6fe795ed4865830e31893c17c08c8169b9084c693309b0f220c43ab090c31", "size": 185908, "required": true },
+  { "filename": "seasurfacetemperature.gz","description": "Sea Surface Temperature",  "checksum": "1c7c0ba258dbe8e2bb251e8e1e981a05e79aa84d2e539d6bccdf4448c88c7670", "size": 300021, "required": true },
+  { "filename": "lightning.gz",            "description": "Lightning Density",        "checksum": "7dcb59a00d88cfbf40f2a95a08827c1920fc2eecd60df71e223e09944602e243", "size": 463626, "required": true },
+  { "filename": "seadepth.gz",             "description": "Sea Depth",                "checksum": "415bffbdd396198b8476bb0e5ec26536ea61d92007a5dbb1cc06557996bf281c", "size": 13850,  "required": true },
+
+  { "filename": "cyclone-atl.gz", "description": "Cyclone Tracks Atlantic",          "checksum": "53ee1d42b0049c111230f075fc4c521c506c778fccc09494b42ae113f53edeb6", "size": 254817, "required": false },
+  { "filename": "cyclone-epa.gz", "description": "Cyclone Tracks Eastern Pacific",   "checksum": "13a9784bdb0f0e8f5f5a55505bc78967a6c6ff0f06eaa0dd14ff0f6bf97ff592", "size": 109423, "required": false },
+  { "filename": "cyclone-nio.gz", "description": "Cyclone Tracks North Indian",      "checksum": "2a31e972399f0e693d097d2deaa697bbf471991ca33a61204b68261822da49c9", "size": 37367,  "required": false },
+  { "filename": "cyclone-she.gz", "description": "Cyclone Tracks South Indian",      "checksum": "52f48a9f7dec7bda24f787745aed6449e4656f6c30c1cf9519bf31849be27be0", "size": 145805, "required": false },
+  { "filename": "cyclone-spa.gz", "description": "Cyclone Tracks South Pacific",     "checksum": "55c013a2e9682348c70b2fe824e249f3d9b64da44bf88b1465e34b87d1d0cb75", "size": 67314,  "required": false },
+  { "filename": "cyclone-wpa.gz", "description": "Cyclone Tracks Western Pacific",   "checksum": "7013c547ac019fd228df144053d75d28ed6375aedb610ee379521ba6fa80055b", "size": 240286, "required": false },
+
+  { "filename": "elnino_years.txt", "description": "El Niño Years", "checksum": "7eec1f7e02809bba9d9e2c5cbfbc2c2bd08073cbe204ef2ca51b1a98434898e7", "size": 3850, "required": false }
+]
+
