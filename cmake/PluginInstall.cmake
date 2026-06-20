@@ -53,7 +53,7 @@ if (UNIX
   include_directories(${BZIP2_INCLUDE_DIR})
   find_package(ZLIB REQUIRED)
   include_directories(${ZLIB_INCLUDE_DIR})
-  target_link_libraries(${PACKAGE_NAME} ${BZIP2_LIBRARIES} ${ZLIB_LIBRARY})
+  target_link_libraries(${PACKAGE_NAME} PRIVATE ${BZIP2_LIBRARIES} ${ZLIB_LIBRARY})
 endif (
   UNIX
   AND NOT APPLE
@@ -139,7 +139,7 @@ if (APPLE)
   )
 
   find_package(ZLIB REQUIRED)
-  target_link_libraries(${PACKAGE_NAME} ${ZLIB_LIBRARIES})
+  target_link_libraries(${PACKAGE_NAME} PRIVATE ${ZLIB_LIBRARIES})
 
   # For Apple build, we need to copy the "data" directory contents to the build
   # directory, so that the packager can pick them up.

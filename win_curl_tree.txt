@@ -1,0 +1,11 @@
+
+    Directory: C:\Users\fcgle\source\climatology_pi\win_curl
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----           6/16/2026 10:52 AM                build32
+d----           6/17/2026  7:16 PM                output32
+-a---           6/17/2026  7:16 PM           3249 build-curl-win32-no-zlib.ps1
+-a---           6/17/2026  7:16 PM           4620 build-curl-win32.ps1
+-a---           6/17/2026  7:16 PM           3401 Prelim-Instructions.txt
+

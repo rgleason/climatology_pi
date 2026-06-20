@@ -1,0 +1,178 @@
+## ====== CUT OUT TOP
+## ---- Section Below - Add your project SET(SRCS and SET(HDRS  etc..
+set(SRCS
+    src/climatology_pi.cpp
+    src/ClimatologyConfigDialog.cpp
+    src/ClimatologyDialog.cpp
+    src/ClimatologyOverlayFactory.cpp
+    src/ClimatologyUI.cpp
+    src/DownloadManager.cpp
+    src/icons.cpp
+    src/IsoBarMap.cpp
+    src/ManifestLoader.cpp
+    src/zuFile.cpp
+)
+
+set(HDRS
+    include/climatology_pi.h
+    include/ClimatologyConfigDialog.h
+    include/ClimatologyDialog.h
+    include/ClimatologyOverlayFactory.h
+    include/ClimatologyUI.h
+    include/gldefs.h
+    include/defs.h
+    include/DownLoadFileEntry.hpp
+    include/DownloadManager.hpp
+    include/icons.h
+    include/IsoBarMap.h
+    include/linmath.h
+    include/ManifestEntry.hpp
+    include/ManifestLoader.hpp
+    include/zuFile.h
+)
+
+add_definitions(-DPLUGIN_USE_SVG)
+
+## ----- Section above - Add your project SET(SRCS and SET(HDRS  etc.-------##
+## ----- If using JSON validation in plugin section below is needed --------##
+
+# Do not need Json Schema Validation
+
+## ----- If using JSON validation in plugin section above is needed --------##
+
+if (QT_ANDROID)
+    # No Android-specific logic for this plugin
+endif()
+
+##=============================================================
+## Modify/configure 'Include' Directories below for the Plugin
+##=============================================================
+
+#include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include)
+
+# Change target_sources to match your project needs.
+# ==============================================================
+
+target_sources(${PACKAGE_NAME} PRIVATE
+    ${SRCS}
+    ${HDRS}
+)
+
+##==============================================================
+
+# 1. Add plugin_dc FIRST
+# plugin_dc must be added BEFORE we add include dirs  so it gets found
+# add_subdirectory(opencpn-libs/plugin_dc)
+
+# 2. Link plugin_dc SECOND
+# If you removed WindowsHeaders (recommended),
+# ocpn::plugin-dc brings in gl_private.h
+#No GLU libraries are linked
+#No tessellator code is linked
+#No Windows GLU headers are injected
+#No GLU symbols appear in your plugin
+target_link_libraries(${PACKAGE_NAME}
+    PRIVATE
+        ocpn::api
+#        ocpn::plugin-dc
+        ocpn::tinyxml
+        ocpn::jsonlib
+        ocpn::wxjson
+        ocpn::bzip2
+        ocpn::zlib
+)
+
+
+# 3. Add include directories LAST
+# opencpn-libs include paths (correct order)
+#This ensures:
+#gl_private.h is visible
+#glu.h is NOT included unless explicitly referenced
+#pidc.h (patched) includes the correct header
+
+
+
+if (NOT OCPN_FLATPAK_CONFIG)
+    # Build environment not available when flatpak is being configured so
+    # following statements will not work
+    message(STATUS "${CMLOC}Adding target link libraries to ${PACKAGE_NAME}")
+
+#    if (WIN32)
+#        add_subdirectory(opencpn-libs/WindowsHeaders)
+#    endif ()
+	add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
+    add_subdirectory(opencpn-libs/tinyxml)
+    add_subdirectory(opencpn-libs/jsonlib)
+    add_subdirectory(opencpn-libs/wxJSON)
+#    add_subdirectory(opencpn-libs/plugin_dc)
+    if(NOT UNIX)
+        add_subdirectory(opencpn-libs/bzip2)
+    endif()
+    if(WIN32 AND MSVC)
+            add_subdirectory(opencpn-libs/zlib)
+    endif()
+endif()
+
+
+
+add_definitions(-DTIXML_USE_STL)
+
+##
+## ----- If using JSON validation section below is needed ---------------##
+##
+
+# Do not need Json Schema Validation
+
+##------- Change below to match project requirements --------------------##
+
+# Needed for android builds
+if (QT_ANDROID)
+  include_directories(BEFORE ${qt_android_include})
+endif (QT_ANDROID)
+
+#===============================================================
+## Needed for all builds Do not change - needed to build app -------------##
+##===============================================================
+set(LOCAL_BUILD ON)
+
+include("PluginInstall")
+include("PluginLocalization")
+include("PluginPackage")
+
+# The plugin build system creates the plugin target inside
+# PluginSetup.cmake and PluginConfigure.cmake.
+# The target name is:  ${PACKAGE_NAME}
+# Ensure install rules attach to the correct plugin target
+set(PKG_TARGET ${PACKAGE_NAME})
+
+target_include_directories(${PACKAGE_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    # plugin_dc core headers
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/include
+    # dc_utils (pidc.h lives here)
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/dc_utils/include
+    # OpenCPN GL replacement headers (gl_private.h)
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/glu/include/GL
+)
+
+## ====== CUT OUT DOWN TO HERE
+
+
+This was duplicated, plugininstall.cmake does it too.
+
+# Install the plugin DLL into the plugins directory
+install(TARGETS ${PACKAGE_NAME}
+        RUNTIME DESTINATION plugins)
+
+# ------------------------------
+# Plugin resource installation
+# ------------------------------
+# manifest.json is metadata, not data — belongs in plugin root
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json
+        DESTINATION plugins/climatology_pi)
+		
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data/
+        DESTINATION plugins/climatology_pi/data)
+		
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/UserIcons/
+        DESTINATION plugins/climatology_pi/UserIcons)

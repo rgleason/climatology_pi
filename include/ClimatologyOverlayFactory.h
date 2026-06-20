@@ -314,8 +314,12 @@ private:
 	CycloneFilterParams m_cycloneParams;
 
     bool CreateGLTexture(ClimatologyOverlay &O, int setting, int month, PlugIn_ViewPort &vp);
-    void DrawGLTexture( ClimatologyOverlay &O1, ClimatologyOverlay &O2,
-                        double dpos, PlugIn_ViewPort &vp, double transparency);
+
+	void DrawGLTexture(GLuint tex1,
+                   GLuint tex2,
+                   double dpos,
+                   PlugIn_ViewPort &vp,
+                   double transparency);
 
     void RenderOverlayMap( int setting, PlugIn_ViewPort &vp);
 
@@ -342,7 +346,6 @@ private:
     wxInt16 m_lightn[13][180][360]; /* 1 degree intervals */
     wxInt16 m_seadepth[180][360];   /* 1 degree intervals   */
 
-    int m_cyclonesDisplayList;
     long m_cyclone_drawn_counter;
 
     // Cyclone basin lists

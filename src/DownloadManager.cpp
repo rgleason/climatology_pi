@@ -1,3 +1,5 @@
+#ifdef CLIMATOLOGY_BUNDLED_CURL
+
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
 #include "icons.h"
@@ -120,7 +122,7 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
         return false;
     }
 
-    FILE* fp = fopen(dest.mb_str(), "wb");
+    FILE* fp = fopen(dest.mb_str().data(), "wb");
     if (!fp) {
         wxLogMessage("Climatology: Failed to open %s for writing", dest);
         return false;
@@ -138,6 +140,7 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
                   wxFileName::GetPathSeparator() + "cacert.pem";
     std::string ca_utf8 = ca.ToStdString();
     wxLogMessage("Climatology: Using CAINFO = %s", ca_utf8.c_str());
+	wxLogMessage("Climatology: CA file exists? %d", wxFileExists(ca));
     curl_easy_setopt(curl, CURLOPT_CAINFO, ca_utf8.c_str());
 	
     // SAFE URL CONVERSION
@@ -272,3 +275,4 @@ wxThread::ExitCode DownloadWorker::Entry()
 
     return (wxThread::ExitCode)0;
 }
+#endif // CLIMATOLOGY_BUNDLED_CURL

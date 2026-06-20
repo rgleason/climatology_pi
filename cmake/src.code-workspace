@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "../../weather_routing_pi/src"
+		},
+		{
+			"path": "../../weather_routing_pi/include"
+		}
+	],
+	"settings": {}
+}

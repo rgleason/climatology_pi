@@ -65,11 +65,13 @@ set(VERBOSE_NAME Climatology)
 set(COMMON_NAME "Climatology")    # Search "getcommonname"in climatology_pi.
 set(TITLE_NAME "climatology")
 set(PACKAGE_CONTACT "Sean D'Epagnier")
+set(PACKAGE "climatology_pi")
+# set(PACKAGE "climatology") -old setting
+# new setting to conform to project name
+set(PACKAGE_NAME "climatology_pi")
+project(${PACKAGE_NAME})
+#project(${PACKAGE}) Old setting
 
-set(PACKAGE "climatology")
-# suggested changes
-#set(PACKAGE_NAME "climatology_pi")
-#set(PACKAGE "climatology_pi")
 
 set(SHORT_DESCRIPTION "Climatology PlugIn: 32 years of monthly NOAA Data")
 set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic weather data. Supported Climatology types include: - Average wind directions and speed- Percentage of gale and calm conditions - Sea Surface Currents - Average swell and sea state (not yet implemented) - Precipitation, Humidity, Cloud Cover, and Lightning Strikes - Monthly average Sea Level pressure and Sea Temperature, Air Temperature - Tropical Cyclone tracks")
@@ -83,11 +85,10 @@ set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
 set(OCPN_API_VERSION_MINOR "20")
-
 set(WX_VER "32")
 set(WX_VER_PATCH "8")
 
-set(TP_COMMENT "  * Release using CI")
+set(TP_COMMENT "  * RelWithDebInfo using CI")
 
 set(PARENT "opencpn")
 
@@ -118,12 +119,24 @@ set(XML_DESCRIPTION ${LONG_DESCRIPTION})
 ## ----- Modify section above to include all the details for your plugin ------- ##
 ## ----- Modify section below if there are special requirements for the plugin --##
 
+# Forces all install() output to go to 
+# "..source\opencpn\build\RelWithDebInfo\plugins\climatology_pi\
+
+# Force installation into the build configuration directory
+# set(PLUGIN_INSTALL_DIR
+#    "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/plugins/${PACKAGE_NAME}" CACHE PATH "" FORCE)
+# set(PLUGIN_INSTALL_DIR
+#    "C:/Users/fcgle/source/opencpn/build/RelWithDebInfo/plugins/${PACKAGE_NAME}" CACHE PATH "" FORCE)
+# set(PLUGIN_INSTALL_DIR
+#    "C:/Users/fcgle/source/opencpn/build/${CMAKE_BUILD_TYPE}/plugins/${PACKAGE_NAME}"
+#    CACHE PATH "" FORCE)
+
 option(PLUGIN_USE_SVG "Use SVG graphics" ON)
 
 set(CMAKE_CXX_STANDARD 11)
 
 # Prefer libGL.so to libOpenGL.so, see CMP0072
-set(OpenGL_GL_PREFERENCE "LEGACY")   #not operational
+#  set(OpenGL_GL_PREFERENCE "LEGACY")   #not operational
 
 option(USE_GL "Enable OpenGL support" ON)
 message(STATUS "${CMLOC}USE_GL: ${USE_GL}")
@@ -143,203 +156,120 @@ message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 # ----- Statements below used to setup standard variables required by the CMAKE  -##
 # ----- process -- Do not remove -##
 
-project(${PACKAGE})
-# Suggested change
-# project(${PACKAGE_NAME})
-
-
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 ##========================================================
-
-include("PluginSetup")
-
+## Standard OpenCPN plugin setup
 ##========================================================
-## ----- Above sets up standard variables required by CMAKE - Do not remove -----##
-## ----- Modify section below if there are special requirements for the plugin --##
-
-set(CMAKE_VERBOSE_MAKEFILE "Activate verbose mode for make files" ON)
-
-option(Plugin_CXX11 "Use c++11" OFF)
-
-## ----- Modify section above if there are special requirements for the plugin --##
-## ----- Do not change next section - needed to configure build process ---------##
-##===========================================================
-
+include("PluginSetup")
 include("PluginConfigure")
-
 ##===========================================================
 ## ----- Do not change section above - needed to configure build process --------##
 ## ----- Change below to match project requirements for source, headers, etc. ---##
 
+set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
+set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
+
+# This forces your include directories (plugin_dc) to be searched 
+# before system include directories. - Does not fix problem.
+
+# ---------------------------------------------------------
+# ADD plugin_dc EARLY — BEFORE linking, BEFORE includes
+# ---------------------------------------------------------
 add_definitions(-DUSE_S57)
+add_definitions(-DUSE_GL)
+add_subdirectory(opencpn-libs/plugin_dc)
+target_compile_definitions(${PACKAGE_NAME} PRIVATE USE_OCPNGL)
+target_compile_definitions(${PACKAGE_NAME} PRIVATE __OCPN__GL__)
 
-add_definitions(-DCLIMATOLOGY_BUNDLED_CURL)
+# ---------------------------------------------------------
+# Add other opencpn-libs BEFORE linking
+# ---------------------------------------------------------
+add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
+add_subdirectory(opencpn-libs/tinyxml)
+add_subdirectory(opencpn-libs/jsonlib)
+add_subdirectory(opencpn-libs/wxJSON)
 
-
-## ---- Section Below - Add your project SET(SRCS and SET(HDRS  etc..
-
-SET(SRCS
-            src/climatology_pi.cpp
-			src/ClimatologyConfigDialog.cpp
-			src/ClimatologyDialog.cpp
-			src/ClimatologyOverlayFactory.cpp
-            src/ClimatologyUI.cpp
-            src/DownloadManager.cpp
-            src/icons.cpp
-            src/IsoBarMap.cpp
-            src/ManifestLoader.cpp            
-			src/ManifestLoader.cpp
-			src/zuFile.cpp
-			src/png2wx.pl
-)
-
-SET(HDRS
-            include/climatology_pi.h
-			include/ClimatologyConfigDialog.h
-			include/ClimatologyDialog.h
-			include/ClimatologyOverlayFactory.h
-			include/ClimatologyUI.h
-			include/gldefs.h
-			include/defs.h
-			include/DownLoadFileEntry.hpp
-			include/DownloadManager.hpp
-			include/icons.h
-			include/IsoBarMap.h
-			include/linmath.h
-			include/ManifestEntry.hpp
-			include/ManifestLoader.hpp
-			include/zuFile.h
-)
-
-add_definitions(-DPLUGIN_USE_SVG)
-
-## ----- Section above - Add your project SET(SRCS and SET(HDRS  etc.-------##
-## ----- If using JSON validation in plugin section below is needed --------##
-
-# Do not need Json Schema Validation
-
-## ----- If using JSON validation in plugin section above is needed --------##
-
-if (QT_ANDROID)
-    # No Android-specific logic for this plugin
+if(NOT UNIX)
+    add_subdirectory(opencpn-libs/bzip2)
 endif()
 
+if(WIN32 AND MSVC)
+    add_subdirectory(opencpn-libs/zlib)
+endif()
 
-##=============================================================
-## Change as required to collect all the set( headers and SRCS
-## This add_library  can be used in conditionals below.
-##=============================================================
+##===========================================================
+## Plugin sources
+##===========================================================
+set(SRCS
+    src/climatology_pi.cpp
+    src/ClimatologyConfigDialog.cpp
+    src/ClimatologyDialog.cpp
+    src/ClimatologyOverlayFactory.cpp
+    src/ClimatologyUI.cpp
+    src/DownloadManager.cpp
+    src/icons.cpp
+    src/IsoBarMap.cpp
+    src/ManifestLoader.cpp
+    src/zuFile.cpp
+)
 
-set(SRC ${SRCS} ${HDRS} )
+set(HDRS
+    include/climatology_pi.h
+    include/ClimatologyConfigDialog.h
+    include/ClimatologyDialog.h
+    include/ClimatologyOverlayFactory.h
+    include/ClimatologyUI.h
+    include/gldefs.h
+    include/defs.h
+    include/DownLoadFileEntry.hpp
+    include/DownloadManager.hpp
+    include/icons.h
+    include/IsoBarMap.h
+    include/linmath.h
+    include/ManifestEntry.hpp
+    include/ManifestLoader.hpp
+    include/zuFile.h
+)
 
-##=============================================================
-## Modify/configure 'Include' Directories below for the Plugin
-##=============================================================
+target_sources(${PACKAGE_NAME} PRIVATE ${SRCS} ${HDRS})
 
-#include_directories(BEFORE ${PROJECT_SOURCE_DIR}/include)
+##===========================================================
+## Correct linking order — plugin_dc MUST be here
+##===========================================================
+target_link_libraries(${PACKAGE_NAME}
+    PRIVATE
+        ocpn::api
+        ocpn::plugin-dc
+        ocpn::tinyxml
+        ocpn::jsonlib
+        ocpn::wxjson
+        ocpn::bzip2
+        ocpn::zlib
+)
 
-# Change target_sources to match your project needs.
-# ==============================================================
-
-target_sources(${PACKAGE_NAME} PUBLIC ${SRC} )
-
-##==============================================================
-
-# Always include plugin headers
+##===========================================================
+## Correct include directory order — MUST come AFTER linking
+##===========================================================
 target_include_directories(${PACKAGE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+
+    # plugin_dc core headers
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/include
+
+    # dc_utils (pidc.h lives here)
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/dc_utils/include
+
+	# OpenCPN GL replacement headers (gl_private.h)
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/glu/include
 )
 
-if (NOT OCPN_FLATPAK_CONFIG)
-    # Build environment not available when flatpak is being configured so
-    # following statements will not work
-    message(STATUS "${CMLOC}Adding target link libraries to ${PACKAGE_NAME}")
-
-    if (WIN32)
-        add_subdirectory(opencpn-libs/WindowsHeaders)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE windows::headers)
-    endif ()
-
-    add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::api)
-
-    add_subdirectory(opencpn-libs/tinyxml)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::tinyxml)
-
-    add_subdirectory(opencpn-libs/jsonlib)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::jsonlib)
-
-    add_subdirectory(opencpn-libs/wxJSON)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::wxjson)
-
-    add_subdirectory(opencpn-libs/plugin_dc)
-    target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::plugin-dc)
-
-    if(NOT UNIX)
-        add_subdirectory(opencpn-libs/bzip2)
-        target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::bzip2)
-    endif()
-
-    if(WIN32)
-        if(MSVC)
-            SET(OPENCPN_IMPORT_LIB "../../${CMAKE_CFG_INTDIR}/${PARENT}")
-            add_subdirectory(opencpn-libs/zlib)
-            target_link_libraries(${PACKAGE_NAME} PRIVATE ocpn::zlib)
-        else()
-            target_link_libraries(${PACKAGE_NAME} PRIVATE "-lz")
-        endif()
-    endif()
-
-endif()
-	
-add_definitions(-DTIXML_USE_STL)
-
-##
-## ----- If using JSON validation section below is needed ---------------##
-##
-
-# Do not need Json Schema Validation
-
-##------- Change below to match project requirements --------------------##
-
-# Needed for android builds
-if (QT_ANDROID)
-  include_directories(BEFORE ${qt_android_include})
-endif (QT_ANDROID)
-
-#===============================================================
-## Needed for all builds Do not change - needed to build app -------------##
-##===============================================================
-set(LOCAL_BUILD ON)
-
-
+##===========================================================
+## Install, localization, packaging
+##===========================================================
 include("PluginInstall")
 include("PluginLocalization")
 include("PluginPackage")
-
-# The plugin build system creates the plugin target inside
-# PluginSetup.cmake and PluginConfigure.cmake.
-# The target name is:  ${PACKAGE_NAME}
-# Ensure install rules attach to the correct plugin target
-set(PKG_TARGET ${PACKAGE_NAME})
-
-# Install the plugin DLL into the plugins directory
-install(TARGETS ${PACKAGE_NAME}
-        RUNTIME DESTINATION plugins)
-
-# ------------------------------
-# Plugin resource installation
-# ------------------------------
-# manifest.json is metadata, not data — belongs in plugin root
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/manifest.json
-        DESTINATION plugins/climatology_pi)
-		
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data/
-        DESTINATION plugins/climatology_pi/data)
-		
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/UserIcons/
-        DESTINATION plugins/climatology_pi/UserIcons)
 
 # --- Bundle libcurl.dll (WeatherRouting style) ---
 # if (WIN32)
@@ -371,5 +301,14 @@ if (WIN32)
     install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
         DESTINATION plugins/climatology_pi)
 		
-endif()
+else()  # -------- Linux / macOS --------
+
+    message(STATUS "${CMLOC}Configuring system curl for non-Windows")
+
+    # Use system curl
+	
+	find_package(CURL REQUIRED)
+	target_link_libraries(${PACKAGE_NAME} PRIVATE CURL::libcurl)
+
+ endif()
 

@@ -20,7 +20,7 @@ bool ManifestLoader::Load(std::vector<ManifestEntry>& entries)
 
     if (!wxFileExists(m_manifestPath))
     {
-        wxLogWarning("Climatology: manifest.json not found: %s", m_manifestPath);
+		wxLogWarning("Climatology: manifest.json not found: %s", m_manifestPath.c_str());
         return false;
     }
 
@@ -85,6 +85,7 @@ for (int i = 0; i < root.Size(); i++)
 }
 
 
-    wxLogMessage("Climatology: Loaded %zu manifest entries", entries.size());
+wxLogMessage("Climatology: Loaded %llu manifest entries",
+             static_cast<unsigned long long>(entries.size()));
     return true;
 }

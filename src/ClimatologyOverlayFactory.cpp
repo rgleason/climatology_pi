@@ -29,34 +29,59 @@
 #include <wx/glcanvas.h>
 #include <wx/event.h>
 
+//#include <GL/gl.h>
+//#include <GL/glext.h>
+
+#include "gldefs.h"
+#include <GL/gl_private.h>
+
+#include <pidc.h>
+#include "pi_shaders.h"
+#include "icons.h"
+#include "climatology_pi.h"
+#include "ClimatologyOverlayFactory.h"
+#include "ManifestLoader.hpp"
+#include "DownloadManager.hpp"
+
+
+
+#if 0
+#include <wx/wx.h>
+#include <wx/glcanvas.h>
+#include <wx/event.h>   
+
+#include <GL/gl.h>
+#include <GL/glext.h>
+
+#include "gldefs.h"          // you can leave this, but it’s not critical now
+#include <GL/gl_private.h>   // also harmless
+
+#include <pidc.h>
+#include "pi_shaders.h"
+
 #ifdef __WXOSX__
 # include <OpenGL/OpenGL.h>
 # include <OpenGL/gl3.h>
 #endif
 
 #ifdef __ANDROID__
-#include <qopengl.h>
-#include "GL/gl_private.h"
-#endif
-
-#ifdef FLATPAK
-#include "GL/gl_private.h"
+# include <qopengl.h>
 #endif
 
 #ifdef __WXGTK__
-#include <GL/glx.h>
+# include <GL/glx.h>
 #endif
 
 #ifdef USE_GLES2
-#include "GLES2/gl2.h"
+# include "GLES2/gl2.h"
 #endif
 
-//#include "gldefs.h"
 #include "icons.h"
 #include "climatology_pi.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ManifestLoader.hpp"
 #include "DownloadManager.hpp"
+#endif
 
 class CycloneLoaderThread : public wxThread
 {
@@ -103,57 +128,6 @@ ConvertManifest(const std::vector<ManifestEntry>& manifest)
 
 #define FAILED_FILELIST_MSG_LEN 150
 
-static int s_multitexturing = 0;
-
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-static PFNGLACTIVETEXTUREARBPROC s_glActiveTextureARB = 0;
-static PFNGLMULTITEXCOORD2DARBPROC s_glMultiTexCoord2dARB = 0;
-#endif
-
-static int texture_format;
-static bool glQueried = false;
-
-static GLboolean QueryExtension( const char *extName )
-{
-    /*
-     ** Search for extName in the extensions string. Use of strstr()
-     ** is not sufficient because extension names can be prefixes of
-     ** other extension names. Could use strtok() but the constant
-     ** string returned by glGetString might be in read-only memory.
-     */
-    char *p;
-    char *end;
-    int extNameLen;
-
-    extNameLen = strlen( extName );
-
-    p = (char *) glGetString( GL_EXTENSIONS );
-    if( NULL == p ) {
-        return GL_FALSE;
-    }
-
-    end = p + strlen( p );
-
-    while( p < end ) {
-        int n = strcspn( p, " " );
-        if( ( extNameLen == n ) && ( strncmp( extName, p, n ) == 0 ) ) {
-            return GL_TRUE;
-        }
-        p += ( n + 1 );
-    }
-    return GL_FALSE;
-}
-
-#if defined(__WXMSW__)
-#define systemGetProcAddress(ADDR) wglGetProcAddress(ADDR)
-#elif defined(__WXOSX__)
-#include <dlfcn.h>
-#define systemGetProcAddress(ADDR) dlsym( RTLD_DEFAULT, ADDR)
-#elif defined(__OCPN__ANDROID__)
-#define systemGetProcAddress(ADDR) eglGetProcAddress(ADDR)
-#else
-#define systemGetProcAddress(ADDR) glXGetProcAddress((const GLubyte*)ADDR)
-#endif
 
 double deg2rad(double degrees)
 {
@@ -170,7 +144,7 @@ ClimatologyOverlay::~ClimatologyOverlay()
 }
 
 static const wxString climatology_pi = "climatology_pi: ";
-static bool s_bnoglrepeat = true;
+
 
 double ClimatologyIsoBarMap::CalcParameter(double lat, double lon)
 {
@@ -183,7 +157,6 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory(ClimatologyDialog &dlg)
       m_bCompletedLoading(false),
       m_dlg(dlg),
       m_Settings(dlg.m_cfgdlg->m_Settings),
-      m_cyclonesDisplayList(0),
       m_cyclone_drawn_counter(0)
 {
 	wxLogMessage("Climatology_pi: dlg.m_cfgdlg = %p", dlg.m_cfgdlg);
@@ -214,27 +187,39 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory(ClimatologyDialog &dlg)
     // 1. Initialize DownloadManager
     // ------------------------------------------------------------
     m_downloadManager = new DownloadManager(&m_dlg, ClimatologyDataDirectory());
-	
+
+    // ------------------------------------------------------------
+    // 2. Load manifest.json
+    // ------------------------------------------------------------
+    wxString manifestPath = ClimatologyDataDirectory() + wxFileName::GetPathSeparator() + "manifest.json";
+
+    ManifestLoader loader(manifestPath.ToStdString());
+
+    std::vector<ManifestEntry> manifestEntries;
+    if (!loader.Load(manifestEntries)) {
+		wxLogWarning("Climatology_pi: Failed to load manifest.json — proceeding without manifest");
+	    // Continue with empty list; Load() will fail gracefully
+    }
+
 	// ------------------------------------------------------------
-	// 2. Convert ManifestEntry → DownloadFileEntry
+	// 3. Convert ManifestEntry → DownloadFileEntry
 	// ------------------------------------------------------------
-	std::vector<ManifestEntry> manifestEntries;
 	std::vector<DownloadFileEntry> files = ConvertManifest(manifestEntries);
 
 	// ------------------------------------------------------------
-	// 3. Pass manifest to Downloadmanager
+	// 4. Pass manifest to Downloadmanager
 	// ------------------------------------------------------------
-
-    m_downloadManager->SetManifest(files);
+    m_downloadManager->SetManifest(files);	
 
     // ------------------------------------------------------------
-    // 4. Local data present? → Load immediately
+    // 5. Local data present? → Load immediately
     // ------------------------------------------------------------
 	if (m_downloadManager->AllRequiredAvailable()) {
 		wxLogMessage("Climatology_pi: All climatology data verified — loading now");
-
-		Load();   // Load immediately; Load() decides if we’re “complete”
-
+		
+		// Load immediately; Load() decides if we’re “complete”
+		Load();   
+		
 		if (!m_bCompletedLoading) {
 			wxLogMessage("Climatology_pi: Data load failed — some files corrupt or missing");
 			m_dlg.m_tStatus->SetLabel("Climatology data load failed");
@@ -250,12 +235,11 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory(ClimatologyDialog &dlg)
 	}
 
     // ------------------------------------------------------------
-    // 5. Otherwise → start background download
+    // 6. Otherwise → start background download
     // ------------------------------------------------------------
     wxLogMessage("Climatology_pi: Missing or corrupt data — starting download manager");
     m_dlg.Bind(EVT_DM_COMPLETE, &ClimatologyOverlayFactory::OnDownloadComplete, this);
     m_downloadManager->StartBackgroundDownload(true);
-
     // UI stays disabled until OnDownloadComplete()
 }
 
@@ -671,68 +655,6 @@ void ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog *progressdi
 		wxLogWarning("Climatology: Progress dialog aborted update step");
 	}
 	ReadSeaDepthData("seadepth");
-
-
-
-#if 0
-// moved to background thread
-    /* load cyclone tracks */
-    bool allcyclone = true;
-	if(progressdialog && !progressdialog->Update(34, _("cyclone (east pacific)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-		// do NOT return
-	}
-	if(!ReadCycloneData("cyclone-epa", m_epa))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(35, _("cyclone (west pacific)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-	}
-	if(!ReadCycloneData("cyclone-wpa", m_wpa))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(36, _("cyclone (south pacific)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-	}
-	if(!ReadCycloneData("cyclone-spa", m_spa, true))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(37, _("cyclone (atlantic)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-	}
-	if(!ReadCycloneData("cyclone-atl", m_atl))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(38, _("cyclone (north indian)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-	}
-	if(!ReadCycloneData("cyclone-nio", m_nio))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(39, _("cyclone (south indian)"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-	}
-	if(!ReadCycloneData("cyclone-she", m_she, true))
-		allcyclone = false;
-
-	if(progressdialog && !progressdialog->Update(40, _("el nino years"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-		// do NOT return
-	}
-
-	if(!ReadElNinoYears("elnino_years.txt")) {
-		m_dlg.m_cfgdlg->m_cbElNino->Disable();
-		m_dlg.m_cfgdlg->m_cbLaNina->Disable();
-		m_dlg.m_cfgdlg->m_cbNeutral->Disable();
-	}
-
-	if(progressdialog && !progressdialog->Update(41, _("cyclone cache"))) {
-		wxLogWarning("Climatology: Progress dialog aborted update step");
-		// do NOT return
-	}
-	BuildCycloneCache();
-		
-#endif
 
 	// CYCLONE LOADING DISABLED AT STARTUP
 	// Cyclones will be loaded later in a background thread.
@@ -1698,428 +1620,83 @@ void ClimatologyOverlayFactory::RenderGLOverlay(wxGLContext *pcontext,
 
 
 
-bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
-                                                int setting, int month,
-                                                PlugIn_ViewPort &vp)
+
+void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
+                                              double dpos,
+                                              PlugIn_ViewPort &vp,
+                                              double transparency)
 {
-    if (!texture_format)
-        return false;
+    // Screen quad
+    float x = 0;
+    float y = 0;
+    float w = vp.pix_width;
+    float h = vp.pix_height;
 
-    double s = 1.0;
-    double latoff = 0, lonoff = 0;
+    float coords[8] = {
+        x,     y,
+        x+w,   y,
+        x,     y+h,
+        x+w,   y+h
+    };
 
-    switch (setting) {
-    case ClimatologyOverlaySettings::WIND: {
-        auto* data = m_WindData[month];
-        if (!data)
-            return false;
+    float uv[8] = {
+        0, 0,
+        1, 0,
+        0, 1,
+        1, 1
+    };
 
-        s = data->longitudes / 360.0;
-        latoff = 90.0 / data->latitudes;
-        lonoff = 180.0 / data->longitudes;
-        break;
-    }
+    // Use the shader program
+    glUseProgram(pi_texture_2DA_shader_program);
 
-    case ClimatologyOverlaySettings::CURRENT: s = 3;  break;
-    case ClimatologyOverlaySettings::SLP:     s = .5; break;
-    case ClimatologyOverlaySettings::AT:      s = .5; break;
-    case ClimatologyOverlaySettings::CLOUD:   s = .5; break;
-    default: s = 1;
-    }
+    // Attributes
+    GLint mPosAttrib = glGetAttribLocation(pi_texture_2DA_shader_program, "aPos");
+    GLint mUvAttrib  = glGetAttribLocation(pi_texture_2DA_shader_program, "aUV");
 
-    wxProgressDialog *progressdialog = nullptr;
-    wxDateTime start = wxDateTime::Now();
+    // Texture samplers
+    GLint texUni1 = glGetUniformLocation(pi_texture_2DA_shader_program, "uTex1");
+    GLint texUni2 = glGetUniformLocation(pi_texture_2DA_shader_program, "uTex2");
+    glUniform1i(texUni1, 0);
+    glUniform1i(texUni2, 1);
 
-    int width = s * 360 + 1;
-    int height = s * 360;
+    // Blend factor
+    GLint blendLoc = glGetUniformLocation(pi_texture_2DA_shader_program, "blendFactor");
+    glUniform1f(blendLoc, (float)dpos);
 
-    unsigned char *data = new unsigned char[width * height * 4];
-
-
-    for(int x = 0; x < width; x++) {
-        if(x % 40 == 0) {
-            if(progressdialog)
-                progressdialog->Update(x);
-            else {
-                wxDateTime now = wxDateTime::Now();
-                if((now-start).GetMilliseconds() > 1000 && x < width/2) {
-                    progressdialog = new wxProgressDialog(
-                        _("Building Overlay map"), _("Climatology"), width+1, &m_dlg,
-                        wxPD_SMOOTH | wxPD_ELAPSED_TIME | wxPD_REMAINING_TIME);
-                }
-            }
-        }
-
-        for(int y = 0; y < height; y++) {
-            /* put in mercator coordinates */
-            double lat = M_PI*(2.0*y/height-1);
-            lat = 2*rad2deg(atan(exp(lat))) - 90;
-            double lon = x/s;
-
-            double v = getValueMonth(MAG, setting, lat + latoff, lon + lonoff, month);
-            wxColour c = GetGraphicColor(setting, v);
-
-            int doff = 4*(y*width + x);
-            data[doff + 0] = c.Red();
-            data[doff + 1] = c.Green();
-            data[doff + 2] = c.Blue();
-            data[doff + 3] = c.Alpha();
-        }
-    }
-    if (progressdialog) progressdialog->Destroy();
-
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(texture_format, texture);
-
-    glTexParameteri( texture_format, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glTexParameteri( texture_format, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-
-    if(s_bnoglrepeat)
-       glTexParameteri( texture_format, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-    else
-        glTexParameteri( texture_format, GL_TEXTURE_WRAP_S, GL_REPEAT );
-    glTexParameteri( texture_format, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(texture_format, 0, GL_RGBA, width, height,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-    delete [] data;
-
-    O.m_iTexture = texture;
-    O.m_width = width - 1;
-    O.m_height = height;
-    O.m_latoff = latoff;
-    O.m_lonoff = lonoff;
-
-    return true;
-}
-
-static inline void glTexCoord2d_2(int multitexturing, double x, double y)
-{
-#ifndef __ANDROID__
-#ifndef __APPLE__
-    if(multitexturing) {
-        s_glMultiTexCoord2dARB(GL_TEXTURE0_ARB, x, y);
-        s_glMultiTexCoord2dARB(GL_TEXTURE1_ARB, x, y);
-    } else
-#endif
-        glTexCoord2d(x, y);
-#endif
-}
-
-void ClimatologyOverlayFactory::DrawGLTexture( ClimatologyOverlay &O1, ClimatologyOverlay &O2,
-                                               double dpos, PlugIn_ViewPort &vp, double transparency)
-{ 
-    if( !O1.m_iTexture || !O2.m_iTexture )
-        return;
-
-    if(vp.m_projection_type != PI_PROJECTION_MERCATOR)
-        return;
-
-#ifdef __ANDROID__      //TODO  Implement shader structure
-#if 0
-        int w = vp.pix_width, h = vp.pix_height;
-
-        double lat[4], lon[4];
-        GetCanvasLLPix( &vp, wxPoint(0, 0), &lat[0], &lon[0] );
-        GetCanvasLLPix( &vp, wxPoint(w, 0), &lat[1], &lon[1] );
-        GetCanvasLLPix( &vp, wxPoint(w, h), &lat[2], &lon[2] );
-        GetCanvasLLPix( &vp, wxPoint(0, h), &lat[3], &lon[3] );
-
-        for(int i = 0; i < 4; i++) {
-            if(lon[i] - vp.clon > 180)
-                lon[i] -= 360;
-            else if(lon[i] - vp.clon < -180)
-                lon[i] += 360;
-
-            // normalize
-            lon[i] = lon[i] / 360.0;
-
-            // mercator conversion
-            double s1 = sin(deg2rad(lat[i]));
-            double y1 = .5 * log((1 + s1) / (1 - s1));
-            lat[i] = (1 + y1/M_PI)/2;
-        }
-    
-    glEnable(texture_format);
-    glBindTexture(texture_format, O1.m_iTexture);
-
-    float uv[8];
-    float coords[8];
-    
-    //normal uv
-    uv[0] = lon[0]; uv[1] = lat[0]; uv[2] = lon[1]; uv[3] = lat[1];
-    uv[4] = lon[2]; uv[5] = lat[2]; uv[6] = lon[3]; uv[7] = lat[3];
-        
-    coords[0] = 0; coords[1] = 0; coords[2] = w; coords[3] = 0;
-    coords[4] = w; coords[5] = h; coords[6] = 0; coords[7] = h;
-    
-    glUseProgram( pi_texture_2DA_shader_program );
-    
-    // Get pointers to the attributes in the program.
-    GLint mPosAttrib = glGetAttribLocation( pi_texture_2DA_shader_program, "aPos" );
-    GLint mUvAttrib  = glGetAttribLocation( pi_texture_2DA_shader_program, "aUV" );
-    
-    // Set up the texture sampler to texture unit 0
-    GLint texUni = glGetUniformLocation( pi_texture_2DA_shader_program, "uTex" );
-    glUniform1i( texUni, 0 );
-    
-    // Disable VBO's (vertex buffer objects) for attributes.
-    glBindBuffer( GL_ARRAY_BUFFER, 0 );
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
-    
-    // Set the attribute mPosAttrib with the vertices in the screen coordinates...
-    glVertexAttribPointer( mPosAttrib, 2, GL_FLOAT, GL_FALSE, 0, coords );
-    // ... and enable it.
-    glEnableVertexAttribArray( mPosAttrib );
-
+    // Transparency
     float colorv[4] = {0, 0, 0, -(float)transparency};
-
-    GLint colloc = glGetUniformLocation(pi_texture_2DA_shader_program,"color");
+    GLint colloc = glGetUniformLocation(pi_texture_2DA_shader_program, "color");
     glUniform4fv(colloc, 1, colorv);
 
-    // Set the attribute mUvAttrib with the vertices in the GL coordinates...
-    glVertexAttribPointer( mUvAttrib, 2, GL_FLOAT, GL_FALSE, 0, uv );
-    // ... and enable it.
-    glEnableVertexAttribArray( mUvAttrib );
-    
-    // Rotate 
-    float angle = 0;
-    mat4x4 I, Q;
+    // No VBOs
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    glVertexAttribPointer(mPosAttrib, 2, GL_FLOAT, GL_FALSE, 0, coords);
+    glEnableVertexAttribArray(mPosAttrib);
+
+    glVertexAttribPointer(mUvAttrib, 2, GL_FLOAT, GL_FALSE, 0, uv);
+    glEnableVertexAttribArray(mUvAttrib);
+
+    // Identity transform
+    mat4x4 I;
     mat4x4_identity(I);
-    mat4x4_rotate_Z(Q, I, angle);
-    
-    // Translate
-    Q[3][0] = 0;
-    Q[3][1] = 0;
-    
-    GLint matloc = glGetUniformLocation(pi_texture_2DA_shader_program,"TransformMatrix");
-    glUniformMatrix4fv( matloc, 1, GL_FALSE, (const GLfloat*)Q); 
-    
-    // Select the active texture unit.
-    glActiveTexture( GL_TEXTURE0 );
 
-    float co1[8];
-    co1[0] = coords[0];
-    co1[1] = coords[1];
-    co1[2] = coords[2];
-    co1[3] = coords[3];
-    co1[4] = coords[6];
-    co1[5] = coords[7];
-    co1[6] = coords[4];
-    co1[7] = coords[5];
-    
-    float tco1[8];
-    tco1[0] = uv[0];
-    tco1[1] = uv[1];
-    tco1[2] = uv[2];
-    tco1[3] = uv[3];
-    tco1[4] = uv[6];
-    tco1[5] = uv[7];
-    tco1[6] = uv[4];
-    tco1[7] = uv[5];
-    
-    glVertexAttribPointer( mPosAttrib, 2, GL_FLOAT, GL_FALSE, 0, co1 );
-    glVertexAttribPointer( mUvAttrib, 2, GL_FLOAT, GL_FALSE, 0, tco1 );
-    
+    GLint matloc = glGetUniformLocation(pi_texture_2DA_shader_program, "TransformMatrix");
+    if (matloc != -1)
+        glUniformMatrix4fv(matloc, 1, GL_FALSE, (const GLfloat*)I);
+
+    // Bind textures
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex1);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, tex2);
+
+    // Draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    
-    glDisable(texture_format);
-#endif
-#else
-    int multitexturing;
-    if(&O1 == &O2)
-        multitexturing = 0;
-    else
-        multitexturing = s_multitexturing;
-
-#if defined(__ANDROID__) || defined(__APPLE__)
-    multitexturing = 0;
-#endif
-
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-    if(multitexturing) {
-        s_glActiveTextureARB (GL_TEXTURE0_ARB);
-        glEnable(texture_format);
-        glBindTexture(texture_format, O2.m_iTexture);
-        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-        s_glActiveTextureARB (GL_TEXTURE1_ARB); 
-    } else
-#endif
-        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    glEnable(texture_format);
-    glBindTexture(texture_format, O1.m_iTexture);
-
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-    if(multitexturing) {
-        float fpos = dpos;
-        GLfloat constColor[4] = {0, 0, 0, fpos};
-
-        glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, constColor);
-
-        glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB_ARB, GL_INTERPOLATE_ARB);
-        glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_ALPHA_ARB, GL_INTERPOLATE_ARB);
-
-        glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE_ARB);
-
-        glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE0_RGB_ARB, GL_TEXTURE);
-        glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA_ARB, GL_TEXTURE);
-        glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND0_RGB_ARB, GL_SRC_COLOR);
-        glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA_ARB, GL_SRC_ALPHA);
-
-        glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_RGB_ARB, GL_PREVIOUS_ARB);
-        glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA_ARB, GL_PREVIOUS_ARB);
-        glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND1_RGB_ARB, GL_SRC_COLOR);
-        glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA_ARB, GL_SRC_ALPHA);
-
-        if(multitexturing > 1) {
-            s_glActiveTextureARB (GL_TEXTURE2_ARB);
-
-            glEnable(texture_format);
-            glBindTexture(texture_format, O2.m_iTexture);
-
-//            constColor[3] = 1;//1 - transparency;
-//            glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, constColor);
-        
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE_ARB);
-            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB_ARB, GL_REPLACE);
-            glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_ALPHA_ARB, GL_MODULATE);
-
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE0_RGB_ARB, GL_PREVIOUS_ARB);
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA_ARB, GL_PREVIOUS_ARB);
-            glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND0_RGB_ARB, GL_SRC_COLOR);
-            glTexEnvf(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA_ARB, GL_SRC_ALPHA);
-
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_RGB_ARB, GL_CONSTANT_ARB);
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA_ARB, GL_CONSTANT_ARB);
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_RGB_ARB, GL_PRIMARY_COLOR_ARB);
-            glTexEnvf(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA_ARB, GL_PRIMARY_COLOR_ARB);
-        }
-    }
-#endif
-    glColor4f(1, 1, 1, 1 - transparency);
-
-    if(s_bnoglrepeat) {
-        // this should be replaced by vp box
-        double x = vp.rv_rect.x, y = vp.rv_rect.y;
-        double w = x+vp.rv_rect.width, h = y+vp.rv_rect.height;
-
-        double tx[2], ty[2];
-        double r = vp.rotation;
-        vp.rotation = 0;
-        GetCanvasLLPix( &vp, wxPoint(x, y), &ty[0], &tx[0] );
-        GetCanvasLLPix( &vp, wxPoint(w, h), &ty[1], &tx[1] );
-        vp.rotation = r;
-
-        for(int i = 0; i < 2; i++) {
-            tx[i] -= O1.m_lonoff;
-            ty[i] -= O1.m_latoff;
-
-            // normalize
-            tx[i] = tx[i] / 360.0 * (O1.m_width-1)/O1.m_width;
-
-            // mercator conversion
-            double s1 = sin(deg2rad(ty[i]));
-            double y1 = .5 * log((1 + s1) / (1 - s1));
-            ty[i] = (1 + y1/M_PI)/2;
-
-            if(texture_format == GL_TEXTURE_RECTANGLE_ARB) {
-                tx[i] *= O1.m_width;
-                ty[i] *= O1.m_height;
-            }
-        }
-    
-        double tw = (texture_format == GL_TEXTURE_RECTANGLE_ARB) ? O1.m_width : 1;
-        double s = .5 * tw/O1.m_width;
-
-        if(tx[0] > tx[1])
-            tx[1] += tw;
-
-        glPushMatrix();
-        glTranslated(vp.pix_width/2.0, vp.pix_height/2.0, 0);
-        glRotated(vp.rotation*180/M_PI, 0, 0, 1);
-        glTranslated(-vp.pix_width/2.0, -vp.pix_height/2.0, 0);
-
-        glBegin(GL_QUADS);
-        if(tx[1]*tx[0]<0) { // meridian crosses rv_rect
-            double t = x + (w-x)*tx[0]/(tx[0] - tx[1]);
-
-            glTexCoord2d_2(multitexturing,       s, ty[0]), glVertex2d(t, y);
-            glTexCoord2d_2(multitexturing, tx[1]+s, ty[0]), glVertex2d(w, y);
-            glTexCoord2d_2(multitexturing, tx[1]+s, ty[1]), glVertex2d(w, h);
-            glTexCoord2d_2(multitexturing,       s, ty[1]), glVertex2d(t, h);
-
-            w = t;
-            tx[0] += tw-2*s;
-            tx[1] = tw-2*s;
-        } else {
-            if(tx[0] < 0)
-                tx[0] += tw-2*s;
-            if(tx[1] < 0)
-                tx[1] += tw-2*s;
-        }
-
-        glTexCoord2d_2(multitexturing, tx[0]+s, ty[0]), glVertex2d(x, y);
-        glTexCoord2d_2(multitexturing, tx[1]+s, ty[0]), glVertex2d(w, y);
-        glTexCoord2d_2(multitexturing, tx[1]+s, ty[1]), glVertex2d(w, h);
-        glTexCoord2d_2(multitexturing, tx[0]+s, ty[1]), glVertex2d(x, h);
-        glEnd();
-
-        glPopMatrix();
-    } else {
-        // this only works if npot textures support GL_REPEAT, and of course
-        // for mercator projections only
-        // it's kind of cool because uses a single quad exactly filling viewport
-        // and modifys tex coordinates
-        int x = 0, y = 0;
-        int w = vp.pix_width, h = vp.pix_height;
-
-        double lat[4], lon[4];
-        GetCanvasLLPix( &vp, wxPoint(x, y), &lat[0], &lon[0] );
-        GetCanvasLLPix( &vp, wxPoint(w, y), &lat[1], &lon[1] );
-        GetCanvasLLPix( &vp, wxPoint(w, h), &lat[2], &lon[2] );
-        GetCanvasLLPix( &vp, wxPoint(x, h), &lat[3], &lon[3] );
-
-        for(int i = 0; i < 4; i++) {
-            if(lon[i] - vp.clon > 180)
-                lon[i] -= 360;
-            else if(lon[i] - vp.clon < -180)
-                lon[i] += 360;
-
-            // normalize
-            lon[i] = lon[i] / 360.0;
-
-            // mercator conversion
-            double s1 = sin(deg2rad(lat[i]));
-            double y1 = .5 * log((1 + s1) / (1 - s1));
-            lat[i] = (1 + y1/M_PI)/2;
-        }
-
-        glBegin(GL_QUADS);
-        glTexCoord2d_2(multitexturing, lon[0], lat[0]), glVertex2i(x, y);
-        glTexCoord2d_2(multitexturing, lon[1], lat[1]), glVertex2i(w, y);
-        glTexCoord2d_2(multitexturing, lon[2], lat[2]), glVertex2i(w, h);
-        glTexCoord2d_2(multitexturing, lon[3], lat[3]), glVertex2i(x, h);
-        glEnd();
-    }
-
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-    if(multitexturing) {
-        if(multitexturing > 1) {
-            glDisable(texture_format);
-            s_glActiveTextureARB (GL_TEXTURE1_ARB);
-        }
-        glDisable(texture_format);
-        s_glActiveTextureARB (GL_TEXTURE0_ARB);
-    }
-#endif
-
-    glDisable(texture_format);
-#endif
 }
+
 
 /* give value for y at a given x location on a segment */
 static double interp_value(double v0, double v1, double d)
@@ -2550,87 +2127,92 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
 
 
 
-void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &vp)
+void ClimatologyOverlayFactory::RenderOverlayMap(int setting,
+                                                 PlugIn_ViewPort &vp)
 {
     if (!m_bCompletedLoading)
         return;
-	
-    if(!m_Settings.Settings[setting].m_bOverlayMap)
+
+    if (!m_Settings.Settings[setting].m_bOverlayMap)
         return;
 
     int month, nmonth;
     double dpos;
 
-    if(setting == ClimatologyOverlaySettings::SEADEPTH) {
+    if (setting == ClimatologyOverlaySettings::SEADEPTH) {
         month = nmonth = 0;
         dpos = 1;
-    } else
+    } else {
         GetDateInterpolation(NULL, month, nmonth, dpos);
+    }
 
-    if(!m_Settings.Settings[setting].m_bOverlayInterpolation) {
+    if (!m_Settings.Settings[setting].m_bOverlayInterpolation) {
         nmonth = month;
         dpos = 1;
     }
 
-	ClimatologyOverlay &O1 = m_pOverlay[month][setting];
-	ClimatologyOverlay &O2 = m_pOverlay[nmonth][setting];
+    ClimatologyOverlay &O1 = m_pOverlay[month][setting];
+    ClimatologyOverlay &O2 = m_pOverlay[nmonth][setting];
 
-	// ------------------------------------------------------------
-	// Validate that required data exists for both months
-	// ------------------------------------------------------------
-	if (!HasDataFor(setting, month) || !HasDataFor(setting, nmonth)) {
-		wxLogMessage("Climatology: Missing data for setting %d (months %d or %d)",
-					 setting, month, nmonth);
-		return;
-	}
+    // Ensure data exists
+    if (!HasDataFor(setting, month) || !HasDataFor(setting, nmonth))
+        return;
 
-	if (!m_dc->GetDC())
-	{
-		// Create textures if needed
-		if (!O1.m_iTexture)
-			CreateGLTexture(O1, setting, month, vp);
+    // OpenGL path
+    if (!m_dc->GetDC()) {
 
-		if (!O2.m_iTexture)
-			CreateGLTexture(O2, setting, nmonth, vp);
+        // Create textures if needed
+        if (!O1.m_iTexture)
+            CreateGLTexture(O1, setting, month, vp);
 
-		// Draw blended texture
-		DrawGLTexture(O1, O2, dpos, vp,
-					  m_Settings.Settings[setting].m_iOverlayTransparency / 100.0);
-	}
-	else
-	{
-		wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
+        if (!O2.m_iTexture)
+            CreateGLTexture(O2, setting, nmonth, vp);
 
-		wxMemoryDC mdc;
-		wxBitmap bm(1000, 1000);
-		mdc.SelectObject(bm);
-		mdc.Clear();
+        // Draw blended texture
+        DrawGLTexture(O1.m_iTexture,
+                      O2.m_iTexture,
+                      dpos,
+                      vp,
+                      m_Settings.Settings[setting].m_iOverlayTransparency / 100.0);
 
-		wxFont font(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-		mdc.SetFont(font);
-		mdc.SetPen(*wxTRANSPARENT_PEN);
-		mdc.SetBrush(wxColour(243, 47, 229));
+        return;
+    }
 
-		int w, h;
-		mdc.GetMultiLineTextExtent(msg, &w, &h);
-		h += 2;
+    // DC fallback (unchanged)
+    wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
 
-		int label_offset = 10;
-		int wdraw = w + (label_offset * 2);
+    wxMemoryDC mdc;
+    wxBitmap bm(1000, 1000);
+    mdc.SelectObject(bm);
+    mdc.Clear();
 
-		mdc.DrawRectangle(0, 0, wdraw, h);
-		mdc.DrawLabel(msg, wxRect(label_offset, 0, wdraw, h),
-					  wxALIGN_LEFT | wxALIGN_CENTRE_VERTICAL);
+    wxFont font(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+    mdc.SetFont(font);
+    mdc.SetPen(*wxTRANSPARENT_PEN);
+    mdc.SetBrush(wxColour(243, 47, 229));
 
-		mdc.SelectObject(wxNullBitmap);
+    int w, h;
+    mdc.GetMultiLineTextExtent(msg, &w, &h);
+    h += 2;
 
-		wxBitmap sbm = bm.GetSubBitmap(wxRect(0, 0, wdraw, h));
-		int x = vp.pix_width, y = vp.pix_height;
+    int label_offset = 10;
+    int wdraw = w + (label_offset * 2);
 
-		m_dc->DrawBitmap(sbm, (x - wdraw) / 2,
-						 y - (GetChartbarHeight() + h), false);
-	}
+    mdc.DrawRectangle(0, 0, wdraw, h);
+    mdc.DrawLabel(msg, wxRect(label_offset, 0, wdraw, h),
+                  wxALIGN_LEFT | wxALIGN_CENTRE_VERTICAL);
+
+    mdc.SelectObject(wxNullBitmap);
+
+    wxBitmap sbm = bm.GetSubBitmap(wxRect(0, 0, wdraw, h));
+    int x = vp.pix_width, y = vp.pix_height;
+
+    m_dc->DrawBitmap(sbm,
+                     (x - wdraw) / 2,
+                     y - (GetChartbarHeight() + h),
+                     false);
 }
+
 
 ZUFILE *ClimatologyOverlayFactory::TryOpenFile(wxString filename)
 {
@@ -2943,13 +2525,7 @@ void ClimatologyOverlayFactory::RenderCycloneSegment(CycloneState &ss, PlugIn_Vi
     }
 
     double *lat = ss.lat, *lon = ss.lon;
-#if 0
-    /* prevent wrong crossover */
-    if((lastlon+180 > vp.clon || lon+180 < vp.clon) &&
-       (lastlon+180 < vp.clon || lon+180 > vp.clon) &&
-       (lastlon-180 > vp.clon || lon-180 < vp.clon) &&
-       (lastlon-180 < vp.clon || lon-180 > vp.clon))
-#endif
+
     {
         wxPoint p[2];
         GetCanvasPixLL( &vp, &p[0], lat[0], lon[0] );
@@ -2976,43 +2552,6 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
 	
     if (!m_bCompletedLoading)
         return;
-    /* no cyclones ever existed between 10 and 20 longitude
-       so use 15 east as the meridian to split the world on.. */
-//#define USE_DL
-#ifdef USE_DL
-    PlugIn_ViewPort nvp = vp;
-    double cclon = 15;
-    static const double NORM_FACTOR = 16;
-
-    if(!m_cyclonesDisplayList)
-        m_cyclonesDisplayList = glGenLists(1);
-
-    if(!m_pdc) {
-        glPushMatrix();
-
-        wxPoint point;
-        GetCanvasPixLL(&vp, &point, 0, cclon - 180);
-        glTranslatef(point.x, point.y, 0);
-        glScalef(vp.view_scale_ppm/NORM_FACTOR, vp.view_scale_ppm/NORM_FACTOR, 1);
-        glRotated(vp.rotation*180/M_PI, 0, 0, 1);
-    }
-    
-    if(!m_bUpdateCyclones)
-        glCallList(m_cyclonesDisplayList);
-    else {
-        if(!m_pdc) {
-            m_bUpdateCyclones = false;
-        
-            nvp.clat = 0;
-            nvp.clon = cclon - 180;
-            nvp.view_scale_ppm = NORM_FACTOR;
-            nvp.rotation = nvp.skew = 0;
-    
-            if(!m_cyclonesDisplayList)
-                m_cyclonesDisplayList = glGenLists(1);
-            glNewList(m_cyclonesDisplayList, GL_COMPILE_AND_EXECUTE);
-        }
-#endif
 
     int dayspan = m_dlg.m_cfgdlg->m_sCycloneDaySpan->GetValue();
 
@@ -3057,126 +2596,53 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
                              _("Climatology"), wxOK | wxICON_WARNING);
         mdlg.ShowModal();
     }
-
-#ifdef USE_DL
-    if(!m_pdc)
-        glEndList();
-
-    if(!m_pdc) {
-        //  Does current vp cross cclon ?
-        // if so, call the display list again translated
-        // to the other side of it..
-
-        if( vp.lon_min < cclon && vp.lon_max > cclon ) {
-            double ts = 40058986*NORM_FACTOR; /* 360 degrees in normalized viewport */
-
-            glPushMatrix();
-            if( vp.clon > cclon )
-                glTranslated(-ts, 0, 0);
-            else
-                glTranslated(ts, 0, 0);
-            glCallList(m_cyclonesDisplayList);
-            glPopMatrix();
-        }
-        glPopMatrix();
-    }
-#endif
 }
 
-static void QueryGL()
-{
-#if !defined(__ANDROID__) && !defined(__APPLE__)
-
-    // assume we have GL_ARB_multitexture if this passes
-    if(QueryExtension( "GL_ARB_texture_env_combine" )) {
-        s_glActiveTextureARB = (PFNGLACTIVETEXTUREARBPROC)
-            systemGetProcAddress("glActiveTextureARB");
-        s_glMultiTexCoord2dARB = (PFNGLMULTITEXCOORD2DARBPROC)
-            systemGetProcAddress("glMultiTexCoord2dARB");
-        s_multitexturing = s_glActiveTextureARB && s_glMultiTexCoord2dARB;
-
-        if(s_multitexturing) {
-            GLint MaxTextureUnits;
-            glGetIntegerv(GL_MAX_TEXTURE_UNITS_ARB, &MaxTextureUnits);
-            if(MaxTextureUnits > 2)
-                s_multitexturing = 2; /* with blending */
-        }
-    }
-#else
-    s_multitexturing = 0;
-#endif
 
 
-    // npot textures don't support GL_REPEAT on GLES
-    // and texture rectangle doesn't either
-    if( QueryExtension( "GL_ARB_texture_non_power_of_two" ) )
-        texture_format = GL_TEXTURE_2D, s_bnoglrepeat = false;
-    else if( QueryExtension( "GL_OES_texture_npot" ) )
-        texture_format = GL_TEXTURE_2D;
-    else if( QueryExtension( "GL_ARB_texture_rectangle" ) )
-        texture_format = GL_TEXTURE_RECTANGLE_ARB;
-    else
-        texture_format = 0; // overlays disabled without npot support
-
-#ifdef USE_ANDROID_GLES2
-    s_bnoglrepeat = false; // supported on gles2 thankfully
-#endif
-}
-
-bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
+// New RenderOverlay 
+bool ClimatologyOverlayFactory::RenderOverlay(piDC &dc, PlugIn_ViewPort &vp)
 {
     if (!m_bCompletedLoading)
-        return true;   // nothing to draw, but not an error	
+        return true;   // nothing to draw, but not an error
+
     m_dc = &dc;
 
-    if(!dc.GetDC()) {
-        if(!glQueried) {
-            QueryGL();
-            glQueried = true;
-        }
-#ifndef USE_GLSL
-        glPushAttrib( GL_LINE_BIT | GL_ENABLE_BIT | GL_HINT_BIT ); //Save state
-
-        //      Enable anti-aliased lines, at best quality
-        glEnable( GL_LINE_SMOOTH );
-        glHint( GL_LINE_SMOOTH_HINT, GL_NICEST );
-
-        glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-#endif
-        glEnable( GL_BLEND );
+    // If we are in OpenGL mode (dc.GetDC() == NULL), blending is handled by the shader.
+    // If we are in DC mode, we fall back to bitmap drawing.
+    if (!dc.GetDC()) {
+        glEnable(GL_BLEND);
     }
 
-    wxFont font( 12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL );
-    m_dc->SetFont( font );
+    wxFont font(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+    m_dc->SetFont(font);
 
-    for(int overlay = 1; overlay >= 0; overlay--)
-    for(int i=0; i<ClimatologyOverlaySettings::SETTINGS_COUNT; i++) {
-        if(!m_dlg.SettingEnabled(i))
-            continue;
+    // Pass 1: overlays
+    for (int overlay = 1; overlay >= 0; overlay--) {
+        for (int i = 0; i < ClimatologyOverlaySettings::SETTINGS_COUNT; i++) {
 
-        if(!m_Settings.Settings[i].m_bEnabled)
-            continue;
+            if (!m_dlg.SettingEnabled(i))
+                continue;
 
-        if(overlay) /* render overlays first */
-            RenderOverlayMap( i, vp );
-        else {
-            RenderIsoBars(i, vp);
-            RenderNumbers(i, vp);
-            RenderDirectionArrows(i, vp);
+            if (!m_Settings.Settings[i].m_bEnabled)
+                continue;
+
+            if (overlay)
+                RenderOverlayMap(i, vp);
+            else {
+                RenderIsoBars(i, vp);
+                RenderNumbers(i, vp);
+                RenderDirectionArrows(i, vp);
+            }
         }
-
     }
 
-    if(m_dlg.m_cbWind->GetValue())
+    if (m_dlg.m_cbWind->GetValue())
         RenderWindAtlas(vp);
 
-    if(m_dlg.m_cbCyclones->GetValue())
+    if (m_dlg.m_cbCyclones->GetValue())
         RenderCyclones(vp);
 
-#ifndef USE_GLSL
-    if(!dc.GetDC())
-        glPopAttrib();
-#endif
     return true;
 }
 

@@ -7,9 +7,7 @@ src/DownloadManager.cpp
 src/icons.cpp
 src/IsoBarMap.cpp
 src/ManifestLoader.cpp
-src/ManifestLoader.cpp
 src/zuFile.cpp
-src/png2wx.pl
 include/climatology_pi.h
 include/ClimatologyConfigDialog.h
 include/ClimatologyDialog.h
