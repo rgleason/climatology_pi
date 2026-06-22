@@ -121,31 +121,48 @@ climatology_pi::climatology_pi(void *ppimgr)
     // Plugin installation directory (icons, metadata, curl DLL, cacert.pem)
     m_plugin_dir = GetPluginDataDir("climatology_pi");
 
-    // Create the PlugIn icons
-    initialize_images();
+// Create the PlugIn icons
+initialize_images();
 
-    s_climatology_pi = this;
+s_climatology_pi = this;
 
-    // Load panel icon from <plugin_dir>/UserIcons/climatology_panel.png
-    wxFileName fn(m_plugin_dir, "");
-    fn.AppendDir("UserIcons");
+// Load panel icon from <plugin_dir>/usericons/climatology_panel.svg (preferred) or .png
+wxFileName fn(m_plugin_dir, "");
+fn.AppendDir("usericons");
+
+wxInitAllImageHandlers();
+
+// Try SVG first
+fn.SetFullName("climatology_panel.svg");
+wxString svgPath = fn.GetFullPath();
+
+if (wxFileExists(svgPath)) {
+    wxLogDebug("Loading SVG icon: " + svgPath);
+    m_panelBitmap = LoadSVG(svgPath, 32, 32);  // Adjust size as needed
+    if (m_panelBitmap.IsOk()) {
+        wxLogMessage("Climatology: Loaded SVG panel icon");
+    } else {
+        wxLogWarning("Climatology: SVG file exists but failed to load");
+    }
+} else {
+    // Fallback to PNG
     fn.SetFullName("climatology_panel.png");
-
-    wxString path = fn.GetFullPath();
-
-    wxInitAllImageHandlers();
-
-    wxLogDebug("Using icon path: " + path);
-    if (!wxImage::CanRead(path)) {
+    wxString pngPath = fn.GetFullPath();
+    
+    wxLogDebug("SVG not found, trying PNG: " + pngPath);
+    
+    if (!wxImage::CanRead(pngPath)) {
         wxLogDebug("Initiating image handlers.");
         wxInitAllImageHandlers();
     }
 
-    wxImage panelIcon(path);
-    if (panelIcon.IsOk())
+    wxImage panelIcon(pngPath);
+    if (panelIcon.IsOk()) {
         m_panelBitmap = wxBitmap(panelIcon);
-    else
+        wxLogMessage("Climatology: Loaded PNG panel icon");
+    } else {
         wxLogWarning("Climatology panel icon has NOT been loaded");
+    }
 }
 
 
@@ -578,7 +595,7 @@ bool climatology_pi::SaveConfig(void)
     return true;
 }
 
-
+#if 0
 void climatology_pi::SetColorScheme(PI_ColorScheme cs)
 {
     DimeWindow(m_pClimatologyDialog);
@@ -628,3 +645,4 @@ extern "C" DECL_EXP const char* GetLongDescription()
 {
     return PLUGIN_LONG_DESCRIPTION;
 }
+#endif

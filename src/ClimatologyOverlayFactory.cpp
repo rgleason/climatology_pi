@@ -39,6 +39,10 @@
 #include "ManifestLoader.hpp"
 #include "DownloadManager.hpp"
 
+// Provide a definition for the shader program handle so the linker is satisfied.
+// dc_utils in this TP build does not emit it, but the plugin expects it.
+int pi_texture_2DA_shader_program = 0;
+
 class CycloneLoaderThread : public wxThread
 {
 public:

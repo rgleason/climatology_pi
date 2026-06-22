@@ -28,7 +28,7 @@ void initialize_images(void)
 	
     tmp_path = GetPluginDataDir("climatology_pi");
     fn.SetPath(tmp_path);
-    fn.AppendDir(_T("UserIcons"));
+    fn.AppendDir(_T("usericons"));
  
     fn.SetFullName(_T("climatology_pi.svg"));
     _svg_climatology = fn.GetFullPath();

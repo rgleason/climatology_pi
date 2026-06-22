@@ -57,12 +57,6 @@ if(COMMAND cmake_policy)
   endif (POLICY CMP0177)
 endif (COMMAND cmake_policy)
 
-
-# set(VCPKG_TARGET_TRIPLET "x86-windows-static" CACHE STRING "")
-# set(VCPKG_CMAKE_SYSTEM_INCLUDE_PATH "" CACHE STRING "")
-#set(VCPKG_CMAKE_SYSTEM_LIBRARY_PATH "" CACHE STRING "")
-
-
 # set for vscode/vscodium
 set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 
@@ -78,15 +72,14 @@ set(PACKAGE_NAME "climatology_pi")
 project(${PACKAGE_NAME})
 #project(${PACKAGE}) Old setting
 
-
 set(SHORT_DESCRIPTION "Climatology PlugIn: 32 years of monthly NOAA Data")
 set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic weather data. Supported Climatology types include: - Average wind directions and speed- Percentage of gale and calm conditions - Sea Surface Currents - Average swell and sea state (not yet implemented) - Precipitation, Humidity, Cloud Cover, and Lightning Strikes - Monthly average Sea Level pressure and Sea Temperature, Air Temperature - Tropical Cyclone tracks")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "6")
-set(VERSION_PATCH "40")
+set(VERSION_PATCH "41")
 set(VERSION_TWEAK "0")
-set(VERSION_DATE  "06/18/2026")#DD/MM/YYYY format
+set(VERSION_DATE  "06/22/2026")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
@@ -125,24 +118,14 @@ set(XML_DESCRIPTION ${LONG_DESCRIPTION})
 ## ----- Modify section above to include all the details for your plugin ------- ##
 ## ----- Modify section below if there are special requirements for the plugin --##
 
-# Forces all install() output to go to 
-# "..source\opencpn\build\RelWithDebInfo\plugins\climatology_pi\
-
-# Force installation into the build configuration directory
-# set(PLUGIN_INSTALL_DIR
-#    "${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE}/plugins/${PACKAGE_NAME}" CACHE PATH "" FORCE)
-# set(PLUGIN_INSTALL_DIR
-#    "C:/Users/fcgle/source/opencpn/build/RelWithDebInfo/plugins/${PACKAGE_NAME}" CACHE PATH "" FORCE)
-# set(PLUGIN_INSTALL_DIR
-#    "C:/Users/fcgle/source/opencpn/build/${CMAKE_BUILD_TYPE}/plugins/${PACKAGE_NAME}"
-#    CACHE PATH "" FORCE)
-
 option(PLUGIN_USE_SVG "Use SVG graphics" ON)
-
-set(CMAKE_CXX_STANDARD 11)
 
 # Prefer libGL.so to libOpenGL.so, see CMP0072
 #  set(OpenGL_GL_PREFERENCE "LEGACY")   #not operational
+#  set(PLUGIN_USE_GL ON)  #Does nothing uaeful
+
+set(CMAKE_CXX_STANDARD 11)
+
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
   set(CMAKE_BUILD_TYPE
@@ -162,27 +145,26 @@ message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # YES — you must keep OCPN_USE_GL ON
-# OCPN_USE_GL controls the plugin’s own GL compile flags
-# It enables: USE_OCPNGL  __OCPN__GL__   GL  aware code paths in your plugin
 # If you turn it OFF: Your plugin compiles in DC‑only mode
-#  All GL code in ClimatologyOverlayFactory becomes inactive, missing GL symbol errors
-# But OCPN_USE_GL does NOT add plugin_dc in your TP version.
-# OCPN_USE_GL enables GL in your plugin, 
-# But PluginSetup does NOT use it to add plugin_dc
+# All GL code in ClimatologyOverlayFactory becomes inactive, missing GL symbol errors
+# For TPtemplate, OCPN_USE_GL does not use pluginsetup.cmake to add piugin_dc 
+
 # So the correct combination is:
 # ✔ OCPN_USE_GL ON
 # ✔ Manual add_subdirectory(opencpn-libs/plugin_dc)
 # ✔ Windows headers alias
 # ✔ No PLUGIN_USE_GL (ignored in your TP version)
 # So plugin_dc must be added manually
-set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
-# set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
 
-# set(OCPN_USE_GL ON)
-# OFF prevents PluginSetup from adding plugin_dc
-# so that we can build it manually below.
-# Best for building plugins in Standalone mode
-# set(PLUGIN_USE_GL OFF) 
+set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
+
+# Why is this needed for API?   I thought TP took care of this!
+# BIZARRE!!
+# Force API 1.20 include path for TestPlugin Template
+# Force API 1.20 include path for TestPlugin Template
+set(OCPN_API_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/api-20/include")
+include_directories(${OCPN_API_INCLUDE_DIR})
+
 
 ##========================================================
 ## Standard OpenCPN plugin setup
@@ -192,37 +174,49 @@ include("PluginSetup")
 include("PluginConfigure")
 ##===========================================================
 
-# Bring in plugin_dc manually for standalone builds
-# Now add plugin_dc so the library builds without a duplicate.
-add_subdirectory(opencpn-libs/plugin_dc)
-
-# ---------------------------------------------------------
-# ADD plugin_dc EARLY — BEFORE linking, BEFORE includes
-# ---------------------------------------------------------
-# Needed - satisfies plugin_dc’s dependency and produces no actual .lib file
-# because INTERFACE IMPORTED targets do not generate binaries
-# add_library(windows::headers INTERFACE IMPORTED)
-# Provide Windows headers for plugin_dc without creating a .lib
+# 2. Restore the Windows headers alias
+# Required because plugin_dc’s CMakeLists expects windows::headers.
+# Windows headers interface library for plugin_dc
+# Windows headers interface library for plugin_dc
 add_library(windows-headers INTERFACE)
 
-# Windows SDK include path (CMake sets this automatically on MSVC)
 target_include_directories(windows-headers INTERFACE
     "$ENV{WindowsSdkDir}/Include"
 )
 
-# Alias to match plugin_dc expectations
 add_library(windows::headers ALIAS windows-headers)
 
+# NOW bring in plugin_dc
+# ---------------------------------------------------------
+# ADD plugin_dc EARLY — BEFORE linking, BEFORE includes
+# ---------------------------------------------------------
+# TP  PluginSetup.cmake does NOT add plugin_dc
+# Bring in plugin_dc manually for standalone builds
+# Now add plugin_dc and the library will build (without a duplicate).
+# You MUST add plugin_dc manually
+# 1. Restore the manual plugin_dc addition
+add_subdirectory(opencpn-libs/plugin_dc)
 
-# Bring in plugin_dc (modern GL abstraction)
-# No - PluginSetup already brings in plugin_dc, don't add it twice.
-# add_subdirectory(opencpn-libs/plugin_dc)
-
+#3. add GL flags to _DC_UTILS manually
+# PluginSetup does not do it, but this is needed with some bizarre
+# Edits of ClimatologyOverlayFactory.cpp at the top
+#   // Provide a definition for the shader program handle so the linker is satisfied.
+#   // dc_utils in this TP build does not emit it, but the plugin expects it.
+#   int pi_texture_2DA_shader_program = 0;
+# target_compile_definitions(_DC_UTILS  PRIVATE  USE_OCPNGL  __OCPN__GL__  )
+# dc_utils must be built with GL enabled so pi_shaders.cpp
+# defines pi_texture_2DA_shader_program
+target_compile_definitions(_DC_UTILS PRIVATE
+    USE_OCPNGL
+    __OCPN__GL__
+)
 
 # Enable OpenCPN GL mode and bundled curl for win
 target_compile_definitions(${PACKAGE_NAME} PRIVATE USE_OCPNGL)
 target_compile_definitions(${PACKAGE_NAME} PRIVATE __OCPN__GL__)
 target_compile_definitions(${PACKAGE_NAME} PRIVATE CLIMATOLOGY_BUNDLED_CURL)
+
+
 
 # ---------------------------------------------------------
 # Add other opencpn-libs BEFORE linking
@@ -231,6 +225,7 @@ add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
 add_subdirectory(opencpn-libs/tinyxml)
 add_subdirectory(opencpn-libs/jsonlib)
 add_subdirectory(opencpn-libs/wxJSON)
+
 
 if(NOT UNIX)
     add_subdirectory(opencpn-libs/bzip2)
@@ -279,10 +274,14 @@ target_sources(${PACKAGE_NAME} PRIVATE ${SRCS} ${HDRS})
 ##===========================================================
 ## Correct linking order — plugin_dc MUST be here
 ##===========================================================
+# 4. Keep linking _DC_UTILS
 target_link_libraries(${PACKAGE_NAME}
     PRIVATE
         ocpn::api
-        ocpn::dc-utils
+        _DC_UTILS
+#       ocpn::dcutils  Fails
+#       ocpn::dc-utils Fails
+#        ocpn::_DC_UTILS  Fails
         ocpn::tinyxml
         ocpn::jsonlib
         ocpn::wxjson
