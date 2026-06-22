@@ -25,63 +25,19 @@
  *
  */
 
+#include <GL/glew.h>
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 #include <wx/event.h>
 
-//#include <GL/gl.h>
-//#include <GL/glext.h>
-
 #include "gldefs.h"
-#include <GL/gl_private.h>
-
-#include <pidc.h>
-#include "pi_shaders.h"
-#include "icons.h"
-#include "climatology_pi.h"
-#include "ClimatologyOverlayFactory.h"
-#include "ManifestLoader.hpp"
-#include "DownloadManager.hpp"
-
-
-
-#if 0
-#include <wx/wx.h>
-#include <wx/glcanvas.h>
-#include <wx/event.h>   
-
-#include <GL/gl.h>
-#include <GL/glext.h>
-
-#include "gldefs.h"          // you can leave this, but it’s not critical now
-#include <GL/gl_private.h>   // also harmless
-
-#include <pidc.h>
-#include "pi_shaders.h"
-
-#ifdef __WXOSX__
-# include <OpenGL/OpenGL.h>
-# include <OpenGL/gl3.h>
-#endif
-
-#ifdef __ANDROID__
-# include <qopengl.h>
-#endif
-
-#ifdef __WXGTK__
-# include <GL/glx.h>
-#endif
-
-#ifdef USE_GLES2
-# include "GLES2/gl2.h"
-#endif
+#include <pi_shaders.h>
 
 #include "icons.h"
 #include "climatology_pi.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ManifestLoader.hpp"
 #include "DownloadManager.hpp"
-#endif
 
 class CycloneLoaderThread : public wxThread
 {
@@ -2157,26 +2113,6 @@ void ClimatologyOverlayFactory::RenderOverlayMap(int setting,
     // Ensure data exists
     if (!HasDataFor(setting, month) || !HasDataFor(setting, nmonth))
         return;
-
-    // OpenGL path
-    if (!m_dc->GetDC()) {
-
-        // Create textures if needed
-        if (!O1.m_iTexture)
-            CreateGLTexture(O1, setting, month, vp);
-
-        if (!O2.m_iTexture)
-            CreateGLTexture(O2, setting, nmonth, vp);
-
-        // Draw blended texture
-        DrawGLTexture(O1.m_iTexture,
-                      O2.m_iTexture,
-                      dpos,
-                      vp,
-                      m_Settings.Settings[setting].m_iOverlayTransparency / 100.0);
-
-        return;
-    }
 
     // DC fallback (unchanged)
     wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");

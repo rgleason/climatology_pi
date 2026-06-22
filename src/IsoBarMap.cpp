@@ -24,26 +24,23 @@
  ***************************************************************************
  */
 
+
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 #include <wx/progdlg.h>
 
-#ifdef __WXOSX__
-# include <OpenGL/OpenGL.h>
-# include <OpenGL/gl3.h>
-#else
-# ifdef __OCPN__ANDROID__
-#  include "qopengl.h"                  // this gives us the qt runtime gles2.h
-#  include "GL/gl_private.h"
-# endif
-#endif
+#include "gldefs.h"
 
 #include "ocpn_plugin.h"
-
 #include "IsoBarMap.h"
 #include "defs.h"
-//#include "gldefs.h"
-#include "pidc.h"
+#include <pi_shaders.h>
+
+#include "icons.h"
+#include "climatology_pi.h"
+#include "ClimatologyOverlayFactory.h"
+#include "ManifestLoader.hpp"
+#include "DownloadManager.hpp"
 
 /* initialize cache to contain data */
 void ParamCache::Initialize(double step)
@@ -426,12 +423,7 @@ void DrawLineSeg(piDC *dc, PlugIn_ViewPort &VP, double lat1, double lon1, double
         dc->DrawLine(r1.x, r1.y, r2.x, r2.y);
     else
     {
-#if 0
-        glBegin(GL_LINES);
-        glVertex2i(r1.x, r1.y);
-        glVertex2i(r2.x, r2.y);
-        glEnd();
-#endif
+       // no GL fallback — handled by overlay factory
     }
 }
 

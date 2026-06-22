@@ -15,7 +15,7 @@ include/ClimatologyOverlayFactory.h
 include/ClimatologyUI.h
 include/gldefs.h
 include/defs.h
-include/DownLoadFileEntry.hpp
+include/DownloadFileEntry.hpp
 include/DownloadManager.hpp
 include/icons.h
 include/IsoBarMap.h

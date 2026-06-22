@@ -313,8 +313,6 @@ private:
     void RenderCyclones(PlugIn_ViewPort &vp);
 	CycloneFilterParams m_cycloneParams;
 
-    bool CreateGLTexture(ClimatologyOverlay &O, int setting, int month, PlugIn_ViewPort &vp);
-
 	void DrawGLTexture(GLuint tex1,
                    GLuint tex2,
                    double dpos,

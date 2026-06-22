@@ -1,5 +1,5 @@
 ##---------------------------------------------------------------------------
-## Author:      Sean d'Epagnier
+## Author:      Sean d'Epagnier   and  Rick Gleason 
 ##***************************************************************************
 ## *   Copyright (C) 2010 by Sean d'Epagnier                              *
 ## *   License:     GPLv3+
@@ -56,6 +56,12 @@ if(COMMAND cmake_policy)
     cmake_policy(SET CMP0177 NEW)
   endif (POLICY CMP0177)
 endif (COMMAND cmake_policy)
+
+
+# set(VCPKG_TARGET_TRIPLET "x86-windows-static" CACHE STRING "")
+# set(VCPKG_CMAKE_SYSTEM_INCLUDE_PATH "" CACHE STRING "")
+#set(VCPKG_CMAKE_SYSTEM_LIBRARY_PATH "" CACHE STRING "")
+
 
 # set for vscode/vscodium
 set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
@@ -138,9 +144,6 @@ set(CMAKE_CXX_STANDARD 11)
 # Prefer libGL.so to libOpenGL.so, see CMP0072
 #  set(OpenGL_GL_PREFERENCE "LEGACY")   #not operational
 
-option(USE_GL "Enable OpenGL support" ON)
-message(STATUS "${CMLOC}USE_GL: ${USE_GL}")
-
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
   set(CMAKE_BUILD_TYPE
       "Release"
@@ -158,29 +161,68 @@ message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# YES — you must keep OCPN_USE_GL ON
+# OCPN_USE_GL controls the plugin’s own GL compile flags
+# It enables: USE_OCPNGL  __OCPN__GL__   GL  aware code paths in your plugin
+# If you turn it OFF: Your plugin compiles in DC‑only mode
+#  All GL code in ClimatologyOverlayFactory becomes inactive, missing GL symbol errors
+# But OCPN_USE_GL does NOT add plugin_dc in your TP version.
+# OCPN_USE_GL enables GL in your plugin, 
+# But PluginSetup does NOT use it to add plugin_dc
+# So the correct combination is:
+# ✔ OCPN_USE_GL ON
+# ✔ Manual add_subdirectory(opencpn-libs/plugin_dc)
+# ✔ Windows headers alias
+# ✔ No PLUGIN_USE_GL (ignored in your TP version)
+# So plugin_dc must be added manually
+set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
+# set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
+
+# set(OCPN_USE_GL ON)
+# OFF prevents PluginSetup from adding plugin_dc
+# so that we can build it manually below.
+# Best for building plugins in Standalone mode
+# set(PLUGIN_USE_GL OFF) 
+
 ##========================================================
 ## Standard OpenCPN plugin setup
+## Do not change - needed to configure build process
 ##========================================================
 include("PluginSetup")
 include("PluginConfigure")
 ##===========================================================
-## ----- Do not change section above - needed to configure build process --------##
-## ----- Change below to match project requirements for source, headers, etc. ---##
 
-set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
-set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
-
-# This forces your include directories (plugin_dc) to be searched 
-# before system include directories. - Does not fix problem.
+# Bring in plugin_dc manually for standalone builds
+# Now add plugin_dc so the library builds without a duplicate.
+add_subdirectory(opencpn-libs/plugin_dc)
 
 # ---------------------------------------------------------
 # ADD plugin_dc EARLY — BEFORE linking, BEFORE includes
 # ---------------------------------------------------------
-add_definitions(-DUSE_S57)
-add_definitions(-DUSE_GL)
-add_subdirectory(opencpn-libs/plugin_dc)
+# Needed - satisfies plugin_dc’s dependency and produces no actual .lib file
+# because INTERFACE IMPORTED targets do not generate binaries
+# add_library(windows::headers INTERFACE IMPORTED)
+# Provide Windows headers for plugin_dc without creating a .lib
+add_library(windows-headers INTERFACE)
+
+# Windows SDK include path (CMake sets this automatically on MSVC)
+target_include_directories(windows-headers INTERFACE
+    "$ENV{WindowsSdkDir}/Include"
+)
+
+# Alias to match plugin_dc expectations
+add_library(windows::headers ALIAS windows-headers)
+
+
+# Bring in plugin_dc (modern GL abstraction)
+# No - PluginSetup already brings in plugin_dc, don't add it twice.
+# add_subdirectory(opencpn-libs/plugin_dc)
+
+
+# Enable OpenCPN GL mode and bundled curl for win
 target_compile_definitions(${PACKAGE_NAME} PRIVATE USE_OCPNGL)
 target_compile_definitions(${PACKAGE_NAME} PRIVATE __OCPN__GL__)
+target_compile_definitions(${PACKAGE_NAME} PRIVATE CLIMATOLOGY_BUNDLED_CURL)
 
 # ---------------------------------------------------------
 # Add other opencpn-libs BEFORE linking
@@ -222,7 +264,7 @@ set(HDRS
     include/ClimatologyUI.h
     include/gldefs.h
     include/defs.h
-    include/DownLoadFileEntry.hpp
+    include/DownloadFileEntry.hpp
     include/DownloadManager.hpp
     include/icons.h
     include/IsoBarMap.h
@@ -240,7 +282,7 @@ target_sources(${PACKAGE_NAME} PRIVATE ${SRCS} ${HDRS})
 target_link_libraries(${PACKAGE_NAME}
     PRIVATE
         ocpn::api
-        ocpn::plugin-dc
+        ocpn::dc-utils
         ocpn::tinyxml
         ocpn::jsonlib
         ocpn::wxjson
@@ -251,17 +293,16 @@ target_link_libraries(${PACKAGE_NAME}
 ##===========================================================
 ## Correct include directory order — MUST come AFTER linking
 ##===========================================================
+
 target_include_directories(${PACKAGE_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-
-    # plugin_dc core headers
+	# pointer to gl_private.h modern opengl put first - not in cmakelists.txt
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/glu/include/GL
+    # plugin_dc core headers	
     ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/include
-
-    # dc_utils (pidc.h lives here)
+    # dc_utils 	
     ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/dc_utils/include
-
-	# OpenCPN GL replacement headers (gl_private.h)
-    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/plugin_dc/glu/include
+	# for pi_shaders.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 ##===========================================================
@@ -280,35 +321,33 @@ include("PluginPackage")
 
 if (WIN32)
     message(STATUS "${CMLOC}Configuring curl integration for Windows")
-
-    # Paths to the curl toolchain built by build-curl-win32.ps1
-	# Bundle libcurl.dll and cacert.pem for Windows (no system curl)
     set(CURL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/win_curl/output32/include")
-
     set(CURL_LIBRARY "${CMAKE_SOURCE_DIR}/win_curl/output32/lib/libcurl_imp.lib")
 
     # Include curl headers
-    include_directories(${CURL_INCLUDE_DIR})
-
-    # Link against curl import library
+    target_include_directories(${PACKAGE_NAME} PRIVATE ${CURL_INCLUDE_DIR})
     target_link_libraries(${PACKAGE_NAME} PRIVATE ${CURL_LIBRARY})
 
     # Install the curl runtime DLL
-	install(FILES "${CMAKE_SOURCE_DIR}/win_curl/output32/bin/libcurl.dll"
-        DESTINATION plugins/climatology_pi)
+	#install(FILES "${CMAKE_SOURCE_DIR}/win_curl/output32/bin/libcurl.dll"
+    #    DESTINATION plugins/climatology_pi)
 
     # Install CA certificate bundle
     install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
         DESTINATION plugins/climatology_pi)
-		
-else()  # -------- Linux / macOS --------
-
+else()  # Linux / macOS
     message(STATUS "${CMLOC}Configuring system curl for non-Windows")
-
-    # Use system curl
-	
 	find_package(CURL REQUIRED)
 	target_link_libraries(${PACKAGE_NAME} PRIVATE CURL::libcurl)
-
  endif()
 
+##===========================================================
+## FINAL CLEANUP — remove vcpkg GL pollution
+##===========================================================
+
+get_target_property(_incs ${PACKAGE_NAME} INCLUDE_DIRECTORIES)
+
+if(_incs)
+    list(FILTER _incs EXCLUDE REGEX "vcpkg")
+    set_target_properties(${PACKAGE_NAME} PROPERTIES INCLUDE_DIRECTORIES "${_incs}")
+endif()
