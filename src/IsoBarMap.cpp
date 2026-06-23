@@ -24,18 +24,24 @@
  ***************************************************************************
  */
 
+// GLEW MUST be first
+//#define GLEW_STATIC
+#include <GL/glew.h>
+#include "gldefs.h"
 
+// Then your GL wrapper
+#include "gldefs.h"
+
+// Now wxWidgets (which pulls in gl.h safely AFTER glew.h)
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 #include <wx/progdlg.h>
 
-#include "gldefs.h"
-
+// Plugin + project headers
 #include "ocpn_plugin.h"
 #include "IsoBarMap.h"
 #include "defs.h"
 #include <pi_shaders.h>
-
 #include "icons.h"
 #include "climatology_pi.h"
 #include "ClimatologyOverlayFactory.h"

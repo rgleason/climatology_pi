@@ -25,13 +25,18 @@
  *
  */
 
+// GLEW MUST be first
+//define GLEW_STATIC
 #include <GL/glew.h>
+
+// Then your GL wrapper
+#include "gldefs.h"
+#include "climatology_shaders.h"
+
+// Now wxWidgets (which pulls in gl.h safely AFTER glew.h)
 #include <wx/wx.h>
 #include <wx/glcanvas.h>
 #include <wx/event.h>
-
-#include "gldefs.h"
-#include <pi_shaders.h>
 
 #include "icons.h"
 #include "climatology_pi.h"
@@ -39,9 +44,6 @@
 #include "ManifestLoader.hpp"
 #include "DownloadManager.hpp"
 
-// Provide a definition for the shader program handle so the linker is satisfied.
-// dc_utils in this TP build does not emit it, but the plugin expects it.
-int pi_texture_2DA_shader_program = 0;
 
 class CycloneLoaderThread : public wxThread
 {
@@ -55,6 +57,10 @@ private:
     virtual ExitCode Entry() override;
 };
 
+ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
+{
+    delete m_downloadManager;
+}
 
 std::vector<DownloadFileEntry>
 ConvertManifest(const std::vector<ManifestEntry>& manifest)
@@ -94,14 +100,6 @@ double deg2rad(double degrees)
   return M_PI * degrees / 180.0;
 }
 
-
-
-ClimatologyOverlay::~ClimatologyOverlay()
-{
-    if(m_iTexture)
-        glDeleteTextures( 1, &m_iTexture );
-    delete m_pDCBitmap, delete[] m_pRGBA;
-}
 
 static const wxString climatology_pi = "climatology_pi: ";
 
@@ -234,7 +232,6 @@ bool ClimatologyOverlayFactory::ValidateCycloneFiles()
 }
 
 
-ClimatologyOverlayFactory::~ClimatologyOverlayFactory() = default;
 
 
 void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
@@ -1563,21 +1560,52 @@ bool ClimatologyOverlayFactory::HasDataFor(int setting, int month)
     }
 }
 
-void ClimatologyOverlayFactory::RenderGLOverlay(wxGLContext *pcontext,
-                                                PlugIn_ViewPort *vp)
+
+void ClimatologyOverlayFactory::RenderGLOverlay(wxGLContext *pcontext, PlugIn_ViewPort *vp)
 {
-    if (!m_bCompletedLoading)
-        return;
+    m_dc = nullptr;   // GL mode
 
     glEnable(GL_BLEND);
 
-    piDC pidc;
-    pidc.SetVP(vp);
+    // Activate our climatology shader
+    ConfigureClimatologyShader(vp->pix_width, vp->pix_height);
 
-    RenderOverlay(pidc, *vp);
+    GLint program = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    wxLogMessage("Climatology: Active GL program = %d", program);
+    wxLogMessage("Climatology: Expected shader = %d", pi_climatology_blend_shader_program);
+
+    for (int i = 0; i < ClimatologyOverlaySettings::SETTINGS_COUNT; i++) {
+        if (m_dlg.SettingEnabled(i) && m_Settings.Settings[i].m_bEnabled)
+            RenderOverlayMap(i, *vp);   // GL path inside this function
+    }
 }
 
+bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O)
+{
+    if (O.m_iTexture)
+        return true;
 
+    if (!O.m_data || O.m_width <= 0 || O.m_height <= 0)
+        return false;
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 O.m_width, O.m_height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 O.m_data);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    O.m_iTexture = tex;
+    return true;
+}
 
 
 
@@ -1586,7 +1614,9 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
                                               PlugIn_ViewPort &vp,
                                               double transparency)
 {
-    // Screen quad
+    glUseProgram(pi_climatology_blend_shader_program);
+
+	// Screen quad in pixel space; TransformMatrix from SetMatrix(vp) will handle mapping
     float x = 0;
     float y = 0;
     float w = vp.pix_width;
@@ -1606,27 +1636,29 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
         1, 1
     };
 
-    // Use the shader program
-    glUseProgram(pi_texture_2DA_shader_program);
+    // Do NOT call glUseProgram here; ConfigureShaders already did that.
 
     // Attributes
-    GLint mPosAttrib = glGetAttribLocation(pi_texture_2DA_shader_program, "aPos");
-    GLint mUvAttrib  = glGetAttribLocation(pi_texture_2DA_shader_program, "aUV");
+    GLint mPosAttrib = glGetAttribLocation(pi_climatology_blend_shader_program, "aPos");
+    GLint mUvAttrib  = glGetAttribLocation(pi_climatology_blend_shader_program, "aUV");
 
     // Texture samplers
-    GLint texUni1 = glGetUniformLocation(pi_texture_2DA_shader_program, "uTex1");
-    GLint texUni2 = glGetUniformLocation(pi_texture_2DA_shader_program, "uTex2");
+    GLint texUni1 = glGetUniformLocation(pi_climatology_blend_shader_program, "uTex1");
+    GLint texUni2 = glGetUniformLocation(pi_climatology_blend_shader_program, "uTex2");
     glUniform1i(texUni1, 0);
     glUniform1i(texUni2, 1);
 
     // Blend factor
-    GLint blendLoc = glGetUniformLocation(pi_texture_2DA_shader_program, "blendFactor");
+    GLint blendLoc = glGetUniformLocation(pi_climatology_blend_shader_program, "blendFactor");
     glUniform1f(blendLoc, (float)dpos);
 
-    // Transparency
+    // Transparency (alpha)
     float colorv[4] = {0, 0, 0, -(float)transparency};
-    GLint colloc = glGetUniformLocation(pi_texture_2DA_shader_program, "color");
+    GLint colloc = glGetUniformLocation(pi_climatology_blend_shader_program, "color");
     glUniform4fv(colloc, 1, colorv);
+
+    // Let g_glTextureManager’s (removed) matrix stand; remove the identity override.
+    // (Delete the mat4x4 I / mat4x4_identity / glUniformMatrix4fv block.)
 
     // No VBOs
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -1638,14 +1670,6 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
     glVertexAttribPointer(mUvAttrib, 2, GL_FLOAT, GL_FALSE, 0, uv);
     glEnableVertexAttribArray(mUvAttrib);
 
-    // Identity transform
-    mat4x4 I;
-    mat4x4_identity(I);
-
-    GLint matloc = glGetUniformLocation(pi_texture_2DA_shader_program, "TransformMatrix");
-    if (matloc != -1)
-        glUniformMatrix4fv(matloc, 1, GL_FALSE, (const GLfloat*)I);
-
     // Bind textures
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex1);
@@ -1655,6 +1679,18 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
 
     // Draw
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	
+	//prevent GL leak to UI
+	glDisableVertexAttribArray(mPosAttrib);
+	glDisableVertexAttribArray(mUvAttrib);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glUseProgram(0);
+	
+	// Ideally, but what issue?
+	glDisable(GL_BLEND);
+
+
 }
 
 
@@ -2086,9 +2122,63 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
 }
 
 
+bool ClimatologyOverlayFactory::BuildOverlayData(ClimatologyOverlay &O,
+                    int setting, int month)
+{
+    double s;
+    double latoff = 0, lonoff = 0;
 
-void ClimatologyOverlayFactory::RenderOverlayMap(int setting,
-                                                 PlugIn_ViewPort &vp)
+    switch(setting) {
+    case ClimatologyOverlaySettings::WIND:
+        s = m_WindData[month]->longitudes / 360.0;
+        latoff = 90.0 / m_WindData[month]->latitudes;
+        lonoff = 180.0 / m_WindData[month]->longitudes;
+        break;
+
+    case ClimatologyOverlaySettings::CURRENT: s = 3;  break;
+    case ClimatologyOverlaySettings::SLP:     s = .5; break;
+    case ClimatologyOverlaySettings::AT:      s = .5; break;
+    case ClimatologyOverlaySettings::CLOUD:   s = .5; break;
+
+    default:
+        s = 1;
+    }
+
+    int width  = s * 360 + 1;
+    int height = s * 360;
+
+    O.m_width  = width;
+    O.m_height = height;
+    O.m_latoff = latoff;
+    O.m_lonoff = lonoff;
+
+    // Allocate RGBA buffer
+    O.m_data = new unsigned char[width * height * 4];
+
+    for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
+
+            double lat = M_PI * (2.0 * y / height - 1);
+            lat = 2 * rad2deg(atan(exp(lat))) - 90;
+            double lon = x / s;
+
+            double v = getValueMonth(MAG, setting, lat + latoff, lon + lonoff, month);
+            wxColour c = GetGraphicColor(setting, v);
+
+            int idx = 4 * (y * width + x);
+            O.m_data[idx + 0] = c.Red();
+            O.m_data[idx + 1] = c.Green();
+            O.m_data[idx + 2] = c.Blue();
+            O.m_data[idx + 3] = c.Alpha();
+        }
+    }
+
+    return true;
+}
+
+
+
+void ClimatologyOverlayFactory::RenderOverlayMap(int setting, PlugIn_ViewPort &vp)
 {
     if (!m_bCompletedLoading)
         return;
@@ -2114,43 +2204,42 @@ void ClimatologyOverlayFactory::RenderOverlayMap(int setting,
     ClimatologyOverlay &O1 = m_pOverlay[month][setting];
     ClimatologyOverlay &O2 = m_pOverlay[nmonth][setting];
 
-    // Ensure data exists
     if (!HasDataFor(setting, month) || !HasDataFor(setting, nmonth))
         return;
 
-    // DC fallback (unchanged)
-    wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
+	// ⭐ GL PATH — use our custom climatology shader
+	if (!m_dc)   // OpenGL mode
+	{
+		glEnable(GL_BLEND);
+		
+		if (!O1.m_data)
+		BuildOverlayData(O1, setting, month);
 
-    wxMemoryDC mdc;
-    wxBitmap bm(1000, 1000);
-    mdc.SelectObject(bm);
-    mdc.Clear();
+		// Ensure textures exist
+		if (!O1.m_iTexture)
+			CreateGLTexture(O1);
+		
+		if (!O2.m_data)
+		BuildOverlayData(O2, setting, nmonth);
 
-    wxFont font(10, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-    mdc.SetFont(font);
-    mdc.SetPen(*wxTRANSPARENT_PEN);
-    mdc.SetBrush(wxColour(243, 47, 229));
+		if (!O2.m_iTexture)
+			CreateGLTexture(O2);
 
-    int w, h;
-    mdc.GetMultiLineTextExtent(msg, &w, &h);
-    h += 2;
+		// Draw blended overlay using our shader
+		DrawGLTexture(O1.m_iTexture,
+					  O2.m_iTexture,
+					  dpos,
+					  vp,
+					  m_Settings.Settings[setting].m_iOverlayTransparency / 100.0);
 
-    int label_offset = 10;
-    int wdraw = w + (label_offset * 2);
+		return;
+	}
 
-    mdc.DrawRectangle(0, 0, wdraw, h);
-    mdc.DrawLabel(msg, wxRect(label_offset, 0, wdraw, h),
-                  wxALIGN_LEFT | wxALIGN_CENTRE_VERTICAL);
+	 // ⭐ DC FALLBACK PATH
+	wxString msg = _("Climatology overlay map unsupported unless OpenGL is enabled");
 
-    mdc.SelectObject(wxNullBitmap);
-
-    wxBitmap sbm = bm.GetSubBitmap(wxRect(0, 0, wdraw, h));
-    int x = vp.pix_width, y = vp.pix_height;
-
-    m_dc->DrawBitmap(sbm,
-                     (x - wdraw) / 2,
-                     y - (GetChartbarHeight() + h),
-                     false);
+	m_dc->SetTextForeground(*wxRED);
+	m_dc->DrawText(msg, 10, 10);
 }
 
 
@@ -2544,20 +2633,13 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
 bool ClimatologyOverlayFactory::RenderOverlay(piDC &dc, PlugIn_ViewPort &vp)
 {
     if (!m_bCompletedLoading)
-        return true;   // nothing to draw, but not an error
+        return true;
 
-    m_dc = &dc;
-
-    // If we are in OpenGL mode (dc.GetDC() == NULL), blending is handled by the shader.
-    // If we are in DC mode, we fall back to bitmap drawing.
-    if (!dc.GetDC()) {
-        glEnable(GL_BLEND);
-    }
+    m_dc = &dc;   // DC mode
 
     wxFont font(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     m_dc->SetFont(font);
 
-    // Pass 1: overlays
     for (int overlay = 1; overlay >= 0; overlay--) {
         for (int i = 0; i < ClimatologyOverlaySettings::SETTINGS_COUNT; i++) {
 
@@ -2568,7 +2650,7 @@ bool ClimatologyOverlayFactory::RenderOverlay(piDC &dc, PlugIn_ViewPort &vp)
                 continue;
 
             if (overlay)
-                RenderOverlayMap(i, vp);
+                RenderOverlayMap(i, vp);   // DC path inside this function
             else {
                 RenderIsoBars(i, vp);
                 RenderNumbers(i, vp);
@@ -2585,6 +2667,7 @@ bool ClimatologyOverlayFactory::RenderOverlay(piDC &dc, PlugIn_ViewPort &vp)
 
     return true;
 }
+
 
 
 void ClimatologyOverlayFactory::LoadCycloneDataBackground(

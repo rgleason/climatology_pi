@@ -8,6 +8,7 @@ src/icons.cpp
 src/IsoBarMap.cpp
 src/ManifestLoader.cpp
 src/zuFile.cpp
+src/climatology_shaders.cpp
 include/climatology_pi.h
 include/ClimatologyConfigDialog.h
 include/ClimatologyDialog.h
@@ -23,3 +24,4 @@ include/linmath.h
 include/ManifestEntry.hpp
 include/ManifestLoader.hpp
 include/zuFile.h
+include/climatology_shaders.h

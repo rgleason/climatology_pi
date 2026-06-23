@@ -25,10 +25,15 @@
  *
  */
 
+// GLEW MUST be first
+// #define GLEW_STATIC
+#include <GL/glew.h>
+#include "gldefs.h"
+
 #include "wx/wx.h"
 #include "wx/datetime.h"
-#include <wx/dcbuffer.h>
 #include <wx/dir.h>
+#include <wx/dcbuffer.h>
 #include <wx/debug.h>
 #include <wx/graphics.h>
 
@@ -37,7 +42,9 @@
 #include <time.h>
 
 #include "climatology_pi.h"
+#include "ClimatologyDialog.h"
 #include "ClimatologyConfigDialog.h"
+
 
 static const wxString units0_names[] = {"Knots", "M/S", "MPH", "KPH", wxEmptyString};
 static const wxString units1_names[] = {"MilliBars", "mmHG", wxEmptyString};

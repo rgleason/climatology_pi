@@ -31,6 +31,7 @@
 #include <wx/colour.h>
 
 #include "zuFile.h"
+#include "climatology_shaders.h"
 
 #include "IsoBarMap.h"
 #include "pidc.h"
@@ -39,6 +40,7 @@
 
 std::vector<DownloadFileEntry>
 ConvertManifest(const std::vector<ManifestEntry>& manifest);
+
 
 struct CycloneFilterParams {
     int statemask;
@@ -52,6 +54,7 @@ struct CycloneFilterParams {
     bool allowNeutral;
     bool allowNotAvailable;
 };
+
 
 
 class PlugIn_ViewPort;
@@ -164,28 +167,34 @@ struct Cyclone
 //    Climatology Overlay Specification
 //----------------------------------------------------------------------------------------------------------
 
-
 class ClimatologyOverlay {
 public:
-    ClimatologyOverlay( void )
+    ClimatologyOverlay()
+        : m_iTexture(0),
+          m_data(nullptr),
+          m_width(0),
+          m_height(0),
+          m_latoff(0),
+          m_lonoff(0)
+    {}
+
+    ~ClimatologyOverlay()
     {
-        m_iTexture = 0;
-        m_pDCBitmap = NULL, m_pRGBA = NULL;
-        m_latoff = m_lonoff = 0;
+        if (m_iTexture)
+            glDeleteTextures(1, &m_iTexture);
+
+        delete[] m_data;
     }
 
-    ~ClimatologyOverlay( void );
-
-    unsigned int m_iTexture; /* opengl mode */
-
-    wxBitmap *m_pDCBitmap; /* dc mode */
-    unsigned char *m_pRGBA;
+    unsigned int m_iTexture;     // OpenGL texture ID
+    unsigned char* m_data;       // RGBA pixel buffer
 
     int m_width, m_height;
     double m_latoff, m_lonoff;
-
-
 };
+
+
+
 
 //----------------------------------------------------------------------------------------------------------
 //    Climatology Overlay Factory Specification
@@ -227,6 +236,8 @@ public:
     ~ClimatologyOverlayFactory();
 	
 	friend class CycloneLoaderThread;   
+
+    bool CreateGLTexture(ClimatologyOverlay &O);
 	
 	void OnDownloadComplete(wxCommandEvent& event);  
 
@@ -276,7 +287,7 @@ public:
 
 private:
 	DownloadManager* m_downloadManager = nullptr;
-
+	bool BuildOverlayData(ClimatologyOverlay &O, int setting, int month);
 	void LoadInternal(wxGenericProgressDialog *progressdialog);
     void Free();
 
@@ -327,7 +338,7 @@ private:
     ClimatologyOverlay m_pOverlay[13][ClimatologyOverlaySettings::SETTINGS_COUNT];
 
 
-    piDC *m_dc;
+    piDC *m_dc;   // nullptr in GL mode, non-null in DC mode
 
     std::map < double , wxImage > m_labelCache;
 

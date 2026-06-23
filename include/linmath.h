@@ -3,9 +3,9 @@
 
 #include <math.h>
 
-#ifdef _MSC_VER
-#define inline __inline
-#endif
+//#ifdef _MSC_VER
+//#define inline __inline
+//#endif
 
 #define LINMATH_H_DEFINE_VEC(n) \
 typedef float vec##n[n]; \

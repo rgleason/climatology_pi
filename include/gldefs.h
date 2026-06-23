@@ -27,11 +27,11 @@
  */
 
 // Always pull in the real OpenGL headers first
-#include <GL/gl.h>
-#include <GL/glu.h>
 
-// if the opengl headers don't have these extensions...
+#include <GL/glew.h>
 
+// do NOT include <GL/gl.h> or <GL/glu.h> here;
+// glew will pull what it needs.
 #ifndef APIENTRYP
 #define APIENTRYP APIENTRY *
 #endif

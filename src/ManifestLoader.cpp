@@ -1,3 +1,9 @@
+
+// GLEW MUST be first
+//#define GLEW_STATIC
+#include <GL/glew.h>
+#include "gldefs.h"
+
 #include "ManifestLoader.hpp"
 #include "ManifestEntry.hpp"
 #include "climatology_pi.h"

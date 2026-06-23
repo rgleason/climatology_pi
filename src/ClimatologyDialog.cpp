@@ -25,6 +25,11 @@
  *
  */
 
+// GLEW MUST be first
+// #define GLEW_STATIC
+#include <GL/glew.h>
+#include "gldefs.h"
+
 #include "wx/wx.h"
 #include "wx/datetime.h"
 #include <wx/dir.h>
