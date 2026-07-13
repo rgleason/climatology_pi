@@ -23,118 +23,148 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.         *
  ***************************************************************************
  */
-
 #ifndef _CLIMATOLOGY_PI_PLUGIN_H_
 #define _CLIMATOLOGY_PI_PLUGIN_H_
 
 #include <wx/wx.h>
+#include <wx/timer.h>
 #include <wx/glcanvas.h>
+#include <GL/glew.h>
+#include <wx/notifmsg.h>
 
 #include "version.h"
-#define ABOUT_AUTHOR_URL "http://seandepagnier.users.sourceforge.net"
 #include "ocpn_plugin.h"
 #include "json/json.h"
 #include "defs.h"
-#include "DownloadManager.hpp"
-#include "DownloadFileEntry.hpp"
-
-wxString ClimatologyDataDirectory();
-
-#ifndef __OCPN__ANDROID__
-#define GetDateCtrlValue GetValue
-#endif
 
 #include "ClimatologyDialog.h"
-#include "ClimatologyUI.h"
+#include "ClimatologyControlDialog.h"
+#include "ClimatologyOverlayFactory.h"
+#include "StandardDisplayParams.h"
+#include "DownloadManager.hpp"
+#include "DownloadFileEntry.hpp"
 
 #ifdef __OCPN__ANDROID__
 extern QString qtStyleSheet;
 #endif
 
-#define ID_CYCLONE_READY 9001
+#define ID_CYCLONE_READY    9001
 #define ID_CYCLONE_PROGRESS 9002
 
+#ifndef __OCPN__ANDROID__
+#define GetDateCtrlValue GetValue
+#endif
 
-//----------------------------------------------------------------------------------------------------------
+// Forward declarations
+class DownloadManager;
+class ClimatologyOverlayFactory;
+class ClimatologyDialog;
+class ClimatologyControlDialog;
+class IsoBarMap;
+class Cyclone;
+struct StandardDisplayParams;
+
+// Global overlay factory pointer
+extern ClimatologyOverlayFactory* g_pOverlayFactory;
+
+// Data directory helper
+wxString ClimatologyDataDirectory();
+
+//----------------------------------------------------------------------------
 //    The PlugIn Class Definition
-//----------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------
 
-#define CLIMATOLOGY_TOOL_POSITION    -1          // Request default positioning of toolbar tool
+#define CLIMATOLOGY_TOOL_POSITION    -1          
+// Request default positioning of toolbar tool
 
 class climatology_pi : public opencpn_plugin_120
 {
 public:
-      climatology_pi(void *ppimgr);
-      ~climatology_pi(void);
+    climatology_pi(void* ppimgr);
+    ~climatology_pi(void);
 
-//    The required PlugIn Methods
-      int Init(void);
-      bool DeInit(void);
+    // Required PlugIn Methods
+    int Init(void);
+    bool DeInit(void);
 
-      int GetAPIVersionMajor();
-      int GetAPIVersionMinor();
-      int GetPlugInVersionMajor();
-      int GetPlugInVersionMinor();
-      int GetPlugInVersionPatch();
-      int GetPlugInVersionPost();  
-      wxBitmap *GetPlugInBitmap();
-      wxString GetCommonName();
-      wxString GetShortDescription();
-      wxString GetLongDescription();
-      // from shipdriver to read listing panel bitmap png
-	  wxBitmap m_panelBitmap; 
+    int GetAPIVersionMajor();
+    int GetAPIVersionMinor();
+    int GetPlugInVersionMajor();
+    int GetPlugInVersionMinor();
+    int GetPlugInVersionPatch();
+    int GetPlugInVersionPost();
 
-      void CreateOverlayFactory();
+    wxBitmap* GetPlugInBitmap();
+    wxString GetCommonName();
+    wxString GetShortDescription();
+    wxString GetLongDescription();
 
-//    The override PlugIn Methods
-      bool RenderOverlay(wxDC &dc, PlugIn_ViewPort *vp);
-	  bool RenderGLOverlay(wxGLContext *pcontext, PlugIn_ViewPort *vp);
-      void SetCursorLatLon(double lat, double lon);
-      void SendClimatology(bool valid);
-      void SetPluginMessage(wxString &message_id, wxString &message_body);
+    wxBitmap m_panelBitmap;
 
-      void SetDefaults(void);
+    void CreateOverlayFactory();
 
-      int GetToolbarToolCount(void);
+    // Override PlugIn Methods
+    void OnToolbarToolCallback(int id);
+    bool RenderGLOverlay(wxGLContext* pcontext, PlugIn_ViewPort* vp);
 
-      void OnToolbarToolCallback(int id);
+    void OnStartupTimer(wxTimerEvent& event);
+    void OnDownloadComplete(wxCommandEvent& event);
 
+    void ShowTransientMessage(const wxString& message,
+                              const wxString& title,
+                              int timeout_ms);
 
-// Other public methods
+    void SetPluginMessage(wxString& message_id, wxString& message_body);
+    void SendClimatology(bool valid);
+    void SendTimelineMessage(wxDateTime time);
 
-      void SetClimatologyDialogX    (int x){ m_climatology_dialog_x = x;};
-      void SetClimatologyDialogY    (int x){ m_climatology_dialog_y = x;}
-      void SetClimatologyDialogSizeX(int x){ m_climatology_dialog_sx = x;}
-      void SetClimatologyDialogSizeY(int x){ m_climatology_dialog_sy = x;}
-      void SetColorScheme(PI_ColorScheme cs);
+    // Dialog geometry setters
+    void SetClimatologyDialogX(int x) { m_climatology_dialog_x = x; }
+    void SetClimatologyDialogY(int y) { m_climatology_dialog_y = y; }
+    void SetClimatologyDialogSizeX(int x) { m_climatology_dialog_sx = x; }
+    void SetClimatologyDialogSizeY(int y) { m_climatology_dialog_sy = y; }
 
-      void OnClimatologyDialogClose();
-      void SendTimelineMessage(wxDateTime time);
-	  void OnDownloadComplete(wxCommandEvent& event);
+    void SetColorScheme(PI_ColorScheme cs);
 
 private:
-      void FreeData();
-	  
-	  std::unique_ptr<DownloadManager> m_downloadManager;
-	  ClimatologyDialog* m_pClimatologyDialog = nullptr;
+    void FreeData();
+    void SetCursorLatLon(double lat, double lon);
+    void SetDefaults(void);
+    int GetToolbarToolCount(void);
+	std::unique_ptr<DownloadManager> m_downloadManager;
 
-      bool LoadConfig(void);
-      bool SaveConfig(void);
-	  bool m_cycloneReady = false;
+    void OnClimatologyDialogClose();
 
+    void SetStandardDisplayParams(const StandardDisplayParams& p);
+    const StandardDisplayParams& GetStandardDisplayParams() const;
+ //   void SendClimatology(const StandardDisplayParams& p);
 
-      wxFileConfig     *m_pconfig;
-      wxWindow         *m_parent_window;
-      void BootstrapDataDirectory();
-	  wxString m_plugin_dir;
+    ClimatologyControlDialog* m_pControlDialog = nullptr;
+    ClimatologyDialog*        m_pClimatologyDialog = nullptr;
 
-      int              m_display_width, m_display_height;
-      int              m_leftclick_tool_id;
+    StandardDisplayParams m_params;
 
-      int              m_climatology_dialog_x, m_climatology_dialog_y;
-      int              m_climatology_dialog_sx, m_climatology_dialog_sy;
+    wxTimer m_startupTimer;
 
+    bool m_bCompletedLoading = false;
+
+    bool LoadConfig(void);
+    bool SaveConfig(void);
+
+    wxFileConfig* m_pconfig = nullptr;
+    wxWindow*     m_parent_window = nullptr;
+
+    void BootstrapDataDirectory();
+    wxString m_plugin_dir;
+
+    int m_display_width = 0;
+    int m_display_height = 0;
+    int m_leftclick_tool_id = 0;
+
+    int m_climatology_dialog_x = 0;
+    int m_climatology_dialog_y = 0;
+    int m_climatology_dialog_sx = 0;
+    int m_climatology_dialog_sy = 0;
 };
 
-extern ClimatologyOverlayFactory *g_pOverlayFactory;
-#endif // CLIMATOLOGY_PI_PLUGIN_H
+#endif // _CLIMATOLOGY_PI_PLUGIN_H_

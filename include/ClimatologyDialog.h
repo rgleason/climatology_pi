@@ -24,91 +24,178 @@
  ***************************************************************************
  */
 
-#ifndef __ClimatologyDIALOG_H__
-#define __ClimatologyDIALOG_H__
+/******************************************************************************
+ * ClimatologyDialog.h  —  Modern hand-written first dialog
+ *
+ * Replaces all wxFormBuilder / legacy boilerplate.
+ * Uses Bind() throughout; layout built entirely in code.
+ *
+ * Responsibilities of this dialog:
+ *   • Timeline bar  : month choice + day slider + "All" checkbox +
+ *                     "Now" button + full-width day-of-year slider
+ *   • Overlay list  : 11 rows, each with enable checkbox + text-only
+ *                     cursor readout; Cyclones row adds a "Config…" button
+ *                     that will open the second (Cyclones config) dialog.
+ *   • Outputs       : ClimatologyRenderParams  — consumed by the renderer
+ *                     StandardDisplayParams    — OpenCPN display contract
+ *
+ * The dialog hides rather than closes, preserving all state.
+ ******************************************************************************/
 
-#include "wx/wxprec.h"
+#ifndef CLIMATOLOGY_DIALOG_H_GUARD
+#define CLIMATOLOGY_DIALOG_H_GUARD
 
-#ifndef  WX_PRECOMP
-#include "wx/wx.h"
-#endif //precompiled headers
-#include <wx/progdlg.h>
-#include <wx/fileconf.h>
-#include <wx/glcanvas.h>
+#include <wx/wx.h>
+#include <wx/choice.h>
+#include <wx/slider.h>
+#include <wx/checkbox.h>
 #include <wx/stattext.h>
+#include <wx/button.h>
+#include <wx/sizer.h>
+#include <wx/scrolwin.h>
 
-#ifdef __OCPN__ANDROID__
-#include <wx/qt/private/wxQtGesture.h>
-#endif
+#include <array>
 
-#include "ClimatologyConfigDialog.h"
-#include "ClimatologyOverlayFactory.h"
-#include "ClimatologyUI.h"
+#include "ClimatologyRenderParams.h"
+#include "StandardDisplayParams.h"
+#include "OverlayTypes.h"
+#include "CycloneFilterParams.h"
 
+// ---------------------------------------------------------------------------
+// Forward declarations
+// ---------------------------------------------------------------------------
 class ClimatologyOverlayFactory;
 
-class wxFileConfig;
-class climatology_pi;
+// ---------------------------------------------------------------------------
+// Overlay index enum
+//   Keep in sync with ClimatologyOverlayFactory's own enum / constants.
+// ---------------------------------------------------------------------------
+// Use canonical OverlayType enum    #include "OverlayTypes.h"
 
-//----------------------------------------------------------------------------------------------------------
-//    Climatology Selector/Control Dialog Specification
-//----------------------------------------------------------------------------------------------------------
-class ClimatologyDialog : public ClimatologyDialogBase {
-public:
-    ClimatologyDialog(wxWindow *parent, climatology_pi *ppi);
-    ~ClimatologyDialog();
-
-#ifdef __OCPN__ANDROID__
-    void OnEvtPanGesture( wxQT_PanGestureEvent &event);
-#endif
-    void Init();
-	void UpdateTrackingControls();
-    void PopulateTrackingControls();
-    void RefreshRedraw();
-    void SetCursorLatLon(double lat, double lon);
-	void EnableAllControls(bool enable);
-    bool SettingEnabled(int setting);
-    void DisableSetting(int setting);
-
-    void FitLater() { m_fittimer.Start(100, true); }
-    void Save();
-	bool Show(bool show);
-	
-	wxStaticText* m_tStatus;
-    ClimatologyConfigDialog *m_cfgdlg;
-    climatology_pi *pPlugIn;
-
-private:
-    wxCheckBox *GetSettingControl(int setting);
-    void SetControlsVisible(ClimatologyOverlaySettings::SettingsType type,
-                            wxControl *ctrl1, wxControl *ctrl2=NULL, wxControl *ctrl3=NULL);
-
-    wxString GetValue(int index, Coord coord=MAG);
-
-    void DayMonthUpdate();
-    void OnMonth( wxCommandEvent& event ) { DayMonthUpdate(); }
-    void OnDay( wxSpinEvent& event ) { DayMonthUpdate(); }
-    void OnTimeline( wxScrollEvent& event );
-    void OnTimelineDown( wxScrollEvent& event );
-    void OnTimelineUp( wxScrollEvent& event );
-    void OnAll( wxCommandEvent& event );
-    void OnNow( wxCommandEvent& event );
-    void OnUpdateDisplay( wxCommandEvent& event );
-    void OnConfig( wxCommandEvent& event );
-	void OnCycloneReady(wxCommandEvent& event);
-	void OnCycloneProgress(wxCommandEvent& event);
-	
-    void OnClose( wxCloseEvent& event );
-    void OnCBAny( wxCommandEvent& event );
-    void OnFitTimer( wxTimerEvent & ) { Fit(); }
-
-    void Now();
-    wxWindow *pParent;
-
-	wxPoint m_startPos, m_startMouse;
-    double m_cursorlat, m_cursorlon;
-
-    wxTimer m_fittimer;
+// ---------------------------------------------------------------------------
+// Internal bundle holding every widget for one overlay row.
+// ---------------------------------------------------------------------------
+struct OverlayRowWidgets {
+    wxCheckBox*   check     = nullptr;  ///< enable / disable overlay
+    wxStaticText* readout   = nullptr;  ///< text-only cursor value
+    wxButton*     configBtn = nullptr;  ///< non-null only for CYCLONES
 };
 
-#endif
+// ---------------------------------------------------------------------------
+//  ClimatologyDialog
+// ---------------------------------------------------------------------------
+class ClimatologyDialog final : public wxDialog
+{
+public:
+    // ctor / dtor -----------------------------------------------------------
+    ClimatologyDialog(wxWindow*                  parent,
+                      ClimatologyOverlayFactory* factory,
+                      wxWindowID                 id    = wxID_ANY,
+                      const wxString&            title = _("Climatology"),
+                      const wxPoint&             pos   = wxDefaultPosition,
+                      const wxSize&              size  = wxDefaultSize);
+
+    ~ClimatologyDialog() override = default;
+
+    // -- Plugin → dialog interface ------------------------------------------
+
+    /// Called by the plugin whenever the cursor rests over the chart.
+    /// Pass an empty string to reset the readout to its idle state.
+	void UpdateCursorReadout(OverlayType id, const wxString& text);
+
+    /// Convenience: clear all readouts at once (cursor left the chart).
+    void ClearCursorReadouts();
+	
+	// Called when dialog is changed: overlay checkbox, timeline slider, “All”, “Now”,  month/day, DOY
+	//  dialog’s “commit + redraw” function.   Synchronizes SetParam + SetCycloneFilter
+	//Push updated parameters downstream and trigger a render.  User driven changes.
+	void PushParamsToFactoryAndRender();
+
+    /// Apply an externally loaded parameter set (e.g. after loading a preset).
+	// Factory → Dialog   “load UI from external state” function. Programatic changes. 
+	// Update the dialog UI from externally loaded parameters without causing a render.
+    void ApplyRenderParams(const ClimatologyRenderParams& p);
+
+    // -- Dialog → plugin interface ------------------------------------------
+
+    const ClimatologyRenderParams& GetRenderParams()  const { return m_renderParams;  }
+    const StandardDisplayParams&   GetDisplayParams() const { return m_displayParams; }
+
+private:
+    // -----------------------------------------------------------------------
+    // UI construction helpers — each returns the sizer it populates
+    // -----------------------------------------------------------------------
+    wxSizer* BuildTimelineBar();
+    wxSizer* BuildOverlayList();
+
+    // -----------------------------------------------------------------------
+    // Event handlers — timeline
+    // -----------------------------------------------------------------------
+    // void OnMonthChoice    (wxCommandEvent& evt);
+    // void OnDaySlider      (wxCommandEvent& evt);
+       void OnAllCheckbox    (wxCommandEvent& evt);
+    // void OnNowButton      (wxCommandEvent& evt);
+    // void OnTimelineSlider (wxCommandEvent& evt);
+
+    // -----------------------------------------------------------------------
+    // Event handlers — overlay list
+    // -----------------------------------------------------------------------
+    void OnOverlayCheck   (wxCommandEvent& evt);
+    void OnCyclonesConfig (wxCommandEvent& evt);
+
+    // -----------------------------------------------------------------------
+    // Event handlers — dialog lifecycle
+    // -----------------------------------------------------------------------
+    void OnClose (wxCloseEvent& evt);
+
+    // -----------------------------------------------------------------------
+    // Internal synchronisation helpers
+    // -----------------------------------------------------------------------
+
+    /// Push m_renderParams.dayOfYear into month/day/timeline controls.
+    // void SyncControlsFromDOY();
+
+    /// Read month + day controls, write result into m_renderParams.dayOfYear
+    /// AND into the full-width timeline slider.
+    // void SyncDOYFromMonthDay();
+
+    /// Enable/disable timeline controls according to the "All" checkbox.
+   // void UpdateTimelineSensitivity();
+
+    /// Days in a given month (1-based); uses year=2000 (leap) as reference.
+    // static int DaysInMonth(int month, int year = 2000);
+
+    /// Convert (month 1-based, day 1-based) → day-of-year 1-based.
+    //  static int MonthDayToDOY(int month, int day);
+
+    /// Convert day-of-year 1-based → { month 1-based, day 1-based }.
+    // static std::pair<int,int> DOYToMonthDay(int doy);
+
+    // -----------------------------------------------------------------------
+    // Data members
+    // -----------------------------------------------------------------------
+    ClimatologyOverlayFactory*  m_factory      = nullptr;
+	ClimatologyRenderParams     m_renderParams;    // from canonical header
+	StandardDisplayParams       m_displayParams;   // from canonical header
+	CycloneFilterParams         m_cycloneFilter;   // optional, if you expose date filters
+
+    // Timeline controls
+ //   wxChoice*   m_monthChoice    = nullptr;  ///< month selector
+ //   wxSlider*   m_daySlider      = nullptr;  ///< day-within-month, 1-31
+    wxCheckBox* m_allCheck       = nullptr;  ///< "All" (full-year aggregate)
+ //   wxButton*   m_nowBtn         = nullptr;  ///< jump to today's DOY
+ //   wxSlider*   m_timelineSlider = nullptr;  ///< full-width DOY slider 1-365
+
+    // Overlay rows — indexed by Climatology Overlay
+	std::array<OverlayRowWidgets, NUM_OVERLAYS> m_rows;
+	
+    // -----------------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------------
+ //   static constexpr int kDOYMin = 1;
+ //   static constexpr int kDOYMax = 365;
+
+    wxDECLARE_NO_COPY_CLASS(ClimatologyDialog);
+};
+
+#endif  // CLIMATOLOGY_DIALOG_H_GUARD

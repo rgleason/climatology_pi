@@ -1,4 +1,3 @@
-#pragma once
 /******************************************************************************
  *
  * Project:  OpenCPN
@@ -25,20 +24,27 @@
  ***************************************************************************
  */
 
+#pragma once
+
+#include <wx/string.h>
+#include <wx/colour.h>
 #include <list>
 
+#include "ocpn_plugin.h"   // defines piDC
 
-/* must be a power of 2, and also divide 360 and 176;
-   really only 8 works without more modifications */
 #define ZONE_SIZE 8
-
-/* divisible by 8 and any closer to the pole than this plots
-   horribly anyway on a flattened earth. */
 #define MAX_LAT 88
-#define LATITUDE_ZONES (2*MAX_LAT/ZONE_SIZE) /* perfectly divisible */
+#define LATITUDE_ZONES (2*MAX_LAT/ZONE_SIZE)
 #define LONGITUDE_ZONES (360/ZONE_SIZE)
 
-/* a single line segment in the plot */
+class piDC;
+class wxWindow;
+struct PlugIn_ViewPort;
+
+// forward declarations for the new context types
+class ClimatologyOverlayFactory;
+class ClimatologyRenderParams;
+
 class PlotLineSeg
 {
 public:
@@ -48,12 +54,12 @@ public:
     double contour;
 };
 
-/* cache values computed to improve speed */
 class ParamCache
 {
 public:
-ParamCache() : values(NULL), m_step(0) {}
+    ParamCache() : values(NULL), m_step(0) {}
     ~ParamCache() { delete [] values; }
+
     void Initialize(double step);
     bool Read(double lat, double lon, double &value);
 
@@ -67,22 +73,28 @@ class ContourText
 public:
     wxString text;
     int w, h;
-    int lastx, lasty; /* when rendering to prevent overcluttering */
+    int lastx, lasty;
 };
 
-class piDC;
-/* main model map suitable for a single plot type */
 class IsoBarMap
 {
 public:
-    IsoBarMap(wxString name, double spacing, double step);
+    IsoBarMap(wxString name,
+              double spacing,
+              double step,
+              const ClimatologyOverlayFactory& factory,
+              int overlayType,
+              const ClimatologyRenderParams&   renderParams);
+
     virtual ~IsoBarMap();
 
     bool Recompute(wxWindow *parent);
 
     void Plot(piDC *dc, PlugIn_ViewPort &vp);
+    void PlotGL(PlugIn_ViewPort &vp);
 
     bool m_bNeedsRecompute, m_bComputing;
+
 protected:
     double m_Spacing, m_Step, m_PoleAccuracy;
 
@@ -93,72 +105,36 @@ private:
     void PlotRegion(std::list<PlotLineSeg> &region,
                     double lat1, double lon1, double lat2, double lon2,
                     int maxdepth);
+
     void BuildParamCache(ParamCache &cache, double lat);
     double CachedParameter(double lat, double lon);
+
     bool Interpolate(double x1, double x2, double y1, double y2, bool lat,
                      double lonval, double &rx, double &ry);
 
     void ClearMap();
     ContourText ContourCacheData(double value);
+
     void DrawContour(piDC *dc, PlugIn_ViewPort &VP, double contour, double lat, double lon);
+    void DrawContourGL(PlugIn_ViewPort &VP, double contour, double lat, double lon);
 
-    /* two caches for all longitudes alternate
-       places (step over each other) to cover the two latitudes
-       currently being built */
     ParamCache m_Cache[2];
-
-    /* the line segments for the entire globe split into zones */
     std::list<PlotLineSeg> m_map[LATITUDE_ZONES][LONGITUDE_ZONES];
 
     double m_MinContour, m_MaxContour;
     int m_contourcachesize;
     ContourText *m_contourcache;
-    int lastx, lasty; /* when rendering to prevent overcluttering */
+
+    int lastx, lasty;
 
     wxString m_Name;
     bool m_bPolar;
     wxColour m_Color;
+
+    // unified‑grid / rendering context
+    const ClimatologyOverlayFactory& m_factory;
+    int                              m_setting;       // overlay id (any scalar overlay)
+    const ClimatologyRenderParams&   m_renderParams;
 };
 
-#if 0
-enum MagneticPlotType {DECLINATION, INCLINATION, FIELD_STRENGTH};
 
-class MagneticPlotMap : public IsoBarMap
-{
-    MagneticPlotMap(IsoBarType type,
-                    WMMtype_MagneticModel *&mm,
-                    WMMtype_MagneticModel *&tmm,
-                    WMMtype_Ellipsoid *ellip)
-        : m_type(type), MagneticModel(mm), TimedMagneticModel(tmm), Ellip(ellip)
-    {
-        switch(m_type) {
-        case DECLINATION:
-            m_Name = _("Declination");
-            m_bPolar = true;
-            break;
-        case INCLINATION:
-            m_Name = _("Inclination");
-            break;
-        default:
-            m_Name = _("Field Strength");
-        }
-    }
-
-    bool m_bEnabled;
-    MagneticPlotType m_type;
-
-    WMMtype_MagneticModel *&MagneticModel;
-    WMMtype_MagneticModel *&TimedMagneticModel;
-    WMMtype_Ellipsoid *Ellip;
-    WMMtype_Date UserDate;
-
-    bool Recompute(wxDateTime date);
-    void ConfigureAccuracy(int step, int poleaccuracy);
-
-    void Plot(piDC *dc, PlugIn_ViewPort &vp)
-    {
-        if(m_bEnabled)
-            IsoBarMap::Plot(dc, vp);
-    }
-};
-#endif

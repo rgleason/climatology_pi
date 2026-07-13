@@ -4,6 +4,7 @@
 #include <wx/window.h>
 #include <wx/thread.h>
 #include <wx/event.h>
+#include <wx/progdlg.h>
 #include <vector>
 #include <mutex>
 
@@ -28,13 +29,14 @@ public:
 
     void SetManifest(const std::vector<DownloadFileEntry>& files);
     bool AllRequiredAvailable() const;
+	bool AllFilesPresent() const;
 
+	void OnDownloadProgress(wxCommandEvent& event);
+	void DestroyProgressDialog();
     void StartBackgroundDownload(bool interactive);
     void Cancel();
 	
 	bool CurlDownload(wxString url, const wxString& dest);
-
-
 
 private:
     friend class DownloadWorker;
@@ -44,6 +46,9 @@ private:
 
     std::vector<DownloadFileEntry> m_files;
     DownloadWorker* m_worker = nullptr;
+
+	wxGenericProgressDialog* m_progress = nullptr;
+
 
     mutable std::mutex m_mutex;
     bool m_cancelled = false;

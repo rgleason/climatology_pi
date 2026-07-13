@@ -2,6 +2,7 @@
 #include "climatology_shaders.h"
 #include <cstdio>
 #include "linmath.h"
+#include <wx/log.h>
 
 
 GLuint pi_climatology_blend_shader_program = 0;
@@ -45,6 +46,10 @@ void main() {
 )";
 
 bool LoadClimatologyShaders() {
+	if (!glCreateShader || !glShaderSource || !glCompileShader || !glLinkProgram) {
+        wxLogMessage("climatology_pi: GL functions not available yet, deferring shader load.");
+        return false;
+    }
     GLint success;
     char infoLog[512];
 
@@ -85,13 +90,19 @@ bool LoadClimatologyShaders() {
     }
 	// NEW SAFETY CHECK
 	if (!pi_climatology_blend_shader_program) {
-		printf("Climatology shader program is 0 — invalid program object.\n");
+		printf("Climatology shader program is 0 ? invalid program object.\n");
 		return false;
 	}
     return true;
 }
 
 void ConfigureClimatologyShader(float width, float height) {
+    // Safety check: ensure shader program is valid
+    if (!pi_climatology_blend_shader_program) {
+        wxLogWarning("ConfigureClimatologyShader: shader program not loaded yet");
+        return;
+    }
+
     float vp_transform[16];
     mat4x4 m;
     mat4x4_identity(m);

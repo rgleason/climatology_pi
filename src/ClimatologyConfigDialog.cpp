@@ -41,9 +41,18 @@
 #include <math.h>
 #include <time.h>
 
+#include "ocpn_plugin.h"
+
 #include "climatology_pi.h"
 #include "ClimatologyDialog.h"
 #include "ClimatologyConfigDialog.h"
+#include "ClimatologyOverlayFactory.h"
+#include "CycloneTypes.h"
+
+
+#ifndef CYCLONE_SETTING
+#define CYCLONE_SETTING ClimatologyOverlaySettings::WIND
+#endif
 
 
 static const wxString units0_names[] = {"Knots", "M/S", "MPH", "KPH", wxEmptyString};
@@ -119,32 +128,6 @@ double ClimatologyOverlaySettings::CalibrationFactor(int setting)
     }
 
     return 1;
-}
-
-void ClimatologyOverlayFactory::UpdateCycloneFilterFromUI()
-{
-    CycloneFilterParams p;
-
-    p.statemask = 0;
-    p.statemask |= 1 * m_dlg.m_cfgdlg->m_cbTropical->GetValue();
-    p.statemask |= 2 * m_dlg.m_cfgdlg->m_cbSubTropical->GetValue();
-    p.statemask |= 4 * m_dlg.m_cfgdlg->m_cbExtraTropical->GetValue();
-    p.statemask |= 8 * m_dlg.m_cfgdlg->m_cbRemanent->GetValue();
-
-    p.minwindspeed = m_dlg.m_cfgdlg->m_sMinWindSpeed->GetValue();
-    p.maxpressure  = m_dlg.m_cfgdlg->m_sMaxPressure->GetValue();
-
-#ifndef __OCPN__ANDROID__
-    p.startDate = m_dlg.m_cfgdlg->m_dPStart->GetValue();
-    p.endDate   = m_dlg.m_cfgdlg->m_dPEnd->GetValue();
-#endif
-
-    p.allowElNino      = m_dlg.m_cfgdlg->m_cbElNino->GetValue();
-    p.allowLaNina      = m_dlg.m_cfgdlg->m_cbLaNina->GetValue();
-    p.allowNeutral     = m_dlg.m_cfgdlg->m_cbNeutral->GetValue();
-    p.allowNotAvailable= m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue();
-
-    m_cycloneParams = p;
 }
 
 
@@ -293,6 +276,25 @@ ClimatologyConfigDialog::ClimatologyConfigDialog(ClimatologyDialog *parent)
     m_refreshTimer.Connect(wxEVT_TIMER, wxTimerEventHandler(ClimatologyConfigDialog::OnRefreshTimer) , NULL, this);
 
     DimeWindow( this );
+
+	//Wind Pressure Sliders
+	m_sMinWind->Bind(wxEVT_SLIDER, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_sMaxPressure->Bind(wxEVT_SLIDER, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	
+	//ENSO checkboxes
+	m_dpStart->Bind(wxEVT_DATE_CHANGED, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_dpEnd->Bind(wxEVT_DATE_CHANGED, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+
+
+	//Cyclone state checkboxes
+	m_cbCycloneTropical->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_cbCycloneSubTropical->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_cbCycloneExtraTropical->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_cbCycloneWave->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_cbCycloneRemanent->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+	m_cbCycloneUnknown->Bind(wxEVT_CHECKBOX, &ClimatologyConfigDialog::OnCycloneFilterChanged, this);
+
+	
 }
 
 
@@ -508,13 +510,45 @@ void ClimatologyConfigDialog::OnUpdateIsobar()
     OnUpdate();
 }
 
-void ClimatologyConfigDialog::OnUpdateCyclones()
-{
-	g_pOverlayFactory->UpdateCycloneFilterFromUI();
-	g_pOverlayFactory->BuildCycloneCache();
-	OnUpdate();
 
+void ClimatologyDialog::OnCycloneFilterChanged(wxCommandEvent& event)
+{
+    if (!g_pOverlayFactory)
+        return;
+
+    CycloneFilterParams params = m_cfgdlg->GetCycloneFilterParams();
+    g_pOverlayFactory->SetCycloneFilter(params);
+
+    RefreshRedraw();
 }
+
+
+CycloneFilterParams ClimatologyConfigDialog::GetCycloneFilterParams() const
+{
+    CycloneFilterParams p;
+
+    // Cyclone state mask (already implemented in CCD)
+    p.statemask = GetCycloneStateMask();
+
+    // Wind / pressure thresholds
+    p.minwindspeed = m_sMinWind->GetValue();
+    p.maxpressure  = m_sMaxPressure->GetValue();
+
+    // Date range
+    p.startDate = m_dpStart->GetValue();
+    p.endDate   = m_dpEnd->GetValue();
+
+    // ENSO filters
+    p.allowElNino       = m_cbElNino->GetValue();
+    p.allowLaNina       = m_cbLaNina->GetValue();
+    p.allowNeutral      = m_cbNeutral->GetValue();
+    p.allowNotAvailable = m_cbUnknownENSO->GetValue();
+
+    return p;
+}
+
+
+
 
 void ClimatologyConfigDialog::OnPaintKey( wxPaintEvent& event )
 {
@@ -557,4 +591,23 @@ void ClimatologyConfigDialog::OnAboutAuthor( wxCommandEvent& event )
 void ClimatologyConfigDialog::OnRefreshTimer( wxTimerEvent& event )
 {
     pParent->RefreshRedraw();
+}
+
+// Add this function to ClimatologyConfigDialog to fix the error
+int ClimatologyConfigDialog::GetCycloneStateMask() const
+{
+    int mask = 0;
+    if (m_cbCycloneTropical && m_cbCycloneTropical->GetValue())
+        mask |= 1 << 0;
+    if (m_cbCycloneSubTropical && m_cbCycloneSubTropical->GetValue())
+        mask |= 1 << 1;
+    if (m_cbCycloneExtraTropical && m_cbCycloneExtraTropical->GetValue())
+        mask |= 1 << 2;
+    if (m_cbCycloneWave && m_cbCycloneWave->GetValue())
+        mask |= 1 << 3;
+    if (m_cbCycloneRemanent && m_cbCycloneRemanent->GetValue())
+        mask |= 1 << 4;
+    if (m_cbCycloneUnknown && m_cbCycloneUnknown->GetValue())
+        mask |= 1 << 5;
+    return mask;
 }

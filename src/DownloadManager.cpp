@@ -62,6 +62,17 @@ void DownloadManager::SetManifest(const std::vector<DownloadFileEntry>& files)
     m_files = files;
 }
 
+bool DownloadManager::AllFilesPresent() const
+{
+    for (const auto &entry : m_files) {
+        wxFileName fn(m_dataDir + "/" + entry.filename);
+        if (!fn.FileExists())
+            return false;
+    }
+    return true;
+}
+
+
 bool DownloadManager::AllRequiredAvailable() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -85,15 +96,54 @@ bool DownloadManager::AllRequiredAvailable() const
     return true;
 }
 
-
 void DownloadManager::StartBackgroundDownload(bool interactive)
 {
     Cancel();
-
     m_cancelled = false;
+
+    // Create progress dialog in MAIN THREAD
+    if (interactive) {
+        m_progress = new wxGenericProgressDialog(
+            _("Climatology Data Download"),
+            _("Downloading climatology data…"),
+            100,
+            m_parent,
+            wxPD_APP_MODAL | wxPD_ELAPSED_TIME | wxPD_REMAINING_TIME
+        );
+    }
+
+    // Bind progress event to this manager
+    m_parent->Bind(EVT_DM_PROGRESS,
+                   &DownloadManager::OnDownloadProgress,
+                   this);
+
+    // Start worker thread
     m_worker = new DownloadWorker(this, interactive);
     m_worker->Run();
 }
+
+
+void DownloadManager::OnDownloadProgress(wxCommandEvent& event)
+{
+    if (!m_progress)
+        return;
+
+    int pct = event.GetInt();
+    m_progress->Update(pct);
+}
+
+void DownloadManager::DestroyProgressDialog()
+{
+    if (m_progress) {
+        m_progress->Destroy();
+        m_progress = nullptr;
+    }
+
+    m_parent->Unbind(EVT_DM_PROGRESS,
+                     &DownloadManager::OnDownloadProgress,
+                     this);
+}
+
 
 void DownloadManager::Cancel()
 {
@@ -197,9 +247,13 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
 // ------------------------------------------------------------
 wxThread::ExitCode DownloadWorker::Entry()
 {
-	wxLogMessage("Climatology: DownloadWorker thread started, %zu files in manifest",
+    wxLogMessage("Climatology: DownloadWorker thread started, %zu files in manifest",
                  m_mgr->m_files.size());
-				 
+
+    const int totalFiles = (int)m_mgr->m_files.size();
+    int filesDone = 0;
+
+    wxString url;   // declare once BEFORE the loop
     for (auto& entry : m_mgr->m_files)
     {
         {
@@ -211,14 +265,15 @@ wxThread::ExitCode DownloadWorker::Entry()
         wxString dest = m_mgr->m_dataDir + entry.filename;
 
         // Skip existing files
-        if (wxFileExists(dest) && wxFileName::GetSize(dest) > 0)
-            continue;
-		
-       // Use URL from manifest.json (actually one entry in a method)		
-		wxLogMessage("Climatology: ENTRY URL = '%s'", entry.url);
-        wxString url = entry.url;
+        if (wxFileExists(dest) && wxFileName::GetSize(dest) > 0) {
+            filesDone++;
+            goto progress_update;
+        }
 
-        // Sanitize URL
+        wxLogMessage("Climatology: ENTRY URL = '%s'", entry.url);
+		
+		url = entry.url;   // assign here, AFTER entry exists
+
         url.Trim(true).Trim(false);
         url.Replace("\r", "");
         url.Replace("\n", "");
@@ -230,49 +285,49 @@ wxThread::ExitCode DownloadWorker::Entry()
         if (!ok)
         {
             wxLogWarning("Climatology: Download failed: %s", url);
-            continue;
+            filesDone++;
+            goto progress_update;
         }
 
-        // ------------------------------------------------------------
-        // CYCLONE FILES ONLY: decompress .gz → plain text
-        // ------------------------------------------------------------
-		if (entry.filename.rfind("cyclone-", 0) == 0)
-		{
-			wxString gzfile = dest;
-			wxString outFile = dest.BeforeLast('.');   // remove .gz
+        if (entry.filename.rfind("cyclone-", 0) == 0)
+        {
+            wxString gzfile = dest;
+            wxString outFile = dest.BeforeLast('.');
 
-			// If already decompressed, do nothing
-			if (wxFileExists(outFile) && wxFileName::GetSize(outFile) > 0) {
-				wxLogMessage("Climatology: cyclone file already decompressed: %s", outFile);
-				continue;
-			}
+            if (wxFileExists(outFile) && wxFileName::GetSize(outFile) > 0) {
+                wxLogMessage("Climatology: cyclone file already decompressed: %s", outFile);
+            } else {
+                wxFileInputStream in(gzfile);
+                if (!in.IsOk()) {
+                    wxLogWarning("Climatology: cannot open cyclone gzip file %s", gzfile);
+                } else {
+                    wxZlibInputStream zin(in, wxZLIB_GZIP);
+                    wxFileOutputStream out(outFile);
 
-			wxFileInputStream in(gzfile);
-			if (!in.IsOk()) {
-				wxLogWarning("Climatology: cannot open cyclone gzip file %s", gzfile);
-				continue;
-			}
+                    if (!out.IsOk()) {
+                        wxLogWarning("Climatology: cannot create cyclone output file %s", outFile);
+                    } else {
+                        out.Write(zin);
+                        wxLogMessage("Climatology: Decompressed cyclone file %s", outFile);
+                    }
+                }
+            }
+        }
 
-			wxZlibInputStream zin(in, wxZLIB_GZIP);
-			wxFileOutputStream out(outFile);
+        filesDone++;
 
-			if (!out.IsOk()) {
-				wxLogWarning("Climatology: cannot create cyclone output file %s", outFile);
-				continue;
-			}
-
-			// Perform decompression
-			out.Write(zin);
-
-			// DO NOT delete the .gz file — ReadCycloneData may still need it
-			wxLogMessage("Climatology: Decompressed cyclone file %s", outFile);
-		}
+    progress_update:
+        wxCommandEvent progressEvt(EVT_DM_PROGRESS);
+        int pct = totalFiles > 0 ? (filesDone * 100) / totalFiles : 100;
+        progressEvt.SetInt(pct);
+        wxQueueEvent(m_mgr->m_parent, progressEvt.Clone());
     }
 
-    // Notify completion
     wxCommandEvent evt(EVT_DM_COMPLETE);
     wxQueueEvent(m_mgr->m_parent, evt.Clone());
 
     return (wxThread::ExitCode)0;
 }
+
+
 #endif // CLIMATOLOGY_BUNDLED_CURL

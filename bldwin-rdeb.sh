@@ -42,7 +42,7 @@ cmake -G "Visual Studio 17 2022" \
   ..
 
 # --- BUILD + INSTALL -------------------------------------------------
-cmake --build . --config "$Build_Type" --target package > BUILD-OUTPUT.txt
+cmake --build . --config "$Build_Type" --target package >"$PLUGIN_ROOT"/OUTPUT.txt
 cmake --build . --config "$Build_Type" --target install
 
 # --- COPY REQUIRED RUNTIME FILES ------------------------------------

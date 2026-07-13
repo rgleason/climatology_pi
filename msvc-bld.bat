@@ -1,8 +1,16 @@
 @echo off
 setlocal
 
+pushd "%~dp0" 
+echo AFTER PUSHD: %CD%
+
+
 REM --- 1. Load MSVC environment (VS 2022 x86) ---
-call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat"
+rem call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat"
+rem call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat"
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat"
+echo AFTER VCVARS: %CD%
+
 
 REM --- 2. Kill stale processes ---
 taskkill /IM opencpn.exe /F >nul 2>&1
@@ -18,14 +26,23 @@ if exist build (
 )
 
 REM --- 4a. Configure with Visual Studio generator (recommended for MSVC) ---
-cmake -B build -G "Visual Studio 17 2022" -A Win32 -DCMAKE_BUILD_TYPE=RelWithDebInfo
+echo BEFORE CMAKE: %CD%
+cmake -B build -G "Visual Studio 17 2022" ^
+-A Win32 ^
+-DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+-DwxWidgets_ROOT_DIR="C:/Users/fcgle/source/ocpn_wxWidgets" ^
+"C:/Users/fcgle/source/climatology_pi"  
+rem ..
+
+	
 if errorlevel 1 (
     echo CMake configure failed.
+	popd
     exit /b 1
 )
 
 REM --- 5. Build ---
-cmake --build build --config RelWithDebInfo
+cmake --build build --config RelWithDebInfo > OUTPUT.TXT
 if errorlevel 1 (
     echo Build failed.
     exit /b 1
