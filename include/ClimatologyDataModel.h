@@ -1,13 +1,15 @@
 #ifndef CLIMATOLOGY_DATA_MODEL_H
 #define CLIMATOLOGY_DATA_MODEL_H
 
-#include <vector>
+#pragma once
+
 #include <array>
-#include <cmath>
-#include <wx/log.h>
+#include <vector>
+#include "GridInfo.h"
+#include "ClimatologyEnums.h"
 
 #include "defs.h"        // for NUM_OVERLAYS
-#include "GridInfo.h"    // your metadata struct
+// your metadata struct
 
 // ============================================================================
 // UnifiedGrid – one scalar or vector field for one month
@@ -16,34 +18,33 @@
 class UnifiedGrid
 {
 public:
+    int rows, cols;
+    double lat0, lon0;
+    double latStep, lonStep;
+    bool loaded;
+    bool isVector;
+
+    std::vector<double> scalar;
+    std::vector<double> u;
+    std::vector<double> v;
+
     UnifiedGrid();
 
-    void InitScalar(int rows, int cols,
-                    double lat0, double lon0,
-                    double latStep, double lonStep);
+    void InitScalar(int r, int c,
+                    double la0, double lo0,
+                    double laStep, double loStep);
 
-    void InitVector(int rows, int cols,
-                    double lat0, double lon0,
-                    double latStep, double lonStep);
+    void InitVector(int r, int c,
+                    double la0, double lo0,
+                    double laStep, double loStep);
 
     bool isValid() const;
 
     double valueAt(double lat, double lon) const;
     double uAt(double lat, double lon) const;
     double vAt(double lat, double lon) const;
-
-private:
-    int rows, cols;
-    double lat0, lon0;
-    double latStep, lonStep;
-
-    bool loaded;
-    bool isVector;
-
-    std::vector<float> scalar;
-    std::vector<float> u;
-    std::vector<float> v;
 };
+
 
 
 // ============================================================================

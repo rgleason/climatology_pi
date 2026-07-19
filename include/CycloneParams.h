@@ -1,38 +1,63 @@
 #ifndef CYCLONE_PARAMS_H
 #define CYCLONE_PARAMS_H
 
+// ============================================================================
+// CycloneParams
 // Persistent cyclone appearance preferences.
 // Saved in config as part of StandardDisplayParams.
-// Used by the cyclone renderer for visual styling ONLY.
-// Not used by ClimatologyRenderParams.h
+// Used by the dialog and renderer for visual styling ONLY.
+// NOT used for filtering (CycloneFilterParams handles filtering).
+// ============================================================================
 
 struct CycloneParams
 {
+    // -----------------------------------------------------------------------
+    // Enable/disable cyclone overlay
+    // -----------------------------------------------------------------------
     bool enabled = false;
 
-    // Track center and span (visual timeline controls)
-    int centerDay = 180;
-    int daySpan   = 30;
+    // -----------------------------------------------------------------------
+    // Timeline controls (visual-only)
+    // -----------------------------------------------------------------------
+    int centerDay = 180;     // Day-of-year center (1–365)
+    int daySpan   = 30;      // +/- days around center
+	int currentMonth = 0;   // 0–11
+    bool allTimesCyclones = false;
 
-    // Intensity display thresholds (visual only)
-    double minWind     = 0.0;
-    double maxPressure = 2000.0;
-
-    // Storm-type mask (visual category coloring)
-    int stateMask = 0xFFFFFFFF;
-
-    // ENSO visibility (visual only)
+    // -----------------------------------------------------------------------
+    // ENSO visibility (visual-only)
+    // -----------------------------------------------------------------------
     bool showElNino       = true;
     bool showLaNina       = true;
     bool showNeutral      = true;
     bool showNotAvailable = true;
 
-    // All-times mode (visual)
-    bool allTimesCyclones = false;
+    // -----------------------------------------------------------------------
+    // Basin visibility (visual-only)
+    // -----------------------------------------------------------------------
+    bool showEPA = true;    // East Pacific
+    bool showWPA = true;    // West Pacific
+    bool showSPA = true;    // South Pacific
+    bool showATL = true;    // Atlantic
+    bool showNIO = true;    // North Indian Ocean
+    bool showSHE = true;    // South Indian Ocean
 
-    // Appearance
-    double opacity = 1.0;
-    int    colorMode = 0;
+    // -----------------------------------------------------------------------
+    // Appearance (visual-only)
+    // -----------------------------------------------------------------------
+    double opacity   = 1.0;   // cyclone track opacity
+    int    colorMode = 0;     // reserved for future color modes
+
+    // -----------------------------------------------------------------------
+    // Intensity thresholds (visual-only)
+    // -----------------------------------------------------------------------
+    double minWind     = 0.0;     // knots
+    double maxPressure = 2000.0;  // hPa
+
+    // -----------------------------------------------------------------------
+    // Storm-type mask (visual-only)
+    // -----------------------------------------------------------------------
+    int stateMask = 0xFFFFFFFF;   // tropical, subtropical, extratropical, etc.
 };
 
 #endif // CYCLONE_PARAMS_H

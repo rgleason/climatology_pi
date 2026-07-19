@@ -23,17 +23,20 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.         *
  ***************************************************************************
  */
+ 
+#pragma once
+ 
+#include "ocpn_plugin.h"
+#include "IsoBarMap.h"
+
 #include <GL/glew.h>
-#include <wx/wx.h>
 #include <wx/glcanvas.h>
 #include <wx/progdlg.h>
 #include <cmath>
 
-#include "IsoBarMap.h"
+#include "ClimatologyEnums.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyRenderParams.h"
-#include "ocpn_plugin.h"
-
 
 // ------------------------------------------------------------
 // Parameter cache helpers
@@ -70,10 +73,10 @@ bool ParamCache::Read(double lat, double lon, double& value)
 
 
 // missing helper from original code
-static inline double square(double x)
-{
-    return x * x;
-}
+// static inline double square(double x)
+//{
+//    return x * x;
+//}
 
 
 void IsoBarMap::BuildParamCache(ParamCache& cache, double lat)
@@ -459,7 +462,7 @@ ContourText IsoBarMap::ContourCacheData(double value)
     return t;
 }
 
-void IsoBarMap::DrawContour(piDC* dc, PlugIn_ViewPort& VP,
+void IsoBarMap::DrawContour(piDC *dc, PlugIn_ViewPort& VP,
                             double contour,
                             double lat, double lon)
 {

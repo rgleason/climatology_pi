@@ -1,4 +1,3 @@
-#pragma once
 /******************************************************************************
  *
  * Project:  OpenCPN
@@ -24,11 +23,15 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.             *
  ***************************************************************************
  */
+#pragma once
 
-
-
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <limits>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // Provide NAN / INFINITY if missing
 #ifndef NAN

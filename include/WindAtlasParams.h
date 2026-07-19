@@ -1,7 +1,12 @@
 #ifndef WINDATLAS_PARAMS_H
 #define WINDATLAS_PARAMS_H
 
-//ClimatologyOverlayFactory uses only StandardDisplayParam.h so this struct will be included.
+#include <wx/colour.h>
+
+// UI-facing Wind Atlas parameters.
+// StandardDisplayParams stores this.
+// ClimatologyRenderParams stores this.
+// ClimatologyOverlayFactory receives this and uses WindAtlasData internally.
 
 struct WindAtlasParams
 {
@@ -19,12 +24,10 @@ struct WindAtlasParams
     double opacity = 1.0;
     bool allTimesWind = false;
     bool allTimesCurrent = false;
-	
-	 // legacy compatibility
+
     wxColour color;        // required by ClimatologyDialog.cpp
 
-	// N, NE, E, SE, S, SW, W, NW replaces resolution
-    int directionBins = 8;  
+    int directionBins = 8; // N, NE, E, SE, S, SW, W, NW
 };
 
 #endif

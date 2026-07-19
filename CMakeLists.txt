@@ -151,38 +151,53 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # ---------------------------------------------------------------------------
 
  set(SRCS
-     src/climatology_pi.cpp
-   	src/climatology_shaders.cpp
-     src/ClimatologyConfigDialog.cpp
-     src/ClimatologyDialog.cpp
-     src/ClimatologyOverlayFactory.cpp
-     src/DownloadManager.cpp
-     src/icons.cpp
-     src/IsoBarMap.cpp
-     src/ManifestLoader.cpp
-     src/zuFile.cpp
+    src/climatology_pi.cpp
+	src/climatology_shaders.cpp
+    src/ClimatologyConfigDialog.cpp
+	src/ClimatologyConstants.cpp
+	src/ClimatologyDataModel.cpp
+    src/ClimatologyDialog.cpp
+    src/ClimatologyOverlayFactory.cpp
+    src/DownloadManager.cpp
+    src/icons.cpp
+    src/IsoBarMap.cpp
+	src//OverlayMapping.cpp
+    src/ManifestLoader.cpp
+    src/zuFile.cpp
 )
 
  set(HDRS
-    include/climatology_pi.h
-    include/ClimatologyConfigDialog.h
-  	include/ClimatologyCoord.h
-    include/ClimatologyDialog.h
-    include/ClimatologyOverlayFactory.h
- 	include/ClimatologyRenderParams.h
-  	include/climatology_shaders.h
- 	include/CycloneFilterParams.h
-	include/CycloneTypes.h
-    include/defs.h
-    include/DownloadFileEntry.hpp
-    include/DownloadManager.hpp
- 	include/gldefs.h
-    include/icons.h
-    include/IsoBarMap.h
-    include/linmath.h
-    include/ManifestEntry.hpp
-    include/ManifestLoader.hpp
-    include/zuFile.h
+#    include/climatology_pi.h
+#	include/climatology_shaders.h
+#    include/ClimatologyConfigDialog.h
+#	include/ClimatologyConstants.h	
+#  	include/ClimatologyCoord.h
+#	include/ClimatologyDataModel.h
+#    include/ClimatologyDialog.h
+#	include/ClimatologyMonthData.h
+#    include/ClimatologyOverlayFactory.h
+# 	include/ClimatologyRenderParams.h
+# 	include/CycloneFilterParams.h
+#	include/CycloneParams.h
+#	include/CycloneTypes.h
+#    include/defs.h
+#	include/DisplayMode.h	
+#    include/DownloadFileEntry.hpp
+#    include/DownloadManager.hpp
+# 	include/gldefs.h
+#	include/GridInfo.h
+#    include/icons.h
+#    include/IsoBarMap.h
+#    include/linmath.h
+#    include/ManifestEntry.hpp
+#    include/ManifestLoader.hpp
+#	include/NoaaOverlayTypes.h
+#	include/OverlayMapping.h
+#	include/OverlayTypes.h
+#	include/piDC.h
+#	include/StandardDisplayParams.h
+#	include/WindAtlasParams.h
+#   include/zuFile.h
 )
 # ---------------------------------------------------------------------------
 # Standard OpenCPN plugin setup

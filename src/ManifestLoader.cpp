@@ -7,6 +7,8 @@
 #include "ManifestLoader.hpp"
 #include "ManifestEntry.hpp"
 #include "climatology_pi.h"
+#include "ClimatologyEnums.h"
+
 
 #include <wx/file.h>
 #include <wx/filename.h>

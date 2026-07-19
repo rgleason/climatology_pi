@@ -26,19 +26,21 @@
 
 #pragma once
 
+#include "piDC.h"
+
+#include "ocpn_plugin.h"   // MUST be first
+
 #include <wx/string.h>
 #include <wx/colour.h>
 #include <list>
-
-#include "ocpn_plugin.h"   // defines piDC
 
 #define ZONE_SIZE 8
 #define MAX_LAT 88
 #define LATITUDE_ZONES (2*MAX_LAT/ZONE_SIZE)
 #define LONGITUDE_ZONES (360/ZONE_SIZE)
 
-class piDC;
 class wxWindow;
+
 struct PlugIn_ViewPort;
 
 // forward declarations for the new context types
@@ -115,7 +117,8 @@ private:
     void ClearMap();
     ContourText ContourCacheData(double value);
 
-    void DrawContour(piDC *dc, PlugIn_ViewPort &VP, double contour, double lat, double lon);
+	void DrawContour(piDC *dc, PlugIn_ViewPort &VP, double contour, double lat, double lon);
+	
     void DrawContourGL(PlugIn_ViewPort &VP, double contour, double lat, double lon);
 
     ParamCache m_Cache[2];

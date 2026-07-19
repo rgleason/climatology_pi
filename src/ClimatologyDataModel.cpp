@@ -1,4 +1,6 @@
 #include "ClimatologyDataModel.h"
+#include <wx/log.h>
+
 
 // ============================================================================
 // UnifiedGrid implementation

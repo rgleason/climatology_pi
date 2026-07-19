@@ -2,126 +2,128 @@
 #define __CLIMATOLOGY_RENDER_PARAMS_H__
 
 #pragma once
-#include <wx/datetime.h>
+#include "piDC.h"
+
+#include "ocpn_plugin.h"    // ensures PlugIn_ViewPort is fully known
+
 #include <wx/colour.h>
-#include "ocpn_plugin.h"   // PlugIn_ViewPort, piDC
+
+#include "DisplayMode.h"
 #include "ClimatologyCoord.h"
-#include "OverlayTypes.h"  // <-- REQUIRED for NUM_OVERLAYS
-
-
-struct piDC
-{
-    wxDC* dc = nullptr;
-
-    wxDC* GetDC() const { return dc; }
-};
+#include "ClimatologyEnums.h"          // defines OVERLAY_SEA_TEMP, etc.
+#include "WindAtlasParams.h"
+#include "CycloneParams.h" // Cyclone Parameters
+#include "CycloneFilterParams.h"
+#include "WindData.h"
+#include "CurrentData.h"
 
 
 struct ClimatologyRenderParams
 {
+    // -----------------------------------------------------------------------
     // Rendering context
+    // -----------------------------------------------------------------------
     PlugIn_ViewPort* vp = nullptr;
-    bool useGL = true;
+    piDC* dc = nullptr;
+
+    bool useGL      = true;
     bool useShaders = true;
 
-	// GL DC context
-    piDC* dc = nullptr;
     bool dcContextValid = false;
-	bool glContextValid = false;
+    bool glContextValid = false;
 
-    // DPI / pixel scaling (optional but recommended)
-	// viewport->chart_scale device pixel ratio
-    double pixelScale = 1.0;  
-	// wxWindow::GetContentScaleFactor()	
-    double contentScale = 1.0;     
+    // -----------------------------------------------------------------------
+    // Overlay selection
+    // -----------------------------------------------------------------------
+    int  overlayType    = OVERLAY_WIND;
+    bool overlayEnabled = false;
+    bool overlayMap     = true;
+	bool overlayInterpolation = true; 
+	
+	// -----------------------------------------------------------------------
+	// Unified‑grid display mode (scalar compositing)
+	// -----------------------------------------------------------------------
+	DisplayMode mode = DisplayMode::SingleScaled;
 
-    // Cursor position (optional but recommended)
+    // -----------------------------------------------------------------------
+    // Cursor position (optional)
+    // -----------------------------------------------------------------------
     double cursorLat = NAN;
     double cursorLon = NAN;
-
-    // Overlay selection
-    int overlayType = 0;
-    wxString overlayTypeName;
-
-    // Visibility flags
-    bool overlayEnabled = true;
-    bool overlayMap = true;
-    bool overlayInterpolation = true;
 	
-	bool showWindAtlas = false;
-    bool showCyclones = false;
-    bool showElNino = false;
-    bool showLaNina = false;
-    bool showNeutral = false;
+    bool showWindAtlas = false;
 	
-    // Timeline (month slider)
-    int currentMonth = 0;        // 0–11
-    int nextMonth = 0;           // interpolation target
-    double monthInterpolation = 0.0;
 
+  	
+	// -----------------------------------------------------------------------
     // All-times modes
-    bool allTimesWind = false;
-    bool allTimesCurrent = false;
-    bool allTimesCyclones = false;
+	// -----------------------------------------------------------------------	
+    bool allTimesWind     = false;
+    bool allTimesCurrent  = false;
 
-    // Cyclone parameters
-    int cycloneColorMode = 0;
-    double cycloneOpacity = 1.0;
+    // -----------------------------------------------------------------------
+    // Resolved per-overlay parameters (from StandardDisplayParams)
+    // -----------------------------------------------------------------------
+    int     units        = 0;    // units[overlayType]
 
-    // Basin toggles
-    bool showEPA = true;
-    bool showWPA = true;
-    bool showSPA = true;
-    bool showATL = true;
-    bool showNIO = true;
-    bool showSHE = true;
+    bool    showIsoBars  = false;
+    int     isoBarSpacing = 0;
+    int     isoBarStep    = 0;
 
-    // Resolved per-overlay parameters (from SDP)
-//    double overlayOpacity = 1.0;   // alpha[overlayType]
-    int units = 0;                 // units[overlayType]
+    bool   showNumbers = false;
+    double numberSize  = 0.0;
 
-    bool showIsoBars = false;      // showIsoBars[overlayType]
-    int isoBarSpacing = 0;         // isoSpacing[overlayType]
-    int isoBarStep = 0;            // isoStep[overlayType]
+    bool showArrows   = false;
+    int  arrowWidth   = 0;
+    int  arrowSpacing = 0;
+    int  arrowSize    = 0;
+    int  arrowMode    = 0;
 
-    bool showNumbers = false;      // showNumbers[overlayType]
-    double numberSize = 0.0;       // numberSize[overlayType]
+    wxColour color;             // color[overlayType]
 
-    bool showArrows = false;       // showArrows[overlayType]
-    int arrowWidth = 0;            // arrowWidth[overlayType]
-    int arrowSpacing = 0;          // arrowSpacing[overlayType]
-    int arrowSize = 0;             // arrowSize[overlayType]
-    int arrowMode = 0;             // arrowMode[overlayType]
+    // -----------------------------------------------------------------------
+    // Wind Atlas (unified nested params)
+    // -----------------------------------------------------------------------
 
-    wxColour color;                // color[overlayType]
-
-    // Wind atlas
- 	struct WindAtlasParams
-	{
-		bool enabled = false;
-		double size = 0.0;
-		double spacing = 0.0;
-		double opacity = 1.0;
-
-		int numberSize = 0;
-		int centerMode = 0;
-
-		bool showCalm = false;
-		bool showFreq = false;
-		bool autoScale = false;
-
-		wxColour color;
-		int resolution = 64;
-	};
-
-	WindAtlasParams windAtlas;
+  	WindAtlasParams windAtlas; 
 	
-	// Native NOAA grid spacing per overlay (added for unified model)
-	double latStep[NUM_OVERLAYS];
-	double lonStep[NUM_OVERLAYS];	
- 
-    // Global smoothing (applies to all grid-based overlays)
-    bool smoothing = true;	
+	int currentMonth = 1;
+	int nextMonth = 2;
+	double monthInterpolation = 0.0;
+
+	bool showCyclones = false;
+	bool showEPA = false;
+	bool showWPA = false;
+	bool showSPA = false;
+	bool showATL = false;
+	bool showNIO = false;
+	bool showSHE = false;
+
+	bool showElNino = false;
+	bool showLaNina = false;
+	bool showNeutral = false;
+
+	double transparency = 1.0;
+
+	
+	// -----------------------------------------------------------------------
+    // Cyclone parameters (unified)
+    // -----------------------------------------------------------------------
+ 	CycloneParams cycloneParams;
+	CycloneFilterParams cycloneFilter;
+	
+	
+
+    // -----------------------------------------------------------------------
+    // Native NOAA grid spacing per overlay (unified model)
+    // -----------------------------------------------------------------------
+    double latStep[NUM_OVERLAYS] = {0.0};
+    double lonStep[NUM_OVERLAYS] = {0.0};
+
+    // -----------------------------------------------------------------------
+    // Global smoothing
+    // -----------------------------------------------------------------------
+    bool smoothing = true;
 };
 
 #endif // __CLIMATOLOGY_RENDER_PARAMS_H__

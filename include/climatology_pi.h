@@ -23,46 +23,48 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,  USA.         *
  ***************************************************************************
  */
+/******************************************************************************
+ * Climatology Plugin — Main Plugin Class (Header)
+ * Modern unified‑grid architecture
+ *
+ * This plugin provides:
+ *   - A quick‑access dialog (ClimatologyDialog)
+ *   - A full configuration dialog (ClimatologyConfigDialog)
+ *   - Unified NOAA‑grid rendering via ClimatologyOverlayFactory
+ *   - GRIB timeline synchronization
+ *   - Background data download and manifest management
+ *
+ * All rendering is driven by:
+ *   StandardDisplayParams
+ *   CycloneParams
+ *   CycloneFilterParams
+ *   WindAtlasParams
+ *   ClimatologyRenderParams
+ *
+ ******************************************************************************/
+
 #ifndef _CLIMATOLOGY_PI_PLUGIN_H_
 #define _CLIMATOLOGY_PI_PLUGIN_H_
 
 #include <wx/wx.h>
 #include <wx/timer.h>
 #include <wx/glcanvas.h>
-#include <GL/glew.h>
 #include <wx/notifmsg.h>
+#include <memory>
 
 #include "version.h"
 #include "ocpn_plugin.h"
 #include "json/json.h"
-#include "defs.h"
 
-#include "ClimatologyDialog.h"
-#include "ClimatologyControlDialog.h"
-#include "ClimatologyOverlayFactory.h"
-#include "StandardDisplayParams.h"
+#include "ClimatologyDialog.h"          // Quick access dialog
+#include "ClimatologyConfigDialog.h"    // Modal 4‑tab configuration dialog
+#include "ClimatologyOverlayFactory.h"  // Unified-grid renderer
+#include "StandardDisplayParams.h"      // Persistent + runtime settings
+#include "CycloneParams.h"
+#include "CycloneFilterParams.h"
+#include "WindAtlasParams.h"
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
-
-#ifdef __OCPN__ANDROID__
-extern QString qtStyleSheet;
-#endif
-
-#define ID_CYCLONE_READY    9001
-#define ID_CYCLONE_PROGRESS 9002
-
-#ifndef __OCPN__ANDROID__
-#define GetDateCtrlValue GetValue
-#endif
-
-// Forward declarations
-class DownloadManager;
-class ClimatologyOverlayFactory;
-class ClimatologyDialog;
-class ClimatologyControlDialog;
-class IsoBarMap;
-class Cyclone;
-struct StandardDisplayParams;
 
 // Global overlay factory pointer
 extern ClimatologyOverlayFactory* g_pOverlayFactory;
@@ -70,101 +72,106 @@ extern ClimatologyOverlayFactory* g_pOverlayFactory;
 // Data directory helper
 wxString ClimatologyDataDirectory();
 
-//----------------------------------------------------------------------------
-//    The PlugIn Class Definition
-//---------------------------------------------------------------------------
-
-#define CLIMATOLOGY_TOOL_POSITION    -1          
-// Request default positioning of toolbar tool
-
+/**
+ * @brief Main plugin class for the Climatology plugin.
+ *
+ * Responsibilities:
+ *   - Manage plugin lifecycle (Init, DeInit)
+ *   - Manage toolbar icon and callbacks
+ *   - Manage dialogs (quick access + config)
+ *   - Manage unified-grid overlay rendering
+ *   - Manage background data downloads
+ *   - Handle GRIB timeline synchronization
+ *   - Provide cursor lat/lon to dialogs
+ *   - Persist dialog geometry
+ */
 class climatology_pi : public opencpn_plugin_120
 {
 public:
     climatology_pi(void* ppimgr);
-    ~climatology_pi(void);
+    ~climatology_pi();
 
-    // Required PlugIn Methods
-    int Init(void);
-    bool DeInit(void);
+    // Required plugin API
+    int  Init(void) override;
+    bool DeInit(void) override;
 
-    int GetAPIVersionMajor();
-    int GetAPIVersionMinor();
-    int GetPlugInVersionMajor();
-    int GetPlugInVersionMinor();
-    int GetPlugInVersionPatch();
-    int GetPlugInVersionPost();
+    int GetAPIVersionMajor() override;
+    int GetAPIVersionMinor() override;
+    int GetPlugInVersionMajor() override;
+    int GetPlugInVersionMinor() override;
+    int GetPlugInVersionPatch() override;
+    int GetPlugInVersionPost() override;
 
-    wxBitmap* GetPlugInBitmap();
-    wxString GetCommonName();
-    wxString GetShortDescription();
-    wxString GetLongDescription();
+    wxBitmap* GetPlugInBitmap() override;
+    wxString  GetCommonName() override;
+    wxString  GetShortDescription() override;
+    wxString  GetLongDescription() override;
 
-    wxBitmap m_panelBitmap;
+    // Toolbar + dialogs
+    void OnToolbarToolCallback(int id) override;
 
-    void CreateOverlayFactory();
+    // Overlay rendering
+    bool RenderGLOverlay(wxGLContext* pcontext, PlugIn_ViewPort* vp) override;
+    bool RenderOverlay(wxDC& dc, PlugIn_ViewPort* vp) override;
 
-    // Override PlugIn Methods
-    void OnToolbarToolCallback(int id);
-    bool RenderGLOverlay(wxGLContext* pcontext, PlugIn_ViewPort* vp);
-
-    void OnStartupTimer(wxTimerEvent& event);
-    void OnDownloadComplete(wxCommandEvent& event);
-
-    void ShowTransientMessage(const wxString& message,
-                              const wxString& title,
-                              int timeout_ms);
-
-    void SetPluginMessage(wxString& message_id, wxString& message_body);
+    // Messaging
+    void SetPluginMessage(wxString& message_id, wxString& message_body) override;
     void SendClimatology(bool valid);
     void SendTimelineMessage(wxDateTime time);
 
-    // Dialog geometry setters
-    void SetClimatologyDialogX(int x) { m_climatology_dialog_x = x; }
-    void SetClimatologyDialogY(int y) { m_climatology_dialog_y = y; }
-    void SetClimatologyDialogSizeX(int x) { m_climatology_dialog_sx = x; }
-    void SetClimatologyDialogSizeY(int y) { m_climatology_dialog_sy = y; }
+    // Cursor
+    void SetCursorLatLon(double lat, double lon) override;
 
-    void SetColorScheme(PI_ColorScheme cs);
+    // Dialog geometry persistence
+    bool LoadConfig(void) override;
+    bool SaveConfig(void) override;
+
+    void SetColorScheme(PI_ColorScheme cs) override;
 
 private:
+    // Internal helpers
+    void CreateOverlayFactory();
     void FreeData();
-    void SetCursorLatLon(double lat, double lon);
-    void SetDefaults(void);
-    int GetToolbarToolCount(void);
-	std::unique_ptr<DownloadManager> m_downloadManager;
+    void BootstrapDataDirectory();
 
-    void OnClimatologyDialogClose();
+    // Download manager
+    void OnStartupTimer(wxTimerEvent& event);
+    void OnDownloadComplete(wxCommandEvent& event);
 
-    void SetStandardDisplayParams(const StandardDisplayParams& p);
-    const StandardDisplayParams& GetStandardDisplayParams() const;
- //   void SendClimatology(const StandardDisplayParams& p);
-
-    ClimatologyControlDialog* m_pControlDialog = nullptr;
-    ClimatologyDialog*        m_pClimatologyDialog = nullptr;
-
+    // Persistent + runtime parameters
     StandardDisplayParams m_params;
 
-    wxTimer m_startupTimer;
+    // Dialogs
+    ClimatologyDialog*        m_pClimatologyDialog = nullptr;  // Quick access
+    ClimatologyConfigDialog*  m_pConfigDialog      = nullptr;  // Modal 4‑tab config
 
-    bool m_bCompletedLoading = false;
+    // Download manager
+    std::unique_ptr<DownloadManager> m_downloadManager;
 
-    bool LoadConfig(void);
-    bool SaveConfig(void);
-
+    // Plugin config + UI
     wxFileConfig* m_pconfig = nullptr;
     wxWindow*     m_parent_window = nullptr;
 
-    void BootstrapDataDirectory();
     wxString m_plugin_dir;
+    wxBitmap m_panelBitmap;
 
-    int m_display_width = 0;
-    int m_display_height = 0;
+    // Toolbar
     int m_leftclick_tool_id = 0;
 
-    int m_climatology_dialog_x = 0;
-    int m_climatology_dialog_y = 0;
+    // Dialog geometry
+    int m_climatology_dialog_x  = 0;
+    int m_climatology_dialog_y  = 0;
     int m_climatology_dialog_sx = 0;
     int m_climatology_dialog_sy = 0;
+
+    // Startup
+    wxTimer m_startupTimer;
+    bool    m_bCompletedLoading = false;
+
+    wxDECLARE_EVENT_TABLE();
 };
+
+#endif // _CLIMATOLOGY_PI_PLUGIN_H_
+
 
 #endif // _CLIMATOLOGY_PI_PLUGIN_H_
