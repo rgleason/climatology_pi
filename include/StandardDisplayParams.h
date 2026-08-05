@@ -19,12 +19,13 @@
 
 struct StandardDisplayParams
 {
+	
     // -----------------------------------------------------------------------
     // Per overlay units, colors, toggles
     // -----------------------------------------------------------------------
  
 	int units[NUM_OVERLAYS]        = {0};
-
+	
     // Overlay enabled/visible
     bool showOverlayType[NUM_OVERLAYS] = {false};
 
@@ -33,6 +34,16 @@ struct StandardDisplayParams
 	
 	// Transparency (0.0 = fully transparent, 1.0 = opaque)
     double alpha[NUM_OVERLAYS] = {1.0};
+	
+	// Used for slider value (UI only)
+	double transparency = 0.0;  
+	
+	// Helper Apply UI slider to the selected overlay
+	// ensures the UI slider updates the correct overlay.	
+	void SetOverlayTransparency(int overlayIndex) {
+    alpha[overlayIndex] = transparency;
+	}
+
 
     // Isobars
     bool showIsoBars[NUM_OVERLAYS] = {false};
@@ -65,15 +76,27 @@ struct StandardDisplayParams
     double calibrationFactor[NUM_OVERLAYS] = {0.0};
     double calibrationOffset[NUM_OVERLAYS] = {0.0};
 	
-    // -----------------------------------------------------------------------
-    // Attached parameter blocks (unified model)
-    // -----------------------------------------------------------------------
+    // ==========================================================
+    // UI / Dialog compatibility parameters
+    // These exist ONLY because the dialog still uses them.
+    // They do NOT affect NOAA loading or unified grid creation.
+	// Eliminates 40 errors, will require refactor in COF.cpp too.
+    // ==========================================================
 
-	// Wind Atlas UI Params (same as CRP)
-	WindAtlasParams windAtlas;
+    int overlayType = 0;        // selected overlay (UI only)
+ 
+
+    // ==========================================================
+    // Attached parameter blocks (unified model)
+    // These map directly into ClimatologyRenderParams.
+    // ==========================================================
+
+    // Wind Atlas UI Params (same as CRP)
+    WindAtlasParams windAtlas;
 
     // Cyclone UI parameters (unified CycloneParams)
-    CycloneParams cyclone;
+    CycloneParams cyclone;	
+	
 };
 
 #endif // STANDARD_DISPLAY_PARAMS_H

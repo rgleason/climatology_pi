@@ -41,12 +41,18 @@
 #include <GL/glew.h>
 #include "gldefs.h"
 
-#include "wx/wx.h"
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+#include <wx/progdlg.h>
+
 #include "wx/datetime.h"
 #include <wx/dir.h>
 #include <wx/dcbuffer.h>
 #include <wx/debug.h>
 #include <wx/graphics.h>
+
 
 #include "ocpn_plugin.h"             // GetOCPNConfigObject, DimeWindow
 #include "ClimatologyConfigDialog.h"
@@ -54,6 +60,7 @@
 #include "climatology_pi.h"          // PLUGIN_VERSION_*
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyEnums.h"      // basin / state enums if needed
+#include "CycloneUtils.h"
 
 wxBEGIN_EVENT_TABLE(ClimatologyConfigDialog, wxDialog)
     EVT_NOTEBOOK_PAGE_CHANGED(wxID_ANY, ClimatologyConfigDialog::OnPageChanged)
@@ -99,6 +106,25 @@ static const wxString* GetUnitListForOverlay(int overlayType)
 // ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
+
+// Factory-based constructor
+// Role A: 4-Tab Config Dialog
+// Role B: Factory Based Constructor - Lightweight entry point
+// StandardDisplayParams and  CycloneParams live inside COF. 
+// COF owns m_displayParams, m_cycloneParams, m_cycloneFilterParams
+ClimatologyConfigDialog::ClimatologyConfigDialog(wxWindow* parent,
+                                                 ClimatologyOverlayFactory* factory)
+    : ClimatologyConfigDialog(
+          static_cast<ClimatologyDialog*>(parent),
+          factory->m_displayParams,
+          factory->m_cycloneParams)
+{
+    // Nothing else needed. The constructor below this builds it.
+
+}
+
+
+
 
 ClimatologyConfigDialog::ClimatologyConfigDialog(ClimatologyDialog* parent,
                                                  StandardDisplayParams& displayParams,
@@ -507,7 +533,8 @@ void ClimatologyConfigDialog::LoadSettings()
     m_displayParams.windAtlas.enabled = (bool)pConf->Read("Enabled", false);
     m_displayParams.windAtlas.size    = (double)pConf->Read("Size1", 120L);
     m_displayParams.windAtlas.spacing = (double)pConf->Read("Spacing1", 80L);
-    m_displayParams.windAtlas.opacity = (double)pConf->Read("Opacity", 205L) / 255.0;
+    m_displayParams.alpha[OVERLAY_WINDATLAS] =
+    (double)pConf->Read("Opacity", 205L) / 255.0;
 
     // Cyclones (persistent appearance)
     pConf->SetPath("/PlugIns/Climatology/Cyclones");
@@ -515,7 +542,7 @@ void ClimatologyConfigDialog::LoadSettings()
     m_cycloneParams.centerDay    = (int)pConf->Read("CenterDay", 180L);
     m_cycloneParams.daySpan      = (int)pConf->Read("CycloneDaySpan", 30L);
     m_cycloneParams.minWind      = (double)pConf->Read("MinWindSpeed", 35L);
-    m_cycloneParams.maxPressure  = (double)pConf->Read("MaxPressure", 1080L);
+//    m_cycloneParams.maxPressure  = (double)pConf->Read("MaxPressure", 1080L);
     m_cycloneParams.allTimesCyclones = (bool)pConf->Read("AllTimesCyclones", false);
 
     // ENSO + basins + stateMask could be persisted similarly if desired.
@@ -535,14 +562,15 @@ void ClimatologyConfigDialog::SaveSettings()
     pConf->Write("Enabled",  m_displayParams.windAtlas.enabled);
     pConf->Write("Size1",    (long)m_displayParams.windAtlas.size);
     pConf->Write("Spacing1", (long)m_displayParams.windAtlas.spacing);
-    pConf->Write("Opacity",  (long)(m_displayParams.windAtlas.opacity * 255.0));
+	pConf->Write("Opacity",  (long)(m_displayParams.alpha[OVERLAY_WINDATLAS] * 255.0));
+
 
     pConf->SetPath("/PlugIns/Climatology/Cyclones");
     pConf->Write("Enabled",        m_cycloneParams.enabled);
     pConf->Write("CenterDay",      (long)m_cycloneParams.centerDay);
     pConf->Write("CycloneDaySpan", (long)m_cycloneParams.daySpan);
     pConf->Write("MinWindSpeed",   (long)m_cycloneParams.minWind);
-    pConf->Write("MaxPressure",    (long)m_cycloneParams.maxPressure);
+//    pConf->Write("MaxPressure",    (long)m_cycloneParams.maxPressure);
     pConf->Write("AllTimesCyclones", m_cycloneParams.allTimesCyclones);
 }
 
@@ -637,7 +665,8 @@ void ClimatologyConfigDialog::SyncWindAtlasTabFromModel()
     m_cbWindAtlasEnable->SetValue(m_displayParams.windAtlas.enabled);
     m_sWindAtlasSize->SetValue((int)m_displayParams.windAtlas.size);
     m_sWindAtlasSpacing->SetValue((int)m_displayParams.windAtlas.spacing);
-    m_sWindAtlasOpacity->SetValue((int)(m_displayParams.windAtlas.opacity * 100.0));
+	m_sWindAtlasOpacity->SetValue(
+		int)(m_displayParams.alpha[OVERLAY_WINDATLAS] * 100.0));
 }
 
 void ClimatologyConfigDialog::SyncWindAtlasTabToModel()
@@ -645,7 +674,8 @@ void ClimatologyConfigDialog::SyncWindAtlasTabToModel()
     m_displayParams.windAtlas.enabled = m_cbWindAtlasEnable->GetValue();
     m_displayParams.windAtlas.size    = (double)m_sWindAtlasSize->GetValue();
     m_displayParams.windAtlas.spacing = (double)m_sWindAtlasSpacing->GetValue();
-    m_displayParams.windAtlas.opacity = m_sWindAtlasOpacity->GetValue() / 100.0;
+	m_displayParams.alpha[OVERLAY_WINDATLAS] =
+    m_sWindAtlasOpacity->GetValue() / 100.0;
 }
 
 // ---------------------------------------------------------------------------
@@ -659,7 +689,7 @@ void ClimatologyConfigDialog::SyncCyclonesTabFromModel()
     m_sCycloneDaySpan->SetValue(m_cycloneParams.daySpan);
 
     m_sMinWind->SetValue((int)m_cycloneParams.minWind);
-    m_sMaxPressure->SetValue((int)m_cycloneParams.maxPressure);
+//    m_sMaxPressure->SetValue((int)m_cycloneParams.maxPressure);
 
     m_cbElNino->SetValue(m_cycloneParams.showElNino);
     m_cbLaNina->SetValue(m_cycloneParams.showLaNina);
@@ -683,7 +713,7 @@ void ClimatologyConfigDialog::SyncCyclonesTabToModel()
     m_cycloneParams.daySpan   = m_sCycloneDaySpan->GetValue();
 
     m_cycloneParams.minWind     = (double)m_sMinWind->GetValue();
-    m_cycloneParams.maxPressure = (double)m_sMaxPressure->GetValue();
+//    m_cycloneParams.maxPressure = (double)m_sMaxPressure->GetValue();
 
     m_cycloneParams.showElNino       = m_cbElNino->GetValue();
     m_cycloneParams.showLaNina       = m_cbLaNina->GetValue();

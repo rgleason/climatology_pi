@@ -13,20 +13,16 @@ enum class CycloneState {
     UNKNOWN
 };
 
-enum class ENSOPeriod {
+enum class CycloneENSO {
     EL_NINO,
     LA_NINA,
     NEUTRAL,
     NA
 };
 
-enum CycloneENSO {
-    ElNino,
-    LaNina,
-    Neutral
-};
 
-enum CycloneBasin {
+enum class CycloneBasin {
+    UNKNOWN,
     EPA,
     WPA,
     SPA,
@@ -34,6 +30,7 @@ enum CycloneBasin {
     NIO,
     SHE
 };
+
 
 // ==========================================================
 // NOAA RAW DATA OVERLAY TYPES

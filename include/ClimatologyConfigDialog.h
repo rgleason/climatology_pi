@@ -33,6 +33,8 @@
 #include "CycloneParams.h"           // Persistent cyclone appearance params
 #include "CycloneFilterParams.h"     // Runtime cyclone filter params
 
+
+class ClimatologyOverlayFactory;
 class ClimatologyDialog;
 
 /**
@@ -52,32 +54,30 @@ class ClimatologyDialog;
 class ClimatologyConfigDialog : public wxDialog
 {
 public:
-    /**
-     * @brief Construct the configuration dialog.
-     *
-     * @param parent          Owning ClimatologyDialog.
-     * @param displayParams   Reference to global StandardDisplayParams.
-     * @param cycloneParams   Reference to global CycloneParams.
-     */
+	// Construct the configuration dialog.
+    // @param parent          Owning ClimatologyDialog.
+    // @param displayParams   Reference to global StandardDisplayParams.
+    // @param cycloneParams   Reference to global CycloneParams.
+     
     ClimatologyConfigDialog(ClimatologyDialog* parent,
                             StandardDisplayParams& displayParams,
                             CycloneParams& cycloneParams);
 
     ~ClimatologyConfigDialog();
 
-    /**
-     * @brief Persist all settings to wxFileConfig.
-     *
-     * Writes StandardDisplayParams and CycloneParams to the config file.
-     */
+    // Persist all settings to wxFileConfig.
+    // Writes StandardDisplayParams and CycloneParams to the config file.
+   
     void Save();
 
-    /**
-     * @brief Build a CycloneFilterParams snapshot from current UI.
-     *
-     * Used by ClimatologyOverlayFactory to filter cyclone tracks.
-     */
+    // Build a CycloneFilterParams snapshot from current UI.
+    // Used by ClimatologyOverlayFactory to filter cyclone tracks.
+   
     CycloneFilterParams GetCycloneFilterParams() const;
+	
+	// Construct the dialog for 4-tab Config cyclones
+    ClimatologyConfigDialog(wxWindow* parent, ClimatologyOverlayFactory* factory);
+
 
 private:
     // --- Persistence helpers ----------------------------------------------

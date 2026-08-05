@@ -5,12 +5,14 @@ struct CurrentData
 {
     int latitudes;
     int longitudes;
-    std::vector<float> u;
-    std::vector<float> v;
+
+    std::vector<float> u;   // NOAA U-component grid
+    std::vector<float> v;   // NOAA V-component grid
 
     CurrentData(int lats, int lons)
-        : latitudes(lats), longitudes(lons),
-          u(lats * lons, 0.0f),
-          v(lats * lons, 0.0f)
+        : latitudes(lats),
+          longitudes(lons),
+          u(lats * lons),
+          v(lats * lons)
     {}
 };

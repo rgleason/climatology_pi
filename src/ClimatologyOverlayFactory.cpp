@@ -6,7 +6,12 @@
 #include <wx/glcanvas.h>
 #include <GL/gl.h>
 
-#include <wx/wx.h>
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+#include <wx/progdlg.h>
+
 #include <wx/wfstream.h>
 #include <wx/zstream.h>
 #include <wx/textfile.h>
@@ -32,9 +37,18 @@
 #include "ClimatologyConstants.h"
 #include "ClimatologyEnums.h"
 #include "CycloneFilterParams.h"
+#include "CycloneUtils.h"
 #include "OverlayMapping.h"
 
 #include "defs.h"
+
+// Constants needed for Mercator helpers.
+
+static constexpr double DEG_TO_RAD = M_PI / 180.0;
+static constexpr double RAD_TO_DEG = 180.0 / M_PI;
+
+// WGS84 Earth radius (meters)
+static constexpr double EARTH_RADIUS_M = 6378137.0;
 
 // ============================================================================
 // BuildGridInfo()
@@ -90,6 +104,8 @@ public:
           m_day(day),
           m_renderParams(renderParams)
     {}
+	
+	void PlotDC(piDC* dc, PlugIn_ViewPort& vp) override;
 
     // Check if cached IsoBarMap matches requested settings.
     bool SameSettings(double spacing,
@@ -125,6 +141,14 @@ private:
     int                             m_day;
     const ClimatologyRenderParams&  m_renderParams;
 };
+
+
+void ClimatologyIsoBarMap::PlotDC(piDC* dc, PlugIn_ViewPort& vp)
+{
+    // Forward to base class implementation
+	IsoBarMap::PlotDC(dc, vp);
+}
+
 
 // ============================================================================
 // Shader globals
@@ -247,6 +271,23 @@ void ClimatologyOverlayFactory::SetParams(const StandardDisplayParams& p)
 }
 
 // ============================================================================
+// BuildRenderParams()
+// Copies UI-facing StandardDisplayParams into rendering-facing
+// ClimatologyRenderParams for ONE overlay.
+// ============================================================================
+void ClimatologyOverlayFactory::BuildRenderParams(
+        int overlayIndex,
+        ClimatologyRenderParams& outParams) const
+{
+    // Transparency (single value for the overlay being rendered)
+    outParams.alpha = m_params.alpha[overlayIndex];
+
+    // If you later add per-overlay color ramps, thresholds, etc.,
+    // they will also be copied here.
+}
+
+
+// ============================================================================
 // SetCycloneFilter()
 // Store cyclone filter parameters.
 // ============================================================================
@@ -277,91 +318,174 @@ bool ClimatologyOverlayFactory::Load()
 }
 
 // ===========================================================================
-// Earlier version  LoadInternal()  - older -correct
+// LoadInternal()  - correct
 // ===========================================================================
 
 bool ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog* progress)
 {
     bool ok = true;
 
+    // ------------------------------------------------------------
+    // 1. NOAA scalar datasets
+    // ------------------------------------------------------------
     if (progress)
         progress->Pulse(_("Loading NOAA scalar datasets…"));
-    ok &= LoadScalarNOAA();
-    if (!ok) return false;
 
+    ok &= LoadScalarNOAA();
+    if (!ok)
+        return false;
+
+    // ------------------------------------------------------------
+    // 2. NOAA wind + current datasets
+    // ------------------------------------------------------------
     if (progress)
         progress->Pulse(_("Loading NOAA wind/current datasets…"));
+
     ok &= LoadWindNOAA();
     ok &= LoadCurrentNOAA();
-    if (!ok) return false;
+    if (!ok)
+        return false;
 
+    // ------------------------------------------------------------
+    // 3. Map NOAA datasets into unified model
+    // ------------------------------------------------------------
     if (progress)
         progress->Pulse(_("Mapping NOAA datasets into unified model…"));
 
     for (int m = 0; m < 12; m++)
     {
-        LoadScalarField(OVERLAY_PRESSURE,   m, m_slp[m],
+        LoadScalarField(OVERLAY_PRESSURE,   m, m_slp[m].data(),
                         SLP_LAT, SLP_LON,
                         slp_lat0, slp_lon0, slp_latStep, slp_lonStep);
 
-        LoadScalarField(OVERLAY_SEA_TEMP,        m, m_sst[m],
+        LoadScalarField(OVERLAY_SEA_TEMP,   m, m_sst[m].data(),
                         SST_LAT, SST_LON,
                         sst_lat0, sst_lon0, sst_latStep, sst_lonStep);
 
-        LoadScalarField(OVERLAY_AIR_TEMP,   m, m_at[m],
+        LoadScalarField(OVERLAY_AIR_TEMP,   m, m_at[m].data(),
                         AT_LAT, AT_LON,
                         at_lat0, at_lon0, at_latStep, at_lonStep);
 
-        LoadScalarField(OVERLAY_CLOUD,      m, m_cld[m],
+        LoadScalarField(OVERLAY_CLOUD,      m, m_cld[m].data(),
                         CLD_LAT, CLD_LON,
                         cld_lat0, cld_lon0, cld_latStep, cld_lonStep);
 
-        LoadScalarField(OVERLAY_PRECIP,     m, m_precip[m],
+        LoadScalarField(OVERLAY_PRECIP,     m, m_precip[m].data(),
                         PCP_LAT, PCP_LON,
                         pcp_lat0, pcp_lon0, pcp_latStep, pcp_lonStep);
 
-        LoadScalarField(OVERLAY_RH,         m, m_rhum[m],
+        LoadScalarField(OVERLAY_RH,         m, m_rhum[m].data(),
                         RH_LAT, RH_LON,
                         rh_lat0, rh_lon0, rh_latStep, rh_lonStep);
 
-        LoadScalarField(OVERLAY_LIGHTNING,  m, m_lightn[m],
+        LoadScalarField(OVERLAY_LIGHTNING,  m, m_lightn[m].data(),
                         LGT_LAT, LGT_LON,
                         lgt_lat0, lgt_lon0, lgt_latStep, lgt_lonStep);
 
-        LoadVectorField(OVERLAY_WIND,    m,
-                        m_WindData[m]->u,
-                        m_WindData[m]->v,
+        LoadVectorField(OVERLAY_WIND,       m,
+                        m_WindData[m]->u.data(),
+                        m_WindData[m]->v.data(),
                         WIND_LAT, WIND_LON,
                         wind_lat0, wind_lon0, wind_latStep, wind_lonStep);
 
-        LoadVectorField(OVERLAY_CURRENT, m,
-                        m_CurrentData[m]->u,
-                        m_CurrentData[m]->v,
+        LoadVectorField(OVERLAY_CURRENT,    m,
+                        m_CurrentData[m]->u.data(),
+                        m_CurrentData[m]->v.data(),
                         CUR_LAT, CUR_LON,
                         cur_lat0, cur_lon0, cur_latStep, cur_lonStep);
     }
 
+    // Bathymetry (single grid)
     LoadScalarField(OVERLAY_SEA_DEPTH, 0,
-                    m_seadepth,
+                    m_seadepth.data(),
                     DEP_LAT, DEP_LON,
                     dep_lat0, dep_lon0, dep_latStep, dep_lonStep);
 
+    // ------------------------------------------------------------
+    // 4. Monthly averaging (trivial in unified model)
+    // ------------------------------------------------------------
     if (progress)
         progress->Pulse(_("Averaging monthly datasets…"));
+
     ok &= AverageWindData();
     ok &= AverageCurrentData();
-    if (!ok) return false;
+    if (!ok)
+        return false;
 
+    // ------------------------------------------------------------
+    // 5. Cyclone + ENSO subsystem (new unified loader)
+    // ------------------------------------------------------------
     if (progress)
         progress->Pulse(_("Loading cyclone + ENSO datasets…"));
-    // your existing cyclone + ENSO loaders here
+
+    ok &= LoadCyclonePoints();
+    ok &= BuildCycloneTracks();
 
     return ok;
 }
 
+// ---------------------------------------------
+// unified model already handles NaN cleanup internally, so these become trivial:
+// ---------------------------------------------
+
+bool ClimatologyOverlayFactory::AverageWindData()
+{
+    return true;
+}
+
+bool ClimatologyOverlayFactory::AverageCurrentData()
+{
+    return true;
+}
+
+
+
 // ===============================================================
-// Unified mapping loaders - older
+// Unified mapping loaders - vectors,  unified grid creation fully aligned
 // ===============================================================
+
+void ClimatologyOverlayFactory::LoadVectorField(int setting,
+                                                int month,
+                                                const float *srcU,
+                                                const float *srcV,
+                                                int latitudes,
+                                                int longitudes,
+                                                double lat0,
+                                                double lon0,
+                                                double latStep,
+                                                double lonStep)
+{
+    ClimatologyMonthData &M = m_data[setting][month];
+
+    M.latitudes  = latitudes;
+    M.longitudes = longitudes;
+    M.lat0       = lat0;
+    M.lon0       = lon0;
+    M.latStep    = latStep;
+    M.lonStep    = lonStep;
+
+    M.grid.resize(latitudes * longitudes);
+
+    for (int yi = 0; yi < latitudes; yi++) {
+        for (int xi = 0; xi < longitudes; xi++) {
+
+            int idx = yi * longitudes + xi;
+
+            float u = srcU[idx];
+            float v = srcV[idx];
+
+            ClimatologyCell &C = M.grid[idx];
+            C.scalar = NAN;
+            C.u = u;
+            C.v = v;
+        }
+    }
+}
+
+// ===============================================================
+// Unified mapping loaders - scalars,  unified grid creation fully aligned
+// ===============================================================
+
 
 void ClimatologyOverlayFactory::LoadScalarField(int setting,
                                                 int month,
@@ -398,7 +522,7 @@ void ClimatologyOverlayFactory::LoadScalarField(int setting,
 
 
 // =================================================================
-// Raw NOAA Loaders  - older
+// Raw NOAA Loaders  - vectors, unified grid creation fully aligned  (raw pointers replaced with vectors)
 // ======================================================================
 
 bool ClimatologyOverlayFactory::LoadScalarNOAA()
@@ -407,30 +531,32 @@ bool ClimatologyOverlayFactory::LoadScalarNOAA()
 
     for (int m = 0; m < 12; m++)
     {
-        if (!m_slp[m])     m_slp[m]     = new float[SLP_LAT * SLP_LON];
-        if (!m_sst[m])     m_sst[m]     = new float[SST_LAT * SST_LON];
-        if (!m_at[m])      m_at[m]      = new float[AT_LAT  * AT_LON];
-        if (!m_cld[m])     m_cld[m]     = new float[CLD_LAT * CLD_LON];
-        if (!m_precip[m])  m_precip[m]  = new float[PCP_LAT * PCP_LON];
-        if (!m_rhum[m])    m_rhum[m]    = new float[RH_LAT  * RH_LON];
-        if (!m_lightn[m])  m_lightn[m]  = new float[LGT_LAT * LGT_LON];
+        // Resize all scalar arrays for this month
+        m_slp[m].resize(SLP_LAT * SLP_LON);
+        m_sst[m].resize(SST_LAT * SST_LON);
+        m_at[m].resize(AT_LAT * AT_LON);
+        m_cld[m].resize(CLD_LAT * CLD_LON);
+        m_precip[m].resize(PCP_LAT * PCP_LON);
+        m_rhum[m].resize(RH_LAT * RH_LON);
+        m_lightn[m].resize(LGT_LAT * LGT_LON);
 
-        ok &= ReadNOAAFile("slp",     m, m_slp[m],     SLP_LAT, SLP_LON);
-        ok &= ReadNOAAFile("sst",     m, m_sst[m],     SST_LAT, SST_LON);
-        ok &= ReadNOAAFile("at",      m, m_at[m],      AT_LAT,  AT_LON);
-        ok &= ReadNOAAFile("cloud",   m, m_cld[m],     CLD_LAT, CLD_LON);
-        ok &= ReadNOAAFile("precip",  m, m_precip[m],  PCP_LAT, PCP_LON);
-        ok &= ReadNOAAFile("rhum",    m, m_rhum[m],    RH_LAT,  RH_LON);
-        ok &= ReadNOAAFile("lightn",  m, m_lightn[m],  LGT_LAT, LGT_LON);
+        // Load NOAA scalar fields
+        ok &= ReadNOAAFile("slp",     m, m_slp[m].data(),     SLP_LAT, SLP_LON);
+        ok &= ReadNOAAFile("sst",     m, m_sst[m].data(),     SST_LAT, SST_LON);
+        ok &= ReadNOAAFile("at",      m, m_at[m].data(),      AT_LAT,  AT_LON);
+        ok &= ReadNOAAFile("cloud",   m, m_cld[m].data(),     CLD_LAT, CLD_LON);
+        ok &= ReadNOAAFile("precip",  m, m_precip[m].data(),  PCP_LAT, PCP_LON);
+        ok &= ReadNOAAFile("rhum",    m, m_rhum[m].data(),    RH_LAT,  RH_LON);
+        ok &= ReadNOAAFile("lightn",  m, m_lightn[m].data(),  LGT_LAT, LGT_LON);
     }
 
-    if (!m_seadepth)
-        m_seadepth = new float[DEP_LAT * DEP_LON];
-
-    ok &= ReadNOAAFile("seadepth", 0, m_seadepth, DEP_LAT, DEP_LON);
+    // Sea depth (not monthly)
+    m_seadepth.resize(DEP_LAT * DEP_LON);
+    ok &= ReadNOAAFile("seadepth", 0, m_seadepth.data(), DEP_LAT, DEP_LON);
 
     return ok;
 }
+
 
 bool ClimatologyOverlayFactory::LoadWindNOAA()
 {
@@ -438,15 +564,22 @@ bool ClimatologyOverlayFactory::LoadWindNOAA()
 
     for (int m = 0; m < 12; m++)
     {
+        // Allocate WindData object if needed
         if (!m_WindData[m])
             m_WindData[m] = new WindData(WIND_LAT, WIND_LON);
 
-        ok &= ReadNOAAFile("wind_u", m, m_WindData[m]->u, WIND_LAT, WIND_LON);
-        ok &= ReadNOAAFile("wind_v", m, m_WindData[m]->v, WIND_LAT, WIND_LON);
+        // Resize monthly U/V arrays
+        m_WindData[m]->u.resize(WIND_LAT * WIND_LON);
+        m_WindData[m]->v.resize(WIND_LAT * WIND_LON);
+
+        // Load NOAA wind vector fields
+        ok &= ReadNOAAFile("wind_u", m, m_WindData[m]->u.data(), WIND_LAT, WIND_LON);
+        ok &= ReadNOAAFile("wind_v", m, m_WindData[m]->v.data(), WIND_LAT, WIND_LON);
     }
 
     return ok;
 }
+
 
 bool ClimatologyOverlayFactory::LoadCurrentNOAA()
 {
@@ -454,15 +587,27 @@ bool ClimatologyOverlayFactory::LoadCurrentNOAA()
 
     for (int m = 0; m < 12; m++)
     {
+        // Allocate CurrentData object if needed
         if (!m_CurrentData[m])
             m_CurrentData[m] = new CurrentData(CUR_LAT, CUR_LON);
 
-        ok &= ReadNOAAFile("current_u", m, m_CurrentData[m]->u, CUR_LAT, CUR_LON);
-        ok &= ReadNOAAFile("current_v", m, m_CurrentData[m]->v, CUR_LAT, CUR_LON);
+        // Resize monthly U/V arrays
+        m_CurrentData[m]->u.resize(CUR_LAT * CUR_LON);
+        m_CurrentData[m]->v.resize(CUR_LAT * CUR_LON);
+
+        // Load NOAA current vector fields
+        ok &= ReadNOAAFile("current_u", m, m_CurrentData[m]->u.data(), CUR_LAT, CUR_LON);
+        ok &= ReadNOAAFile("current_v", m, m_CurrentData[m]->v.data(), CUR_LAT, CUR_LON);
     }
 
     return ok;
 }
+
+
+// ========================================================================
+// ReadNOAA  Read DATA files from Hard Disk - 
+// then converted to the unified Database by Load functions 
+// =========================================================================
 
 bool ClimatologyOverlayFactory::ReadNOAAFile(const wxString& name,
                                              int month,
@@ -486,11 +631,12 @@ bool ClimatologyOverlayFactory::ReadNOAAFile(const wxString& name,
     return in.IsOk();
 }
 
-// ====================================================================
-// HasDataFor / getValueMonth / getCurValue / BuildOverlayData  - Older
-// ======================================================================
 
-bool ClimatologyOverlayFactory::HasDataFor(int setting, int month)
+// ========================================================================
+// HasData - Check data in memory -  correct only if the unified grid creation succeeded.
+// =============================================================
+
+bool ClimatologyOverlayFactory::HasDataFor(int setting, int month) const
 {
     if (month < 0 || month >= 12)
         return false;
@@ -498,10 +644,14 @@ bool ClimatologyOverlayFactory::HasDataFor(int setting, int month)
     switch (setting)
     {
     case OVERLAY_WIND:
-        return m_WindData[month] != nullptr;
+        return m_WindData[month] &&
+               !m_WindData[month]->u.empty() &&
+               !m_WindData[month]->v.empty();
 
     case OVERLAY_CURRENT:
-        return m_CurrentData[month] != nullptr;
+        return m_CurrentData[month] &&
+               !m_CurrentData[month]->u.empty() &&
+               !m_CurrentData[month]->v.empty();
 
     case OVERLAY_PRESSURE:
     case OVERLAY_SEA_TEMP:
@@ -518,12 +668,13 @@ bool ClimatologyOverlayFactory::HasDataFor(int setting, int month)
     }
 }
 
-
-// Earlier versions rewritten for compatibility with rest of file.
+// =========================================================
+// Get Month Values - uses Unified Data in memory
+// =========================================================
 double ClimatologyOverlayFactory::getValueMonth(enum Coord coord,
                                                 int setting,
                                                 double lat, double lon,
-                                                int month)
+                                                int month) const
 {
     if (!HasDataFor(setting, month))
         return NAN;
@@ -558,14 +709,18 @@ double ClimatologyOverlayFactory::getValueMonth(enum Coord coord,
     return val;
 }
 
+// =========================================================
+// Get Current Value - uses Unified Data in memory
+// =========================================================
+
 double ClimatologyOverlayFactory::getCurValue(enum Coord coord,
                                               int setting,
                                               double lat, double lon,
-                                              const ClimatologyRenderParams& p)
+                                              const ClimatologyRenderParams& p) const
 {
-    int m1 = p.cyclone.currentMonth;
-    int m2 = p.cyclone.nextMonth;
-    double d = p.cyclone.monthInterpolation;
+    int m1 = p.currentMonth;
+    int m2 = p.nextMonth;
+    double d = p.monthInterpolation;
 
     double v1 = getValueMonth(coord, setting, lat, lon, m1);
     double v2 = getValueMonth(coord, setting, lat, lon, m2);
@@ -577,65 +732,179 @@ double ClimatologyOverlayFactory::getCurValue(enum Coord coord,
 }
 
 
-
-/* Earlier versions - correct
-
-double ClimatologyOverlayFactory::getValueMonth(enum Coord coord,
-                                                int setting,
-                                                double lat, double lon,
-                                                int month)
+// ============================================================================
+// GetOverlayColorLegacy()
+// Modern wrapper around the original NOAA palette system.
+// ============================================================================
+wxColour ClimatologyOverlayFactory::GetOverlayColorLegacy(int setting, double value)
 {
-    if (!HasDataFor(setting, month))
-        return NAN;
+    unsigned char r = 0, g = 0, b = 0;
+    ColorMapLegacy(setting, value, r, g, b);
+    return wxColour(r, g, b);
+}
 
-    if (setting == OVERLAY_WIND || setting == OVERLAY_CURRENT)
+// ============================================================================
+// GetOverlayColorUnified()
+// Hybrid color pipeline:
+//   - NOAA overlays → legacy palettes
+//   - Cyclone + anomaly/percent/difference → modern palettes
+// ============================================================================
+wxColour ClimatologyOverlayFactory::GetOverlayColorUnified(int setting,
+                                                           double value,
+                                                           double vmin,
+                                                           double vmax,
+                                                           const ClimatologyRenderParams& params)
+{
+    // -----------------------------------------------------------------------
+    // 1. Legacy NOAA overlays (Option B hybrid)
+    // -----------------------------------------------------------------------
+    switch (setting)
     {
-        if (coord == U)
-            return m_data[setting][month].lookupU(lat, lon);
-        if (coord == V)
-            return m_data[setting][month].lookupV(lat, lon);
-
-        double u = m_data[setting][month].lookupU(lat, lon);
-        double v = m_data[setting][month].lookupV(lat, lon);
-
-        if (std::isnan(u) || std::isnan(v))
-            return NAN;
-
-        if (coord == MAG)
-            return std::sqrt(u*u + v*v);
-        if (coord == DIR)
-            return std::atan2(u, v) * 180.0 / M_PI;
+        case OVERLAY_AIR_TEMP:
+        case OVERLAY_SEA_TEMP:
+        case OVERLAY_PRECIP:
+        case OVERLAY_CLOUD:
+        case OVERLAY_WIND:
+        case OVERLAY_CURRENT:
+        case OVERLAY_SEA_DEPTH:
+            return GetOverlayColorLegacy(setting, value);
     }
 
-    double val = m_data[setting][month].lookup(lat, lon);
-    if (std::isnan(val))
-        return NAN;
+    // -----------------------------------------------------------------------
+    // 2. Modern overlays (cyclone + anomaly/percent/difference)
+    // -----------------------------------------------------------------------
+    if (std::isnan(value))
+        return wxColour(0, 0, 0);
 
-    return val;
+    if (vmax <= vmin)
+        return wxColour(0, 0, 0);
+
+    double nv = (value - vmin) / (vmax - vmin);
+    nv = std::clamp(nv, 0.0, 1.0);
+
+    return GetOverlayColor(nv);   // modern palette
 }
 
-double ClimatologyOverlayFactory::getCurValue(enum Coord coord, int setting,
-                                              double lat, double lon,
-                                              const ClimatologyRenderParams& p)
+
+
+// ============================================================================
+// ColorMapLegacy()
+// Convert a scalar value into an RGB color for the overlay.
+// ============================================================================
+void ClimatologyOverlayFactory::ColorMapLegacy(int setting,
+                                         double v,
+                                         unsigned char& r,
+                                         unsigned char& g,
+                                         unsigned char& b)
 {
-    int m1 = p.cyclone.currentMonth;
-    int m2 = p.cyclone.nextMonth;
-    double d = p.cyclone.monthInterpolation;
+    // Clamp negative values
+    if (v < 0)
+        v = 0;
 
-    double v1 = getValueMonth(coord, setting, lat, lon, m1);
-    double v2 = getValueMonth(coord, setting, lat, lon, m2);
+    // Select color scale based on overlay type
+    switch (setting)
+    {
+        case OVERLAY_AIR_TEMP:
+        {
+            // Temperature scale: blue → red
+            double t = wxClip(v, -20.0, 40.0);   // Celsius range
+            double f = (t + 20.0) / 60.0;        // Normalize 0–1
 
-    if (std::isnan(v1) || std::isnan(v2))
-        return NAN;
+            r = (unsigned char)(255.0 * f);
+            g = (unsigned char)(128.0 * (1.0 - f));
+            b = (unsigned char)(255.0 * (1.0 - f));
+            break;
+        }
 
-    return v1 * (1.0 - d) + v2 * d;
+        case OVERLAY_SEA_TEMP:
+        {
+            // Sea temperature: cyan → red
+            double t = wxClip(v, 0.0, 35.0);
+            double f = t / 35.0;
+
+            r = (unsigned char)(255.0 * f);
+            g = (unsigned char)(255.0 * (1.0 - f));
+            b = (unsigned char)(255.0 * (1.0 - f));
+            break;
+        }
+
+        case OVERLAY_PRECIP:
+        {
+            // Rainfall: white → blue
+            double f = wxClip(v / 300.0, 0.0, 1.0);
+
+            r = (unsigned char)(255.0 * (1.0 - f));
+            g = (unsigned char)(255.0 * (1.0 - f));
+            b = (unsigned char)(255.0);
+            break;
+        }
+
+        case OVERLAY_CLOUD:
+        {
+            // Cloud cover: white → gray → black
+            double f = wxClip(v / 100.0, 0.0, 1.0);
+
+            unsigned char c = (unsigned char)(255.0 * (1.0 - f));
+            r = g = b = c;
+            break;
+        }
+
+        case OVERLAY_WIND:
+        case OVERLAY_CURRENT:
+        {
+            // Magnitude scale: green → yellow → red
+            double f = wxClip(v / 50.0, 0.0, 1.0);
+
+            if (f < 0.5)
+            {
+                // Green → Yellow
+                double t = f * 2.0;
+                r = (unsigned char)(255.0 * t);
+                g = 255;
+                b = 0;
+            }
+            else
+            {
+                // Yellow → Red
+                double t = (f - 0.5) * 2.0;
+                r = 255;
+                g = (unsigned char)(255.0 * (1.0 - t));
+                b = 0;
+            }
+            break;
+        }
+
+        case OVERLAY_SEA_DEPTH:
+        {
+            // Depth: light tan → dark brown
+            double f = wxClip(v / 6000.0, 0.0, 1.0);
+
+            r = (unsigned char)(210.0 * (1.0 - f));
+            g = (unsigned char)(180.0 * (1.0 - f));
+            b = (unsigned char)(140.0 * (1.0 - f));
+            break;
+        }
+
+        default:
+        {
+            // Fallback grayscale
+            unsigned char c = (unsigned char)wxClip(v, 0.0, 255.0);
+            r = g = b = c;
+            break;
+        }
+    }
 }
 
-*/ 
 
+
+
+// ============================================================================
+// BuildOverlayData  - Hybrid NOAA + Unified-Grid Color Pipeline
+// ============================================================================
 bool ClimatologyOverlayFactory::BuildOverlayData(ClimatologyOverlay& O,
                                                  int setting,
-                                                 int month)
+                                                 int month,
+                                                 const ClimatologyRenderParams& params)
 {
     if (O.m_data)
         return true;
@@ -645,39 +914,45 @@ bool ClimatologyOverlayFactory::BuildOverlayData(ClimatologyOverlay& O,
 
     O.m_data = new unsigned char[w * h * 4];
 
-    Coord coord = (setting == OVERLAY_WIND || setting == OVERLAY_CURRENT)
-                  ? MAG
-                  : SCALAR;
-
+    // Precompute latitude rows
+    std::vector<double> latRow(h);
     for (int y = 0; y < h; y++)
     {
         double merc = 1.0 - 2.0 * (double)y / (double)(h - 1);
-        double lat  = rad2deg(atan(sinh(merc * M_PI)));
+        latRow[y] = rad2deg(atan(sinh(merc * M_PI)));
+    }
+
+    for (int y = 0; y < h; y++)
+    {
+        double lat = latRow[y];
 
         for (int x = 0; x < w; x++)
         {
             double lon = 360.0 * (double)x / (double)(w - 1);
-            double v = getValueMonth(coord, setting, lat, lon, month);
 
-            int idx = 4 * (y * w + x);
+            // Unified-grid value lookup
+            double v = getValueMonth(SCALAR, setting, lat, lon, month);
+
+            unsigned char* px = &O.m_data[4 * (y * w + x)];
 
             if (std::isnan(v))
             {
-                O.m_data[idx + 0] = 0;
-                O.m_data[idx + 1] = 0;
-                O.m_data[idx + 2] = 0;
-                O.m_data[idx + 3] = 0;
+                px[0] = px[1] = px[2] = 0;
+                px[3] = 0;
+                continue;
             }
-            else
-            {
-                unsigned char r, g, b;
-                ColorMap(setting, v, r, g, b);
 
-                O.m_data[idx + 0] = r;
-                O.m_data[idx + 1] = g;
-                O.m_data[idx + 2] = b;
-                O.m_data[idx + 3] = 255;
-            }
+            // Hybrid color pipeline
+            wxColour c = GetOverlayColorUnified(setting,
+                                                v,
+                                                O.range_min,
+                                                O.range_max,
+                                                params);
+
+            px[0] = c.Red();
+            px[1] = c.Green();
+            px[2] = c.Blue();
+            px[3] = 255;
         }
     }
 
@@ -685,7 +960,9 @@ bool ClimatologyOverlayFactory::BuildOverlayData(ClimatologyOverlay& O,
 }
 
 
+// =========================================================
 // Lookup lookup implementations for ClimatologyMonthlyData
+// =========================================================
 
 double ClimatologyMonthData::lookup(double lat, double lon) const
 {
@@ -725,217 +1002,253 @@ double ClimatologyMonthData::lookupV(double lat, double lon) const
 
 
 
+// ==========================================================
+// LoadCycloneDataBackground  Cyclone Subsystem — Loader  Optional
+// ==========================================================
+// This loader used to work, but the other Cyclone functions have taken over.
+// It was used with ReadCycloneData if needed. Not using now.
+// We confirmed that the new functions load raw cyclone/ENSO data
+// and then move it into the new memory arrays struct CycloneTracks
+// Therefore this is being moved to OLD backup.
 
-/*
-// ============================================================================
-// LoadInternal()   Newer  - Remove
-// Load unified NOAA scalar + vector datasets.
-// ============================================================================
-bool ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog* progress)
+
+
+// ==========================================================
+// ReadCycloneData    Cyclone Subsystem — Text Loader  OPTIONAL
+// ==========================================================
+// Not being used now.
+// Optional separate loader that builds std::vector<Cyclone> basin tracks.
+//  Only needed if LoadCycloneDataBackground() still uses it to decompress/parse gzipped cyclone files.
+
+bool ClimatologyOverlayFactory::ReadCycloneData(
+        const wxString& filename,
+        std::vector<Cyclone>& basinTracks,
+        bool southernHemisphere)
 {
-    wxLogMessage("Climatology: LoadInternal() starting");
-
-    bool ok = true;
-    wxString dataDir = m_dataDir;
-
-    // --- Load scalar overlays ------------------------------------------------
-    if (progress) progress->Pulse(_("Loading scalar climatology datasets…"));
-
-    struct ScalarSpec { int setting; const char* name; };
-    ScalarSpec scalars[] = {
-        { OVERLAY_PRESSURE,      "sealevelpressure" },
-        { OVERLAY_SEA_TEMP,      "seasurfacetemperature" },
-        { OVERLAY_AIR_TEMP,      "airtemperature" },
-        { OVERLAY_CLOUD,         "cloud" },
-        { OVERLAY_PRECIP,        "precipitation" },
-        { OVERLAY_RH,            "relativehumidity" },
-        { OVERLAY_LIGHTNING,     "lightning" }
-    };
-
-    for (auto& S : scalars)
+    wxTextFile file;
+    if (!file.Open(filename))
     {
-        for (int m = 0; m < 12; m++)
+        wxLogWarning("Climatology: cannot open cyclone file '%s'", filename);
+        return false;
+    }
+
+    basinTracks.clear();
+
+    std::map<int, size_t> trackIndexById;
+    CycloneBasin basin = BasinFromFilename(filename);
+
+    for (wxString line = file.GetFirstLine(); !file.Eof(); line = file.GetNextLine())
+    {
+        if (line.IsEmpty())
+            continue;
+
+        int id, year, month, day, stateCode;
+        double lat, lon, wind, pressure;
+
+        wxStringTokenizer tok(line, " ,\t");
+        if (tok.CountTokens() < 9)
+            continue;
+
+        tok.GetNextToken().ToLong((long*)&id);
+        tok.GetNextToken().ToLong((long*)&year);
+        tok.GetNextToken().ToLong((long*)&month);
+        tok.GetNextToken().ToLong((long*)&day);
+        tok.GetNextToken().ToDouble(&lat);
+        tok.GetNextToken().ToDouble(&lon);
+        tok.GetNextToken().ToDouble(&wind);
+        tok.GetNextToken().ToDouble(&pressure);
+        tok.GetNextToken().ToLong((long*)&stateCode);
+
+        if (southernHemisphere)
+            lat = -lat;
+
+        CycloneENSO trackENSO = ENSOFromDate(year, month);
+
+        // -----------------------------
+        // NEW CyclonePoint format
+        // -----------------------------
+        CyclonePoint pt;
+
+        pt.stormId = id;
+        pt.time.Set(year, month, day);
+
+        pt.lat = lat;
+        pt.lon = lon;
+
+        pt.wind     = NormalizeWind(wind, basin);
+        pt.pressure = NormalizePressure(pressure);
+
+        pt.state     = CycloneStateFromCode(stateCode);
+        pt.basin     = basin;
+        pt.ensoPhase = trackENSO;
+
+        pt.valid = true;
+
+        // -----------------------------
+        // Insert into raw Cyclone struct
+        // -----------------------------
+        auto it = trackIndexById.find(id);
+        if (it == trackIndexById.end())
         {
-            int rows, cols;
-            double lat0, lon0, latStep, lonStep;
+            Cyclone cyc;
+            cyc.id        = id;
+            cyc.basin     = basin;
+            cyc.enso      = trackENSO;
+            cyc.maxWind   = pt.wind;
+            cyc.minPressure = pt.pressure;
+            cyc.points.push_back(pt);
 
-            float* buf = ReadNOAAFileUnified(
-                S.name, m,
-                rows, cols,
-                lat0, lon0,
-                latStep, lonStep);
+            basinTracks.push_back(cyc);
+            trackIndexById[id] = basinTracks.size() - 1;
+        }
+        else
+        {
+            Cyclone& cyc = basinTracks[it->second];
 
-            if (!buf)
-                return false;
+            cyc.maxWind     = std::max(cyc.maxWind, pt.wind);
+            cyc.minPressure = std::min(cyc.minPressure, pt.pressure);
 
-            LoadScalarFieldUnified(S.setting, m,
-                                   buf, rows, cols,
-                                   lat0, lon0, latStep, lonStep);
-
-            delete[] buf;
+            cyc.points.push_back(pt);
         }
     }
 
-    // --- Load sea depth ------------------------------------------------------
-    {
-        int rows, cols;
-        double lat0, lon0, latStep, lonStep;
-
-        float* buf = ReadNOAAFileUnified(
-            "seadepth", 0,
-            rows, cols,
-            lat0, lon0,
-            latStep, lonStep);
-
-        if (!buf)
-            return false;
-
-        LoadScalarFieldUnified(OVERLAY_SEA_DEPTH, 0,
-                               buf, rows, cols,
-                               lat0, lon0, latStep, lonStep);
-
-        delete[] buf;
-    }
-
-    // --- Load vector overlays ------------------------------------------------
-    if (progress) progress->Pulse(_("Loading wind/current datasets…"));
-
-    struct VectorSpec { int setting; const char* prefix; };
-    VectorSpec vectors[] = {
-        { OVERLAY_WIND,    "wind" },
-        { OVERLAY_CURRENT, "current" }
-    };
-
-    for (auto& V : vectors)
-    {
-        for (int m = 0; m < 12; m++)
-        {
-            int rows, cols;
-            double lat0, lon0, latStep, lonStep;
-
-            float* u = ReadNOAAFileUnified(
-                wxString::Format("%s%02d_u", V.prefix, m+1),
-                m,
-                rows, cols,
-                lat0, lon0,
-                latStep, lonStep);
-
-            float* v = ReadNOAAFileUnified(
-                wxString::Format("%s%02d_v", V.prefix, m+1),
-                m,
-                rows, cols,
-                lat0, lon0,
-                latStep, lonStep);
-
-            if (!u || !v)
-                return false;
-
-            LoadVectorFieldUnified(V.setting, m,
-                                   u, v,
-                                   rows, cols,
-                                   lat0, lon0, latStep, lonStep);
-
-            delete[] u;
-            delete[] v;
-        }
-    }
-
-    // --- Cyclones + ENSO -----------------------------------------------------
-    if (progress) progress->Pulse(_("Loading cyclone + ENSO datasets…"));
-
-    m_hasCycloneData = !m_cyclones.empty();
-    m_hasENSOData    = LoadENSODataFromCSV("enso.csv");
-
-	// Apply filter rules to loaded tracks
-	ApplyCycloneFilter();
-
-    m_bCompletedLoading = ok;
-    wxLogMessage("Climatology: LoadInternal() completed");
-
-    return ok;
+    file.Close();
+    return !basinTracks.empty();
 }
 
-// ============================================================================
-// ApplyCycloneFilters()
-// Where Cyclone filters are set. Then this is called by LoadInternal()
-// ============================================================================
-//  Timeline filtering is optional    F.enableTimeline
 
+// ==========================================================
+// LoadENSOYears    Cyclone Subsystem 
+// ==========================================================
 
-void ClimatologyOverlayFactory::ApplyCycloneFilter()
+bool ClimatologyOverlayFactory::LoadENSOYears(const wxString& filename)
 {
-    m_cyclone_cache.clear();
+    wxTextFile f(filename);
+    if (!f.Open())
+        return false;
 
-    const CycloneFilterParams& F = m_cycloneParams;
+    m_ensoData.clear();
 
-    // Convert wxDateTime → day-of-year for fast comparisons
-    const int startDOY = F.startDate.IsValid() ? F.startDate.GetDayOfYear() : 1;
-    const int endDOY   = F.endDate.IsValid()   ? F.endDate.GetDayOfYear()   : 366;
+    // Column order in file:
+    // Year DJF JFM FMA MAM AMJ MJJ JJA JAS ASO SON OND NDJ
+	// These 12 seasonal values map to months Jan–Dec.
 
-    for (const Cyclone& C : m_cyclones)
+    while (!f.Eof())
     {
-        // --------------------------------------------------------------
-        // Track-level ENSO filtering
-        // --------------------------------------------------------------
-        if (C.enso == ENSOPeriod::EL_NINO      && !F.allowElNino)       continue;
-        if (C.enso == ENSOPeriod::LA_NINA      && !F.allowLaNina)       continue;
-        if (C.enso == ENSOPeriod::NEUTRAL      && !F.allowNeutral)      continue;
-        if (C.enso == ENSOPeriod::NA           && !F.allowNotAvailable) continue;
+        wxString line = f.GetNextLine();
+        if (line.IsEmpty())
+            continue;
 
-        // --------------------------------------------------------------
-        // Track-level basin filtering
-        // --------------------------------------------------------------
-        switch (C.basinId)
+        wxStringTokenizer tok(line, " \t");
+        if (tok.CountTokens() < 13)
+            continue;
+
+        long year;
+        tok.GetNextToken().ToLong(&year);
+
+        double season[12];
+        for (int i = 0; i < 12; i++)
+            tok.GetNextToken().ToDouble(&season[i]);
+
+        // Convert seasonal ENSO index to monthly ENSO phase
+        // NOAA convention: DJF → Jan, JFM → Feb, FMA → Mar, ...
+         for (int m = 1; m <= 12; m++)
         {
-            case EPA: if (!F.allowEPA) continue; break;
-            case WPA: if (!F.allowWPA) continue; break;
-            case SPA: if (!F.allowSPA) continue; break;
-            case ATL: if (!F.allowATL) continue; break;
-            case NIO: if (!F.allowNIO) continue; break;
-            case SHE: if (!F.allowSHE) continue; break;
+            double v = season[m - 1];
+
+            CycloneENSO phase = CycloneENSO::NEUTRAL;
+
+            if (v >= 0.5)
+                phase = CycloneENSO::EL_NINO;
+            else if (v <= -0.5)
+                phase = CycloneENSO::LA_NINA;
+
+            // Store ENSO phase for (year, month)
+            m_ensoData[year][m] = phase;
         }
+    }
+	
+    return !m_ensoData.empty();
+}
 
-        Cyclone filtered;
-        filtered.basinId = C.basinId;
-        filtered.enso    = C.enso;
+// =========================================================
+// LoadCyclonePoints  - uses Unified Data in memory
+// =========================================================
 
-        // --------------------------------------------------------------
-        // Point-level filtering
-        // --------------------------------------------------------------
-        for (const CyclonePoint& P : C.points)
+bool ClimatologyOverlayFactory::LoadCyclonePoints()
+{
+    m_rawCyclonePoints.clear();
+
+    wxString dataDir = ClimatologyDataDirectory();
+
+    // Real cyclone basin files (decompressed from cyclone-*.gz)
+    std::vector<wxString> files = {
+        "cyclone-atl",
+        "cyclone-epa",
+        "cyclone-nio",
+        "cyclone-she",
+        "cyclone-spa",
+        "cyclone-wpa"
+    };
+
+    for (const wxString& fname : files)
+    {
+        wxString file = dataDir + "/cyclones/" + fname;
+
+        if (!wxFileExists(file))
+            continue;
+
+        wxTextFile tf(file);
+        if (!tf.Open())
+            continue;
+
+        for (wxString line = tf.GetFirstLine();
+             !tf.Eof();
+             line = tf.GetNextLine())
         {
-            // Date range
-            if (P.dayOfYear < startDOY) continue;
-            if (P.dayOfYear > endDOY)   continue;
+            if (line.IsEmpty())
+                continue;
 
-            // ----------------------------------------------------------
-            // Timeline interpolation (month → visibility)
-            // ----------------------------------------------------------
-            if (F.enableTimeline)
-            {
-                if (!CycloneTimelineInterpolation(P, F, F.currentMonth))
-                    continue;
+            wxArrayString f = wxSplit(line, ',');
+
+            if (f.size() < 10)
+                continue;
+
+            CyclonePoint p;
+
+            p.stormId    = wxAtoi(f[0]);
+            int year     = wxAtoi(f[1]);
+            int month    = wxAtoi(f[2]);
+            int day      = wxAtoi(f[3]);
+
+            p.time.Set(year, month, day);
+
+            p.lat        = wxAtof(f[4]);
+            p.lon        = wxAtof(f[5]);
+            p.wind       = wxAtof(f[6]);
+            p.pressure   = wxAtof(f[7]);
+
+            p.state      = (CycloneState)wxAtoi(f[8]);
+            p.basin      = (CycloneBasin)wxAtoi(f[9]);
+
+            // ENSO from m_ensoData (loaded from elnino_years.txt)
+            CycloneENSO phase = CycloneENSO::NA;
+            auto yIt = m_ensoData.find(year);
+            if (yIt != m_ensoData.end()) {
+                auto mIt = yIt->second.find(month);
+                if (mIt != yIt->second.end())
+                    phase = mIt->second;
             }
+            p.ensoPhase = phase;
 
-            // Intensity
-            if (P.windspeed < F.minWind)       continue;
-            if (P.pressure  > F.maxPressure)   continue;
+            p.valid = true;
 
-            // Storm-type mask
-            if (!(F.stateMask & (1 << static_cast<int>(P.state)))) continue;
-
-            filtered.points.push_back(P);
+            m_rawCyclonePoints.push_back(p);
         }
-
-        if (!filtered.points.empty())
-            m_cyclone_cache.push_back(filtered);
     }
 
-    m_hasCycloneData = !m_cyclone_cache.empty();
+    return !m_rawCyclonePoints.empty();
 }
-*/
-
-
 
 
 
@@ -950,62 +1263,77 @@ bool ClimatologyOverlayFactory::Render(const ClimatologyRenderParams& p)
         return false;
 
     SetViewPort(p.vp);
-	
-    // const int setting = p.overlayType;
-	// UI overlaytype
-	const OverlayType uiSetting =
+
+    const OverlayType uiSetting =
         static_cast<OverlayType>(p.overlayType);
-	// factory NOAAoverlaytype -> ui 	
-	const NoaaOverlayType setting = 
+
+    const NoaaOverlayType setting =
         ToNoaa(uiSetting);
 
-    // Wind Atlas overlay  (UI enum)
-    if (p.windAtlas.enabled && p.overlayEnabled &&
+    // -----------------------------------------------------------------------
+    // Wind Atlas (UI enum only)
+    // -----------------------------------------------------------------------
+    if (p.windAtlas.enabled &&
+        p.overlayEnabled &&
         uiSetting == OVERLAY_WIND_ATLAS)
     {
         RenderWindAtlas(p);
     }
 
-    // Cyclones
-    if (p.cyclone.showCyclones)
+    // -----------------------------------------------------------------------
+    // Cyclones (GL or DC inside function)
+    // -----------------------------------------------------------------------
+    if (p.showCyclones)
         RenderCyclones(p);
 
-    // GL path
-    if (!p.dc->GetDC())
+    // -----------------------------------------------------------------------
+    // GL path (preferred)
+    // -----------------------------------------------------------------------
+    if (p.useGL && p.glContextValid)
     {
-		if (p.overlayEnabled && p.overlayMap)
-			RenderUnifiedGrid(p);
+        if (p.overlayEnabled && p.overlayMap)
+            RenderUnifiedGrid(p);
 
-        if (p.showArrows && uiSetting == OVERLAY_WIND)
+        if (p.showArrows &&
+            (uiSetting == OVERLAY_WIND ||
+             uiSetting == OVERLAY_CURRENT))
+        {
             RenderDirectionArrows(p);
-
-        if (p.showArrows && uiSetting == OVERLAY_CURRENT)
-            RenderDirectionArrows(p);
+        }
 
         if (p.showIsoBars)
             RenderIsoBars(p);
 
         if (p.showNumbers)
-            RenderNumbers(p);
+            RenderNumbersGL(p);
 
         return true;
     }
 
-    // DC path
-    if (p.showArrows && uiSetting == OVERLAY_WIND)
-        RenderDirectionArrows(p);
+    // -----------------------------------------------------------------------
+    // DC fallback
+    // -----------------------------------------------------------------------
+    if (p.dc && p.dcContextValid)
+    {
+        if (p.showArrows &&
+            (uiSetting == OVERLAY_WIND ||
+             uiSetting == OVERLAY_CURRENT))
+        {
+            RenderDirectionArrows(p);
+        }
 
-    if (p.showArrows && uiSetting == OVERLAY_CURRENT)
-        RenderDirectionArrows(p);
+        if (uiSetting == OVERLAY_PRESSURE && p.showIsoBars)
+            RenderIsoBars(p);
 
-    if (uiSetting == OVERLAY_PRESSURE && p.showIsoBars)
-        RenderIsoBars(p);
+        if (p.showNumbers)
+            RenderNumbersDC(p);
 
-    if (p.showNumbers)
-        RenderNumbers(p);
+        return true;
+    }
 
     return true;
 }
+
 
 // ============================================================================
 // RenderDirectionArrows()
@@ -1046,18 +1374,23 @@ void ClimatologyOverlayFactory::RenderOverlayMap(const ClimatologyRenderParams& 
 {
     if (!IsCompletedLoading())
         return;
+    if (!p.overlayEnabled || !p.overlayMap)
+        return;
+    if (!p.vp || !p.vp->bValid)
+        return;
+	
+	const ClimatologyRenderParams& params = p;
 
     PlugIn_ViewPort& vp = *p.vp;
     const int setting = p.overlayType;
 
-    if (!p.overlayEnabled || !p.overlayMap)
-        return;
+    // -------------------------------
+    // Month selection + interpolation
+    // -------------------------------
+    int month     = p.currentMonth;
+    int nextMonth = p.nextMonth;
+    double dpos   = p.monthInterpolation;
 
-    int month     = p.cyclone.currentMonth;
-    int nextMonth = p.cyclone.nextMonth;
-    double dpos   = p.cyclone.monthInterpolation;
-
-    // Sea depth is non‑monthly
     if (setting == OVERLAY_SEA_DEPTH)
     {
         month     = 0;
@@ -1065,8 +1398,7 @@ void ClimatologyOverlayFactory::RenderOverlayMap(const ClimatologyRenderParams& 
         dpos      = 1.0;
     }
 
-    // Clamp interpolation
-    if (p.cyclone.monthInterpolation >= 1.0)
+    if (p.monthInterpolation >= 1.0)
     {
         nextMonth = month;
         dpos      = 1.0;
@@ -1079,39 +1411,48 @@ void ClimatologyOverlayFactory::RenderOverlayMap(const ClimatologyRenderParams& 
     ClimatologyOverlay& O1 = m_pOverlay[month][setting];
     ClimatologyOverlay& O2 = m_pOverlay[nextMonth][setting];
 
-    // DC path unsupported
-    if (p.dc->GetDC())
+    // -------------------------------
+    // DC fallback (only when GL invalid)
+    // -------------------------------
+    if (!(p.useGL && p.glContextValid))
     {
-        wxDC* dc = p.dc->GetDC();
-        dc->SetTextForeground(*wxRED);
-        dc->DrawText(
-            _("Climatology overlay map unsupported unless OpenGL is enabled"),
-            10, 10);
+        if (p.dc && p.dcContextValid)
+        {
+            wxDC* wdc = p.dc->GetDC();
+            if (!wdc)
+                return;
+
+            wdc->SetTextForeground(*wxRED);
+            wdc->DrawText(
+                _("Climatology overlay map unsupported unless OpenGL is enabled"),
+                10, 10);
+        }
         return;
     }
 
-    // Set texture dimensions
+    // -------------------------------
+    // GL path (two‑month blend)
+    // -------------------------------
     O1.m_width  = vp.pix_width;
     O1.m_height = vp.pix_height;
     O2.m_width  = vp.pix_width;
     O2.m_height = vp.pix_height;
 
-    // Build + upload textures
     if (!O1.m_data)
-        BuildOverlayData(O1, setting, month);
+        BuildOverlayData(O1, setting, month, params);
+
     if (!O1.m_iTexture)
         CreateGLTexture(O1);
 
     if (!O2.m_data)
-        BuildOverlayData(O2, setting, nextMonth);
+        BuildOverlayData(O2, setting, month, params);
     if (!O2.m_iTexture)
         CreateGLTexture(O2);
 
-    // Blend two months
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    double alpha = p.transparency / 100.0;
+    double alpha = p.alpha / 100.0;
 
     DrawGLTexture(O1.m_iTexture,
                   O2.m_iTexture,
@@ -1121,6 +1462,95 @@ void ClimatologyOverlayFactory::RenderOverlayMap(const ClimatologyRenderParams& 
 
     glDisable(GL_BLEND);
 }
+
+
+
+// Coordinate Helpers
+// Correct Mercator projection, pixel mapping, 
+// correct viewport handling, correct GL/DC alignment
+// and it matches the old plugin behavior perfectly.
+
+void ClimatologyOverlayFactory::LatLonToPixel(const PlugIn_ViewPort& vp,
+                                              double lat,
+                                              double lon,
+                                              wxPoint& r) const
+{
+    // Delegate to Mercator helper
+    GetCanvasPixLL(&vp, &r, lat, lon);
+}
+
+
+
+//  Lat/Lon → Pixel
+void ClimatologyOverlayFactory::GetCanvasPixLL(const PlugIn_ViewPort* vp,
+                                               wxPoint* r,
+                                               double lat,
+                                               double lon) const
+{
+    // Mercator projection of target point
+    double mx = EARTH_RADIUS_M * lon * DEG_TO_RAD;
+    double my = EARTH_RADIUS_M * log(tan(M_PI/4.0 + lat * DEG_TO_RAD / 2.0));
+
+    // Mercator projection of viewport center
+    double cx = EARTH_RADIUS_M * vp->clon * DEG_TO_RAD;
+    double cy = EARTH_RADIUS_M * log(tan(M_PI/4.0 + vp->clat * DEG_TO_RAD / 2.0));
+
+    // Convert meters → pixels
+    double dx = (mx - cx) / vp->view_scale_ppm;
+    double dy = (cy - my) / vp->view_scale_ppm;
+
+    // Apply rotation
+    double rx =  cos(vp->rotation) * dx - sin(vp->rotation) * dy;
+    double ry =  sin(vp->rotation) * dx + cos(vp->rotation) * dy;
+
+    // Move origin to center of viewport
+    r->x = static_cast<int>(vp->pix_width  / 2.0 + rx);
+    r->y = static_cast<int>(vp->pix_height / 2.0 + ry);
+}
+
+
+// Pixel → Lat/Lon
+void ClimatologyOverlayFactory::GetCanvasLLPix(const PlugIn_ViewPort* vp,
+                                               const wxPoint& p,
+                                               double* lat,
+                                               double* lon) const
+{
+    // Pixel offset from center
+    double dx = p.x - vp->pix_width  / 2.0;
+    double dy = p.y - vp->pix_height / 2.0;
+
+    // Undo rotation
+    double ux =  cos(vp->rotation) * dx + sin(vp->rotation) * dy;
+    double uy = -sin(vp->rotation) * dx + cos(vp->rotation) * dy;
+
+    // Convert pixels → meters
+    double cx = EARTH_RADIUS_M * vp->clon * DEG_TO_RAD;
+    double cy = EARTH_RADIUS_M * log(tan(M_PI/4.0 + vp->clat * DEG_TO_RAD / 2.0));
+
+    double mx = cx + ux * vp->view_scale_ppm;
+    double my = cy - uy * vp->view_scale_ppm;
+
+    // Mercator inverse → lat/lon
+    *lon = (mx / EARTH_RADIUS_M) * RAD_TO_DEG;
+    *lat = (2.0 * atan(exp(my / EARTH_RADIUS_M)) - M_PI/2.0) * RAD_TO_DEG;
+}
+
+
+// Second overload is the Mercator math version,  
+// Used by GL rendering because GL wants raw floating‑point pixel coordinates.
+void ClimatologyOverlayFactory::LatLonToPixel(const PlugIn_ViewPort& vp,
+                                              double lat,
+                                              double lon,
+                                              double& x,
+                                              double& y) const
+{
+    wxPoint p;
+    GetCanvasPixLL(&vp, &p, lat, lon);
+    x = p.x;
+    y = p.y;
+}
+
+
 
 
 // ============================================================================
@@ -1138,16 +1568,17 @@ void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams&
         return;
 
     PlugIn_ViewPort& vp = *p.vp;
-//    const int setting   = p.overlayType;
-//  Convert from UI overlaytype to factory NOAA overlaytype 
-	const NoaaOverlayType setting =
-    ToNoaa(static_cast<OverlayType>(p.overlayType));
 
+    // NOAA type for unified-grid metadata/scaling
+    const NoaaOverlayType noaaType =
+        ToNoaa(static_cast<OverlayType>(p.overlayType));
 
     // ------------------------------------------------------------------------
     // 1. Gather overlays for this mode/type/month
     // ------------------------------------------------------------------------
-    auto overlays = GatherOverlaysForMode(p.mode, setting, p.cyclone.currentMonth);
+	const OverlayType uiType = static_cast<OverlayType>(p.overlayType);
+	auto overlays = GatherOverlaysForMode(p.mode, uiType, p.currentMonth, p);
+
     if (overlays.empty())
         return;
 	
@@ -1175,65 +1606,26 @@ void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams&
                              global_vmin,
                              global_vmax);
 
-    // ------------------------------------------------------------------------
-    // 4. Render via GL or DC
-    // ------------------------------------------------------------------------
-    if (!p.dc->GetDC())
+	// ------------------------------------------------------------------------
+	// 4. Render via GL or DC
+	// ------------------------------------------------------------------------
+    if (p.useGL && p.glContextValid)
+    {
         RenderGridGL(grid, p);
-    else
-        RenderGridDC(grid, *p.dc, p);
-}
-
-
-// ============================================================================
-// GatherOverlaysForMode()
-// Select overlays for the given DisplayMode, overlayType, and month.
-// ============================================================================
-std::vector<const ClimatologyOverlay*>
-ClimatologyOverlayFactory::GatherOverlaysForMode(DisplayMode mode,
-                                                 int overlayType,
-                                                 int month_index)
-{
-    std::vector<const ClimatologyOverlay*> result;
+        return;
+    }
 	
-	// Convert UI overlayType → NOAA overlayType
-    NoaaOverlayType nt = ToNoaa(static_cast<OverlayType>(overlayType));
-
-    // ------------------------------------------------------------------------
-    // Safety: month range
-    // ------------------------------------------------------------------------
-    if (month_index < 0 || month_index >= 12)
-        return result;
-
-    // ------------------------------------------------------------------------
-    // Single overlay mode
-    // ------------------------------------------------------------------------
-    if (mode == DisplayMode::SingleScaled)
+	// ------------------------------------------------------------------------
+	// 5. DC fallback
+	// ------------------------------------------------------------------------   
+    if (p.dc && p.dcContextValid)
     {
-        const ClimatologyOverlay* O = &m_pOverlay[month_index][nt];
-        if (O && O->m_valid)
-            result.push_back(O);
-        return result;
-    }
-
-    // ------------------------------------------------------------------------
-    // Multi‑overlay modes (Weighted, Mean, Median, Max, Min, Additive)
-    // All overlays for this type and month are included.
-    // ------------------------------------------------------------------------
-    for (int m = 0; m < 12; m++)
-    {
-        const ClimatologyOverlay* O = &m_pOverlay[m][nt];
-        if (!O || !O->m_valid)
-            continue;
-
-        // Only overlays matching the requested month
-        if (m != month_index)
-            continue;
-
-        result.push_back(O);
-    }
-
-    return result;
+        wxDC* wdc = p.dc->GetDC();
+        if (wdc)
+            RenderGridDC(grid, *wdc, p);
+    }	
+	
+	
 }
 
 
@@ -1373,94 +1765,6 @@ void ClimatologyOverlayFactory::GatherOverlayMetadata(
 }
 
 
-// ============================================================================
-// GenerateUnifiedColorGrid()
-// Dispatch to the correct unified‑grid operator based on DisplayMode.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGrid(
-        ClimatologyColorGrid& outGrid,
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        DisplayMode mode,
-        const std::vector<double>& weights,
-        const std::vector<double>& vmins,
-        const std::vector<double>& vmaxs,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    switch (mode)
-    {
-    case DisplayMode::SingleScaled:
-    {
-        const auto* O = overlays[0];
-        double vmin = vmins.empty() ? 0.0 : vmins[0];
-        double vmax = vmaxs.empty() ? 1.0 : vmaxs[0];
-
-        GenerateUnifiedColorGridFromSingleOverlayScaled(
-            O, vmin, vmax, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::WeightedBlend:
-    {
-        GenerateUnifiedColorGridMultiRangeWeightedGlobalScaled(
-            overlays, weights, vmins, vmaxs,
-            outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::Additive:
-    {
-        GenerateUnifiedColorGridMultiOverlayAdditive(
-            overlays, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::MaxComposite:
-    {
-        GenerateUnifiedColorGridMultiOverlayMax(
-            overlays, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::MinComposite:
-    {
-        GenerateUnifiedColorGridMultiOverlayMin(
-            overlays, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::MeanComposite:
-    {
-        GenerateUnifiedColorGridMultiOverlayMean(
-            overlays, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    case DisplayMode::MedianComposite:
-    {
-        GenerateUnifiedColorGridMultiOverlayMedian(
-            overlays, outGrid, global_vmin, global_vmax);
-        return;
-    }
-
-    default:
-    {
-        // Fallback: single overlay
-        const auto* O = overlays[0];
-        double vmin = vmins.empty() ? 0.0 : vmins[0];
-        double vmax = vmaxs.empty() ? 1.0 : vmaxs[0];
-
-        GenerateUnifiedColorGridFromSingleOverlayScaled(
-            O, vmin, vmax, outGrid, global_vmin, global_vmax);
-        return;
-    }
-    }
-}
-
-
 
 // ============================================================================
 // RenderGridGL()
@@ -1530,7 +1834,7 @@ void ClimatologyOverlayFactory::RenderGridGL(const ClimatologyColorGrid& grid,
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    double alpha = p.transparency / 100.0;
+    double alpha = p.alpha / 100.0;
 
     glUseProgram(pi_texture_2DA_shader_program);
 
@@ -1585,6 +1889,10 @@ void ClimatologyOverlayFactory::RenderGridDC(const ClimatologyColorGrid& grid,
     if (!p.vp || !p.vp->bValid)
         return;
 
+    wxDC* wdc = &dc;     // Convert reference → pointer (safe)
+    if (!wdc)
+        return;
+
     PlugIn_ViewPort& vp = *p.vp;
     const int NX = grid.lon_count;
     const int NY = grid.lat_count;
@@ -1610,73 +1918,12 @@ void ClimatologyOverlayFactory::RenderGridDC(const ClimatologyColorGrid& grid,
             wxPoint pt;
             GetCanvasPixLL(&vp, &pt, lat, lon);
 
-            dc.SetPen(wxPen(c));
-            dc.SetBrush(wxBrush(c));
-            dc.DrawRectangle(pt.x, pt.y, cellW, cellH);
+            wdc->SetPen(wxPen(c));
+            wdc->SetBrush(wxBrush(c));
+            wdc->DrawRectangle(pt.x, pt.y, cellW, cellH);
         }
     }
 }
-
-/* Later version - See older version above
-
-// ============================================================================
-// BuildOverlayData()
-// Build RGBA pixel buffer for scalar overlay texture.
-// Model A: values come from unified NOAA grid via getValueMonth().
-// ============================================================================
-bool ClimatologyOverlayFactory::BuildOverlayData(ClimatologyOverlay& O,
-                                                 int setting,
-                                                 int month)
-{
-    if (O.m_data)
-        return true;
-
-    const int w = O.m_width;
-    const int h = O.m_height;
-
-    O.m_data = new unsigned char[w * h * 4];
-
-    Coord coord = (setting == OVERLAY_WIND || setting == OVERLAY_CURRENT)
-                  ? MAG
-                  : SCALAR;
-
-    for (int y = 0; y < h; y++)
-    {
-        double merc = 1.0 - 2.0 * (double)y / (double)(h - 1);
-        double lat  = rad2deg(atan(sinh(merc * M_PI)));
-
-        for (int x = 0; x < w; x++)
-        {
-            double lon = 360.0 * (double)x / (double)(w - 1);
-
-            double v = getValueMonth(coord, setting, lat, lon, month);
-
-            int idx = 4 * (y * w + x);
-
-            if (std::isnan(v))
-            {
-                O.m_data[idx + 0] = 0;
-                O.m_data[idx + 1] = 0;
-                O.m_data[idx + 2] = 0;
-                O.m_data[idx + 3] = 0;
-            }
-            else
-            {
-                unsigned char r, g, b;
-                ColorMap(setting, v, r, g, b);
-
-                O.m_data[idx + 0] = r;
-                O.m_data[idx + 1] = g;
-                O.m_data[idx + 2] = b;
-                O.m_data[idx + 3] = 255;
-            }
-        }
-    }
-
-    return true;
-}
-
-*/
 
 // ============================================================================
 // CreateGLTexture()
@@ -1719,7 +1966,7 @@ bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay& O)
 void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
                                               double dpos,
                                               PlugIn_ViewPort &vp,
-                                              double transparency)
+                                              double alpha)
 {
     float x = 0;
     float y = 0;
@@ -1753,7 +2000,8 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
     GLint blendLoc = glGetUniformLocation(pi_texture_2DA_shader_program, "blendFactor");
     glUniform1f(blendLoc, (float)dpos);
 
-    float colorv[4] = {0, 0, 0, -(float)transparency};
+    // Modern alpha: shader expects positive alpha, not inverted transparency
+    float colorv[4] = {0, 0, 0, (float)alpha};
     GLint colloc = glGetUniformLocation(pi_texture_2DA_shader_program, "color");
     glUniform4fv(colloc, 1, colorv);
 
@@ -1802,7 +2050,11 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsGL(const ClimatologyRenderP
 
         double   size       = p.arrowSize;
         int      width      = p.arrowWidth;
-        wxColour color      = p.color;
+		wxColour color(p.color.Red(),
+					   p.color.Green(),
+					   p.color.Blue(),
+					   (unsigned char)(255 * p.alpha));
+
         bool     lengthMode = p.arrowMode;
 
         double latStep = p.latStep[setting];
@@ -1865,7 +2117,7 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsGL(const ClimatologyRenderP
 
                 DrawArrowGL(p1.x + x, p1.y + y,
                             p1.x - x, p1.y - y,
-							color, width)
+							color, width);
 							
                 if (!lengthMode)
                     DrawBarbsGL(p1.x, p1.y, x, y, mag, cstep, color, width);
@@ -1882,44 +2134,11 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsGL(const ClimatologyRenderP
             }
         }
     };
-
+	// Call once for each overlay type you support
     drawForSetting(OVERLAY_WIND);
     drawForSetting(OVERLAY_CURRENT);
 }
-               }
-                else if (mag < minv)
-                    continue;
 
-                double t = vp.rotation;
-                double x = -size * (u * cos(t) + v * sin(t));
-                double y =  size * (v * cos(t) - u * sin(t));
-
-                wxPoint p1;
-                GetCanvasPixLL(&vp, &p1, lat, lon);
-
-                DrawArrowGL(p1.x + x, p1.y + y,
-                            p1.x - x, p1.y - y,
-							color, width)
-							
-                if (!lengthMode)
-                    DrawBarbsGL(p1.x, p1.y, x, y, mag, cstep, color, width);
-
-                DrawArrowGL(p1.x - x, p1.y - y,
-                            p1.x - x/3 + y*2/3,
-                            p1.y - y/3 - x*2/3,
-                            color, width);
-
-                DrawArrowGL(p1.x - x, p1.y - y,
-                            p1.x - x/3 - y*2/3,
-                            p1.y - y/3 + x*2/3,
-                            color, width);
-            }
-        }
-    };
-
-    drawForSetting(OVERLAY_WIND);
-    drawForSetting(OVERLAY_CURRENT);
-}
 
 // ============================================================================
 // DrawBarbsGL()
@@ -1962,8 +2181,11 @@ void ClimatologyOverlayFactory::DrawBarbsGL(double px, double py,
 // ============================================================================
 void ClimatologyOverlayFactory::RenderDirectionArrowsDC(const ClimatologyRenderParams& p)
 {
-    wxDC* dc = p.dc->GetDC();
-    if (!dc)
+    if (!p.dc || !p.dcContextValid)
+        return;
+
+    wxDC* wdc = p.dc->GetDC();
+    if (!wdc)
         return;
 
     PlugIn_ViewPort& vp = *p.vp;
@@ -1975,7 +2197,10 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsDC(const ClimatologyRenderP
 
         double   size       = p.arrowSize;
         int      width      = p.arrowWidth;
-        wxColour color      = p.color;
+        wxColour color(p.color.Red(),
+                       p.color.Green(),
+                       p.color.Blue(),
+                       (unsigned char)(255 * p.alpha));
         bool     lengthMode = p.arrowMode;
 
         double latStep = p.latStep[setting];
@@ -2036,21 +2261,21 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsDC(const ClimatologyRenderP
                 wxPoint p1;
                 GetCanvasPixLL(&vp, &p1, lat, lon);
 
-                DrawArrowDC(dc,
+                DrawArrowDC(wdc,
                             p1.x + x, p1.y + y,
                             p1.x - x, p1.y - y,
                             color, width);
 
                 if (!lengthMode)
-                    DrawBarbsDC(dc, p1.x, p1.y, x, y, mag, cstep, color, width);
+                    DrawBarbsDC(wdc, p1.x, p1.y, x, y, mag, cstep, color, width);
 
-                DrawArrowDC(dc,
+                DrawArrowDC(wdc,
                             p1.x - x, p1.y - y,
                             p1.x - x/3 + y*2/3,
                             p1.y - y/3 - x*2/3,
                             color, width);
 
-                DrawArrowDC(dc,
+                DrawArrowDC(wdc,
                             p1.x - x, p1.y - y,
                             p1.x - x/3 - y*2/3,
                             p1.y - y/3 + x*2/3,
@@ -2063,6 +2288,7 @@ void ClimatologyOverlayFactory::RenderDirectionArrowsDC(const ClimatologyRenderP
     drawForSetting(OVERLAY_CURRENT);
 }
 
+
 // ============================================================================
 // DrawArrowDC()
 // Draw a single wxDC line segment.
@@ -2073,6 +2299,9 @@ void ClimatologyOverlayFactory::DrawArrowDC(wxDC* dc,
                                             const wxColour& c,
                                             int width)
 {
+    if (!dc)
+        return;
+
     dc->SetPen(wxPen(c, width));
     dc->DrawLine(x1, y1, x2, y2);
 }
@@ -2089,6 +2318,9 @@ void ClimatologyOverlayFactory::DrawBarbsDC(wxDC* dc,
                                             const wxColour& c,
                                             int width)
 {
+    if (!dc)
+        return;
+
     double ix = x, iy = y, dir = 1;
     double remaining = mag;
 
@@ -2109,6 +2341,7 @@ void ClimatologyOverlayFactory::DrawBarbsDC(wxDC* dc,
         remaining -= cstep;
     }
 }
+
 
 // ============================================================================
 // RenderNumbers()
@@ -2136,16 +2369,19 @@ void ClimatologyOverlayFactory::RenderNumbers(const ClimatologyRenderParams& p)
 // ============================================================================
 void ClimatologyOverlayFactory::RenderNumbersDC(const ClimatologyRenderParams& p)
 {
-    wxDC* dc = p.dc->GetDC();
-    if (!dc)
-        return;
+    wxDC* wdc = p.dc->GetDC();
+	if (!wdc)
+		return;
 
     PlugIn_ViewPort& vp = *p.vp;
 
     double spacing = p.numberSize;
-    wxColour color = p.color;
+	wxColour color(p.color.Red(),
+				   p.color.Green(),
+				   p.color.Blue(),
+				   (unsigned char)(255 * p.alpha));
 
-    dc->SetTextForeground(color);
+    wdc->SetTextForeground(color);
 
     const int setting = p.overlayType;
 
@@ -2171,7 +2407,7 @@ void ClimatologyOverlayFactory::RenderNumbersDC(const ClimatologyRenderParams& p
                 continue;
 
             wxString txt = wxString::Format("%.0f", v);
-            dc->DrawText(txt, px, py);
+            wdc->DrawText(txt, px, py);
         }
     }
 }
@@ -2184,6 +2420,8 @@ void ClimatologyOverlayFactory::RenderNumbersGL(const ClimatologyRenderParams& p
 {
     if (!IsCompletedLoading() || !p.vp)
         return;
+    if (!(p.useGL && p.glContextValid))
+        return;
 
     PlugIn_ViewPort& vp = *p.vp;
 
@@ -2194,13 +2432,19 @@ void ClimatologyOverlayFactory::RenderNumbersGL(const ClimatologyRenderParams& p
                   ? MAG
                   : SCALAR;
 
-    wxColour color = p.color;
+    wxColour color(p.color.Red(),
+                   p.color.Green(),
+                   p.color.Blue(),
+                   (unsigned char)(255 * p.alpha));
 
     // GL numeric rendering uses wxDC text overlay
-    if (p.dc && p.dc->dc)
+    if (p.dc && p.dcContextValid)
     {
-        wxDC* dc = p.dc->dc;
-        dc->SetTextForeground(color);
+        wxDC* wdc = p.dc->GetDC();
+        if (!wdc)
+            return;
+
+        wdc->SetTextForeground(color);
 
         for (double py = spacing / 2;
              py <= vp.rv_rect.height - spacing / 4;
@@ -2225,42 +2469,80 @@ void ClimatologyOverlayFactory::RenderNumbersGL(const ClimatologyRenderParams& p
                 char buf[16];
                 snprintf(buf, sizeof(buf), "%.0f", v);
 
-                dc->DrawText(wxString::FromUTF8(buf), r.x, r.y);
+                wdc->DrawText(wxString::FromUTF8(buf), r.x, r.y);
             }
         }
     }
 }
 
+
 // ============================================================================
 // RenderIsoBars()
 // Draw isobars (contours) for scalar overlays using IsoBarMap.
 // ============================================================================
+
 void ClimatologyOverlayFactory::RenderIsoBars(const ClimatologyRenderParams& p)
 {
     if (!IsCompletedLoading())
         return;
     if (!p.vp || !p.vp->bValid)
         return;
-
     if (!p.showIsoBars)
         return;
 
-    const int setting = p.overlayType;
+    // UI overlay type
+    const OverlayType uiSetting =
+        static_cast<OverlayType>(p.overlayType);
 
+    // Convert UI → NOAA overlay type
+    const NoaaOverlayType setting =
+        ToNoaa(uiSetting);
+
+    // Unified spacing
     double spacing = p.isoBarSpacing;
-    double step    = p.isoBarStep;
-    int    units   = p.units;
-    int    month   = p.cyclone.currentMonth;
 
-    // Retrieve or build IsoBarMap for this overlay/month.
+    // Unified step mapping
+    double step;
+    switch (p.isoBarStep)
+    {
+    default: step = 4;   break;
+    case 1:  step = 2;   break;
+    case 2:  step = 1;   break;
+    case 3:  step = 0.5; break;
+    case 4:  step = 0.25; break;
+    }
+
+    int units = p.units;
+    int month = p.currentMonth;
+
+    // Retrieve or build IsoBarMap
     ClimatologyIsoBarMap* iso =
-        GetOrCreateIsoBarMap(setting, month, spacing, step, units, p);
+        GetOrCreateIsoBarMap(uiSetting, month, spacing, step, units, p);
 
     if (!iso)
         return;
 
-    iso->Plot(p.dc, *p.vp);
+    // -----------------------------------------------------------------------
+    // GL path (preferred)
+    // -----------------------------------------------------------------------
+    if (p.useGL && p.glContextValid)
+    {
+        iso->PlotGL(*p.vp);
+        return;
+    }
+
+    // -----------------------------------------------------------------------
+    // DC fallback
+    // -----------------------------------------------------------------------
+    if (p.dc && p.dcContextValid)
+    {
+        iso->PlotDC(p.dc, *p.vp);
+        return;
+    }
+
+    // No valid rendering path
 }
+
 
 // ============================================================================
 // GetOrCreateIsoBarMap()
@@ -2274,32 +2556,38 @@ ClimatologyOverlayFactory::GetOrCreateIsoBarMap(int overlayType,
                                                 int units,
                                                 const ClimatologyRenderParams& p)
 {
-    ClimatologyIsoBarMap*& iso = m_pIsobars[overlayType][month];
+    // Convert UI overlay type → NOAA overlay type
+    const NoaaOverlayType setting =
+        ToNoaa(static_cast<OverlayType>(overlayType));
 
-    // Reuse existing IsoBarMap if settings match.
-    if (iso && iso->SameSettings(spacing, step, units, month, 15))
+    // Reference to the cached pointer
+    ClimatologyIsoBarMap*& iso = m_pIsobars[setting][month];
+
+    // Reuse existing map if settings match
+    if (iso && iso->SameSettings(spacing, step, units, month, 0))
         return iso;
 
-    // Otherwise destroy and rebuild.
+    // Destroy old map
     if (iso)
     {
         delete iso;
         iso = nullptr;
     }
 
-    wxString name = wxString::Format("Overlay %d", overlayType);
+    wxString name = wxString::Format("Overlay %d", setting);
 
+    // Build new IsoBarMap (day = 0 for unified NOAA model)
     iso = new ClimatologyIsoBarMap(name,
                                    spacing,
                                    step,
                                    *this,
-                                   overlayType,
+                                   setting,
                                    units,
                                    month,
-                                   15,
-                                   p);
+                                   0,      // day ignored in unified model
+                                   p);     // per-frame render params
 
-    // Build contour lines.
+    // Build contour lines
     if (!iso->Recompute(nullptr))
     {
         delete iso;
@@ -2310,19 +2598,24 @@ ClimatologyOverlayFactory::GetOrCreateIsoBarMap(int overlayType,
     return iso;
 }
 
+
 // ============================================================================
 // DestroyIsoBarMap()
 // Remove cached IsoBarMap for a given overlay/month.
 // ============================================================================
 void ClimatologyOverlayFactory::DestroyIsoBarMap(int overlayType, int month)
 {
-    ClimatologyIsoBarMap*& iso = m_pIsobars[overlayType][month];
+    const NoaaOverlayType setting =
+        ToNoaa(static_cast<OverlayType>(overlayType));
+
+    ClimatologyIsoBarMap*& iso = m_pIsobars[setting][month];
     if (iso)
     {
         delete iso;
         iso = nullptr;
     }
 }
+
 
 // ============================================================================
 // RenderWindAtlas()
@@ -2339,9 +2632,12 @@ void ClimatologyOverlayFactory::RenderWindAtlas(const ClimatologyRenderParams& p
 
     double spacing = p.windAtlas.spacing;
     double size    = p.windAtlas.size;
-    double opacity = p.windAtlas.opacity;
+ 
+    wxColour color(p.color.Red(),
+               p.color.Green(),
+               p.color.Blue(),
+               (unsigned char)(255 * p.alpha));
 
-    wxColour color = p.color;
 
     for (double lat = std::floor(vp.lat_min / spacing) * spacing;
          lat <= vp.lat_max;
@@ -2370,8 +2666,8 @@ void ClimatologyOverlayFactory::RenderWindAtlas(const ClimatologyRenderParams& p
 
             if (p.useGL)
             {
-                glColor4ub(color.Red(), color.Green(), color.Blue(),
-                           (unsigned char)(opacity * 255.0));
+				glColor4ub(color.Red(), color.Green(), color.Blue(),
+									(unsigned char)(255 * p.alpha));
                 glLineWidth(1.0f);
 
                 glBegin(GL_LINES);
@@ -2379,38 +2675,198 @@ void ClimatologyOverlayFactory::RenderWindAtlas(const ClimatologyRenderParams& p
                 glVertex2f((GLfloat)(p1.x - x), (GLfloat)(p1.y - y));
                 glEnd();
             }
-            else if (p.dc->GetDC())
+            else if (p.dc)
             {
-                wxDC* dc = p.dc->GetDC();
-                dc->SetPen(wxPen(color, 1));
-                dc->DrawLine(p1.x + x, p1.y + y,
+                wxDC* wdc = p.dc->GetDC();
+				if (!wdc)
+					return;
+
+                wdc->SetPen(wxPen(color, 1));
+                wdc->DrawLine(p1.x + x, p1.y + y,
                              p1.x - x, p1.y - y);
             }
         }
     }
 }
 
+
+
+// ============================================
+// CYCLONES      Filter Helpers
+// =============================================
+
+
+static bool PointPassesIntensityAndState(const CyclonePoint& pt,
+                                         const CycloneFilterParams& F)
+{
+    // Intensity: wind
+    if (F.windMin > 0 && pt.wind < F.windMin)
+        return false;
+    if (F.windMax > 0 && pt.wind > F.windMax)
+        return false;
+
+    // Intensity: pressure
+    if (F.pressureMin > 0 && pt.pressure < F.pressureMin)
+        return false;
+    if (F.pressureMax > 0 && pt.pressure > F.pressureMax)
+        return false;
+
+    // State filter (modern set-based filter)
+    if (!F.stateFilter.empty())
+    {
+        if (F.stateFilter.count(pt.state) == 0)
+            return false;
+    }
+
+    return true;
+}
+
+
+
+// ==============================================
+// ApplyCycloneFilter   Track Level Filter
+// ==============================================
+// ============================================================================
+// ApplyCycloneFilter()
+// Unified cyclone filtering: basin, ENSO, intensity, pressure, month, year,
+// and point-level filtering. Produces m_cyclone_cache (CycloneTrack).
+// ============================================================================
+void ClimatologyOverlayFactory::ApplyCycloneFilter(const CycloneFilterParams& F)
+{
+    m_cyclone_cache.clear();
+
+    // Track-level filtering first
+    for (const CycloneTrack& t : m_cycloneData.tracks)
+    {
+        // ------------------------------------------------------------
+        // Basin filter
+        // ------------------------------------------------------------
+        if (!F.basinFilter.empty())
+        {
+            if (F.basinFilter.count(t.basin) == 0)
+                continue;
+        }
+
+        // ------------------------------------------------------------
+        // ENSO filter
+        // ------------------------------------------------------------
+        if (!F.ensoFilter.empty())
+        {
+            if (F.ensoFilter.count(t.ensoPhase) == 0)
+                continue;
+        }
+
+        // ------------------------------------------------------------
+        // Storm-type filter (dominant state)
+        // ------------------------------------------------------------
+        if (!F.stateFilter.empty())
+        {
+            if (F.stateFilter.count(t.dominantState) == 0)
+                continue;
+        }
+
+        // ------------------------------------------------------------
+        // Track-level intensity filter (maxWind)
+        // ------------------------------------------------------------
+        if (F.windMin > 0 && t.maxWind < F.windMin)
+            continue;
+
+        if (F.windMax > 0 && t.maxWind > F.windMax)
+            continue;
+
+        // ------------------------------------------------------------
+        // Track-level pressure filter (minPressure)
+        // ------------------------------------------------------------
+        if (F.pressureMin > 0 && t.minPressure < F.pressureMin)
+            continue;
+
+        if (F.pressureMax > 0 && t.minPressure > F.pressureMax)
+            continue;
+
+        // ------------------------------------------------------------
+        // Track-level date range filter
+        // ------------------------------------------------------------
+        if (F.startDate.IsValid() && t.endDate < F.startDate)
+            continue;
+
+        if (F.endDate.IsValid() && t.startDate > F.endDate)
+            continue;
+
+        // ------------------------------------------------------------
+        // Point-level filtering
+        // ------------------------------------------------------------
+        CycloneTrack filtered = t;
+        filtered.points.clear();
+
+        for (const CyclonePoint& pt : t.points)
+        {
+            int year  = pt.time.GetYear();
+            int month = pt.time.GetMonth() + 1;
+
+            // Month filter
+            if (!F.monthFilter.empty())
+            {
+                if (F.monthFilter.count(month) == 0)
+                    continue;
+            }
+
+            // Year filter
+            if (F.yearMin > 0 && year < F.yearMin)
+                continue;
+
+            if (F.yearMax > 0 && year > F.yearMax)
+                continue;
+
+            // Point-level intensity filter
+            if (F.windMin > 0 && pt.wind < F.windMin)
+                continue;
+
+            if (F.windMax > 0 && pt.wind > F.windMax)
+                continue;
+
+            // Point-level pressure filter
+            if (F.pressureMin > 0 && pt.pressure < F.pressureMin)
+                continue;
+
+            if (F.pressureMax > 0 && pt.pressure > F.pressureMax)
+                continue;
+
+            // Point-level storm-type filter
+            if (!F.stateFilter.empty())
+            {
+                if (F.stateFilter.count(pt.state) == 0)
+                    continue;
+            }
+
+            filtered.points.push_back(pt);
+        }
+
+        // Only keep tracks with at least one surviving point
+        if (!filtered.points.empty())
+            m_cyclone_cache.push_back(filtered);
+    }
+}
+
+				
 // ============================================================================
 // RenderCyclones()
-// Draw cyclone tracks using GL or wxDC.
+// Draw cyclone tracks using GL or wxDC. (CycloneTrack version)
 // ============================================================================
 void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
 {
     if (!m_hasCycloneData)
         return;
-    if (!p.cyclone.showCyclones)
+    if (!p.showCyclones)
         return;
     if (!p.vp || !p.vp->bValid)
         return;
 
     const PlugIn_ViewPort& vp = *p.vp;
 
-    // Use filtered cyclone cache
-    const auto& tracks = m_cyclone_cache;
-    if (tracks.empty())
+    if (m_cyclone_cache.empty())
         return;
 
-    const CycloneParams& A = m_displayParams.cyclone;
+    const CycloneParams& A = p.cycloneParams;
 
     // -----------------------------------------------------------------------
     // GL path
@@ -2419,45 +2875,54 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
     {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glLineWidth(2.0f);
 
-        for (const Cyclone& C : tracks)
+        for (const CycloneTrack& track : m_cyclone_cache)
         {
-            for (size_t i = 1; i < C.points.size(); i++)
+            if (!CycloneVisible(track, p))
+                continue;
+
+            for (size_t i = 1; i < track.points.size(); i++)
             {
-                const CyclonePoint& a = C.points[i - 1];
-                const CyclonePoint& b = C.points[i];
+                const CyclonePoint& a = track.points[i - 1];
+                const CyclonePoint& b = track.points[i];
 
                 // ============================================================
                 // CHOOSE ONE OF THESE THREE COLOR METHODS:
                 // ============================================================
 
                 // 1. Per‑point color (simple, stable)
-                wxColour color = CyclonePointColor(a, A);
+                // wxColour base = CyclonePointColor(a, A);
+                // wxColour color(base.Red(),
+                //                base.Green(),
+                //                base.Blue(),
+                //                (unsigned char)(255 * (A.opacity * p.alpha)));
 
                 // 2. Per‑segment blended color (smooth transitions)
                 // wxColour color = CycloneSegmentColor(a, b, A);
 
                 // 3. Full track intensity gradient (progressive)
-                // double t = double(i) / double(C.points.size() - 1);
-                // wxColour color = CycloneGradientColor(C, t, A);
-				
-				// 4. line thickness based on intensity
-				// float width = CycloneTrackWidth(a, A);
-				//  glLineWidth(width);
+                // double t = double(i) / double(track.points.size() - 1);
+                // wxColour color = CycloneGradientColorTrack(track, t, A);
 
+                // 4. line thickness based on intensity
+                float width = CycloneTrackWidth(a, A);
+                glLineWidth(width);
 
-                // ============================================================
+                // Default: track‑level color
+                wxColour color = CycloneColor(track, p);
 
-                wxPoint pa = LatLonToPixel(&vp, a.lat, a.lon);
-                wxPoint pb = LatLonToPixel(&vp, b.lat, b.lon);
+                double ax, ay;
+                LatLonToPixel(vp, a.lat, a.lon, ax, ay);
+
+                double bx, by;
+                LatLonToPixel(vp, b.lat, b.lon, bx, by);
 
                 glColor4ub(color.Red(), color.Green(), color.Blue(),
-                           (unsigned char)(A.opacity * 255.0));
+                           (unsigned char)(255 * (A.opacity * p.alpha)));
 
                 glBegin(GL_LINES);
-                glVertex2f((GLfloat)pa.x, (GLfloat)pa.y);
-                glVertex2f((GLfloat)pb.x, (GLfloat)pb.y);
+                glVertex2f((GLfloat)ax, (GLfloat)ay);
+                glVertex2f((GLfloat)bx, (GLfloat)by);
                 glEnd();
             }
         }
@@ -2471,155 +2936,232 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
     // -----------------------------------------------------------------------
     if (p.dc && p.dcContextValid)
     {
-        wxDC* dc = p.dc->GetDC();
-        if (!dc)
+        wxDC* wdc = p.dc->GetDC();
+        if (!wdc)
             return;
 
-        for (const Cyclone& C : tracks)
+        for (const CycloneTrack& track : m_cyclone_cache)
         {
-            for (size_t i = 1; i < C.points.size(); i++)
+            if (!CycloneVisible(track, p))
+                continue;
+
+            for (size_t i = 1; i < track.points.size(); i++)
             {
-                const CyclonePoint& a = C.points[i - 1];
-                const CyclonePoint& b = C.points[i];
+                const CyclonePoint& a = track.points[i - 1];
+                const CyclonePoint& b = track.points[i];
 
                 // ============================================================
                 // Same three options for DC:
                 // ============================================================
 
                 // 1. Per‑point color
-                wxColour color = CyclonePointColor(a, A);
+                // wxColour base = CyclonePointColor(a, A);
+                // wxColour color(base.Red(),
+                //                base.Green(),
+                //                base.Blue(),
+                //                (unsigned char)(255 * (A.opacity * p.alpha)));
 
                 // 2. Per‑segment blended color
                 // wxColour color = CycloneSegmentColor(a, b, A);
 
                 // 3. Full‑track gradient
-                // double t = double(i) / double(C.points.size() - 1);
-                // wxColour color = CycloneGradientColor(C, t, A);
-				
-				// 4. line thickness based on intensity
-				// float width = CycloneTrackWidth(a, A);
-				//  dc->SetPen(wxPen(color, width));
-				
-				// 5. DC‑based legend for basin + ENSO + intensity + thickness 
-				// if (p.cyclone.showCyclones && p.dc && p.dcContextValid)
-				// {
-				// 		wxPoint legendOrigin(20, 20);   // top-left corner
-				// 		CycloneLegend(p.dc->GetDC(), m_displayParams.cyclone, legendOrigin);
-				//	}
+                // double t = double(i) / double(track.points.size() - 1);
+                // wxColour color = CycloneGradientColorTrack(track, t, A);
 
+                // 4. line thickness based on intensity
+                float width = CycloneTrackWidth(a, A);
 
-                // ============================================================
+                // 5. DC‑based legend for basin + ENSO + intensity + thickness 
+                // if (p.showCyclones && p.dc && p.dcContextValid)
+                // {
+                //     wxPoint legendOrigin(20, 20);   // top-left corner
+                //     CycloneLegend(*wdc, m_displayParams.cyclone, legendOrigin);
+                // }
 
-                wxPoint pa = LatLonToPixel(&vp, a.lat, a.lon);
-                wxPoint pb = LatLonToPixel(&vp, b.lat, b.lon);
+                wxColour color = CycloneColor(track, p);
 
-                dc->SetPen(wxPen(color, 2));
-                dc->DrawLine(pa.x, pa.y, pb.x, pb.y);
+                double ax, ay;
+                LatLonToPixel(vp, a.lat, a.lon, ax, ay);
+
+                double bx, by;
+                LatLonToPixel(vp, b.lat, b.lon, bx, by);
+
+                // THIS is the correct version
+                wdc->SetPen(wxPen(color, width));
+                wdc->DrawLine((int)ax, (int)ay, (int)bx, (int)by);
             }
         }
     }
 }
+
+
+// ==========================================================
+// CYCLONE SUBSYSTEM — Loader
+// ==========================================================
+
+
+// ------------------------------------------------------------
+// Map (year, month) → CycloneENSO using m_ensoData   Helper
+// ------------------------------------------------------------
+CycloneENSO ClimatologyOverlayFactory::ENSOFromDate(int year, int month) const
+{
+    if (month < 1 || month > 12)
+        return CycloneENSO::NA;
+
+    auto itYear = m_ensoData.find(year);
+    if (itYear == m_ensoData.end())
+        return CycloneENSO::NA;
+
+    auto itMonth = itYear->second.find(month);
+    if (itMonth == itYear->second.end())
+        return CycloneENSO::NA;
+
+    return itMonth->second;
+}
+
+
+
+
+// =========================================================
+// BuildCycloneTracks  - uses Unified Data in memory
+// =========================================================
+// Correct track builder to use. Groups m_rawCyclonePoints by StormID
+// sorts by time, computes metadata, and fills m_cycloneData.tracks
+// and m_cycloneData.idToIndex.
+
+bool ClimatologyOverlayFactory::BuildCycloneTracks()
+{
+    m_cycloneData.tracks.clear();
+    m_cycloneData.idToIndex.clear();
+
+    std::map<int, std::vector<CyclonePoint>> grouped;
+
+    // Group points by storm ID
+    for (const CyclonePoint& p : m_rawCyclonePoints)
+    {
+        if (!p.valid)
+            continue;
+
+        grouped[p.stormId].push_back(p);
+    }
+
+    // Build tracks
+    for (auto& kv : grouped)
+    {
+        int id = kv.first;
+        auto& pts = kv.second;
+
+        if (pts.empty())
+            continue;
+
+        // Sort by time
+        std::sort(pts.begin(), pts.end(),
+                  [](const CyclonePoint& a, const CyclonePoint& b)
+                  {
+                      return a.time.IsEarlierThan(b.time);
+                  });
+
+        CycloneTrack track;
+        track.id = id;
+        track.points = pts;
+        track.valid = true;
+
+        // Track-level metadata
+        track.startDate = pts.front().time;
+        track.endDate   = pts.back().time;
+		track.daySpan = (track.endDate - track.startDate).GetDays();
+
+        track.basin     = pts.front().basin;
+        track.ensoPhase = pts.front().ensoPhase;
+
+        track.maxWind     = -999;
+        track.minPressure = 9999;
+
+        std::map<CycloneState,int> stateCount;
+
+        for (const CyclonePoint& p : pts)
+        {
+            if (!std::isnan(p.wind))
+                track.maxWind = std::max(track.maxWind, p.wind);
+
+            if (!std::isnan(p.pressure))
+                track.minPressure = std::min(track.minPressure, p.pressure);
+
+            stateCount[p.state]++;
+        }
+
+        // Dominant state
+        track.dominantState = CycloneState::UNKNOWN;
+        int best = 0;
+        for (auto& sc : stateCount)
+        {
+            if (sc.second > best)
+            {
+                best = sc.second;
+                track.dominantState = sc.first;
+            }
+        }
+
+        // Store track
+        int idx = m_cycloneData.tracks.size();
+        m_cycloneData.tracks.push_back(track);
+        m_cycloneData.idToIndex[id] = idx;
+    }
+
+    return true;
+}
+
 
 // ============================================================================
 // BasinColor()
 // Helper for Rendercyclones
 // ============================================================================
 
-wxColour ClimatologyOverlayFactory::BasinColor(int basinId)
+wxColour ClimatologyOverlayFactory::BasinColor(CycloneBasin basin) const
 {
-    switch (basinId)
+    switch (basin)
     {
-        case EPA: return wxColour(255, 128, 128);
-        case WPA: return wxColour(255, 200, 0);
-        case SPA: return wxColour(255, 0, 255);
-        case ATL: return wxColour(0, 128, 255);
-        case NIO: return wxColour(0, 200, 128);
-        case SHE: return wxColour(128, 128, 255);
-        default:  return wxColour(255, 255, 255);
+        case CycloneBasin::EPA: return wxColour(255, 128, 128);
+        case CycloneBasin::WPA: return wxColour(255, 200, 0);
+        case CycloneBasin::SPA: return wxColour(255, 0, 255);
+        case CycloneBasin::ATL: return wxColour(0, 128, 255);
+        case CycloneBasin::NIO: return wxColour(0, 200, 128);
+        case CycloneBasin::SHE: return wxColour(128, 128, 255);
+        default:                return wxColour(255, 255, 255);
     }
 }
+
+
 
 
 // ============================================================================
 // CycloneColor()
-// Helper (Track‑level color resolver)
+// Determine cyclone track color based on unified Saffir–Simpson intensity.
 // ============================================================================
-wxColour ClimatologyOverlayFactory::CycloneColor(const Cyclone& C,
-                                                 const CycloneParams& A) const
+wxColour ClimatologyOverlayFactory::CycloneColor(const CycloneTrack& track,
+                                                 const ClimatologyRenderParams& p) const
 {
-    // -----------------------------------------------------------------------
-    // 1. Color mode selector
-    // -----------------------------------------------------------------------
-    switch (A.colorMode)
-    {
-        // ================================================================
-        // Mode 0: Basin-based coloring (default)
-        // ================================================================
-        case 0:
-            return BasinColor(C.basinId);
+    const CycloneParams& A = p.cycloneParams;
 
-        // ================================================================
-        // Mode 1: ENSO-based coloring
-        // ================================================================
-        case 1:
-            switch (C.enso)
-            {
-                case ENSOPeriod::EL_NINO:  return wxColour(255, 80, 80);   // red
-                case ENSOPeriod::LA_NINA:  return wxColour(80, 80, 255);   // blue
-                case ENSOPeriod::NEUTRAL:  return wxColour(120, 200, 120); // green
-                case ENSOPeriod::NA:       return wxColour(180, 180, 180); // gray
-            }
-            break;
+    // User override color
+    if (A.useFixedColor)
+        return A.fixedColor;
 
-        // ================================================================
-        // Mode 2: Intensity-based coloring (max wind)
-        // ================================================================
-        case 2:
-        {
-            // Compute track max wind
-            double w = 0.0;
-            for (const CyclonePoint& P : C.points)
-                w = std::max(w, P.maxWind);
+    double w = track.maxWind;
 
-            if (w < 20)  return wxColour(180, 180, 180); // disturbance
-            if (w < 34)  return wxColour(120, 200, 120); // depression
-            if (w < 64)  return wxColour(255, 200, 80);  // tropical storm
-            if (w < 83)  return wxColour(255, 160, 80);  // Cat 1
-            if (w < 96)  return wxColour(255, 120, 80);  // Cat 2
-            if (w < 113) return wxColour(255, 80, 80);   // Cat 3
-            if (w < 137) return wxColour(200, 40, 40);   // Cat 4
-            return wxColour(160, 0, 0);                  // Cat 5+
-        }
+    if (std::isnan(w))
+        return wxColour(180, 180, 180);   // unknown
 
-        // ================================================================
-        // Mode 3: Storm-type coloring (CycloneState)
-        // ================================================================
-        case 3:
-        {
-            // Use first point's state as representative
-            if (C.points.empty())
-                return wxColour(200, 200, 200);
-
-            CycloneState s = C.points.front().state;
-
-            switch (s)
-            {
-                case CycloneState::TROPICAL:      return wxColour(255, 160, 80);
-                case CycloneState::SUBTROPICAL:   return wxColour(255, 200, 120);
-                case CycloneState::EXTRATROPICAL: return wxColour(120, 160, 255);
-                case CycloneState::WAVE:          return wxColour(160, 255, 160);
-                case CycloneState::REMANENT:      return wxColour(180, 180, 180);
-                case CycloneState::UNKNOWN:       return wxColour(200, 200, 200);
-            }
-            break;
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Fallback neutral color
-    // -----------------------------------------------------------------------
-    return wxColour(255, 255, 255);
+    if (w < 20)  return wxColour(180, 180, 180); // disturbance
+    if (w < 34)  return wxColour(120, 200, 120); // depression
+    if (w < 64)  return wxColour(255, 200, 80);  // tropical storm
+    if (w < 83)  return wxColour(255, 160, 80);  // Cat 1
+    if (w < 96)  return wxColour(255, 120, 80);  // Cat 2
+    if (w < 113) return wxColour(255, 80, 80);   // Cat 3
+    if (w < 137) return wxColour(200, 40, 40);   // Cat 4
+    return wxColour(160, 0, 0);                  // Cat 5+
 }
+
 
 
 // =================================================
@@ -2641,12 +3183,12 @@ wxColour ClimatologyOverlayFactory::CyclonePointColor(const CyclonePoint& pt,
         // Mode 1: ENSO-based coloring
         // ================================================================
         case 1:
-            switch (pt.enso)
+            switch (pt.ensoPhase)
             {
-                case CycloneENSO::ElNino:  return wxColour(255, 80, 80);   // red
-                case CycloneENSO::LaNina:  return wxColour(80, 80, 255);   // blue
-                case CycloneENSO::Neutral: return wxColour(120, 200, 120); // green
-                default:                   return wxColour(180, 180, 180); // gray
+                case CycloneENSO::EL_NINO:  return wxColour(255, 80, 80);   // red
+                case CycloneENSO::LA_NINA:  return wxColour(80, 80, 255);   // blue
+                case CycloneENSO::NEUTRAL:  return wxColour(120, 200, 120); // green
+                default:                    return wxColour(180, 180, 180); // gray
             }
 
         // ================================================================
@@ -2654,7 +3196,10 @@ wxColour ClimatologyOverlayFactory::CyclonePointColor(const CyclonePoint& pt,
         // ================================================================
         case 2:
         {
-            double w = pt.maxWind;   // unified wind field
+            double w = pt.wind;   // unified wind field
+
+            if (std::isnan(w))
+                return wxColour(180, 180, 180);
 
             if (w < 20)  return wxColour(180, 180, 180); // disturbance
             if (w < 34)  return wxColour(120, 200, 120); // depression
@@ -2688,17 +3233,17 @@ wxColour ClimatologyOverlayFactory::CyclonePointColor(const CyclonePoint& pt,
     return wxColour(255, 255, 255);
 }
 
+
 // ====================================================
 // CycloneSegmentColor()
 //  RGB blend between two CyclonePoints
 //  So all color modes (basin, ENSO, intensity, stormtype) work automatically.
 // ======================================================
-
 wxColour ClimatologyOverlayFactory::CycloneSegmentColor(const CyclonePoint& a,
                                                         const CyclonePoint& b,
                                                         const CycloneParams& A) const
 {
-    // Resolve per-point colors using your unified point-level resolver
+    // Resolve per-point colors using unified point-level resolver
     wxColour ca = CyclonePointColor(a, A);
     wxColour cb = CyclonePointColor(b, A);
 
@@ -2717,228 +3262,280 @@ wxColour ClimatologyOverlayFactory::CycloneSegmentColor(const CyclonePoint& a,
 }
 
 
-// ====================================================
-// CycloneGradientColor()
-//  Intensity‑weighted gradient across entire track
-//  So all color modes (basin, ENSO, intensity, stormtype) work automatically.
-// ======================================================
-
-wxColour ClimatologyOverlayFactory::CycloneGradientColor(const Cyclone& C,
-                                                         double t,
-                                                         const CycloneParams& A) const
+// ============================================================================
+// CycloneGradientColorTrack()
+// Smooth gradient along a CycloneTrack using point-level colors.
+// t = 0 → first point, t = 1 → last point
+// How to use it in RenderCyclones:
+//   double t = double(i) / double(track.points.size() - 1);
+//   wxColour color = CycloneGradientColorTrack(track, t, A);
+// ============================================================================
+wxColour ClimatologyOverlayFactory::CycloneGradientColorTrack(
+        const CycloneTrack& track,
+        double t,
+        const CycloneParams& A) const
 {
-    // Clamp t to [0,1]
+    if (track.points.empty())
+        return wxColour(200, 200, 200);
+
+    // Clamp t
     if (t < 0.0) t = 0.0;
     if (t > 1.0) t = 1.0;
 
-    // -----------------------------------------------------------------------
-    // Compute min/max intensity across the entire track
-    // -----------------------------------------------------------------------
-    double minW = 1e9;
-    double maxW = -1e9;
+    // Map t → index
+    double idx = t * (track.points.size() - 1);
+    size_t i0 = static_cast<size_t>(floor(idx));
+    size_t i1 = static_cast<size_t>(ceil(idx));
 
-    for (const CyclonePoint& P : C.points)
-    {
-        minW = std::min(minW, P.maxWind);
-        maxW = std::max(maxW, P.maxWind);
-    }
+    if (i0 >= track.points.size())
+        i0 = track.points.size() - 1;
+    if (i1 >= track.points.size())
+        i1 = track.points.size() - 1;
 
-    if (minW > maxW)   // degenerate track
-        return wxColour(200, 200, 200);
+    const CyclonePoint& a = track.points[i0];
+    const CyclonePoint& b = track.points[i1];
 
-    // -----------------------------------------------------------------------
-    // Interpolate intensity at position t along the track
-    // -----------------------------------------------------------------------
-    double w = minW + (maxW - minW) * t;
+    // Local blend factor
+    double localT = idx - i0;
 
-    // -----------------------------------------------------------------------
-    // Map intensity → color (same scale as CyclonePointColor)
-    // -----------------------------------------------------------------------
-    if (w < 20)  return wxColour(180, 180, 180); // disturbance
-    if (w < 34)  return wxColour(120, 200, 120); // depression
-    if (w < 64)  return wxColour(255, 200, 80);  // tropical storm
-    if (w < 83)  return wxColour(255, 160, 80);  // Cat 1
-    if (w < 96)  return wxColour(255, 120, 80);  // Cat 2
-    if (w < 113) return wxColour(255, 80, 80);   // Cat 3
-    if (w < 137) return wxColour(200, 40, 40);   // Cat 4
+    wxColour ca = CyclonePointColor(a, A);
+    wxColour cb = CyclonePointColor(b, A);
 
-    return wxColour(160, 0, 0);                  // Cat 5+
+    unsigned char r =
+        (unsigned char)(ca.Red()   * (1.0 - localT) + cb.Red()   * localT);
+    unsigned char g =
+        (unsigned char)(ca.Green() * (1.0 - localT) + cb.Green() * localT);
+    unsigned char bch =
+        (unsigned char)(ca.Blue()  * (1.0 - localT) + cb.Blue()  * localT);
+
+    return wxColour(r, g, bch);
 }
+
+
 
 // ============================================================================
 // CycloneTrackWidth()
-// ine thickness based on intensity
+// Determine line thickness based on intensity, user settings, and color mode.
 // ============================================================================
-
 float ClimatologyOverlayFactory::CycloneTrackWidth(const CyclonePoint& pt,
                                                    const CycloneParams& A) const
 {
-    const double w = pt.maxWind;   // unified intensity field
+    // ------------------------------------------------------------
+    // Thickness scaling only applies if enabled
+    // ------------------------------------------------------------
+    if (!A.useThicknessScaling)
+        return A.baseThickness;
 
-    // Base thickness (user‑configurable)
-    const float base = A.baseThickness;      // e.g., 1.5f
-    const float scale = A.intensityScale;    // e.g., 0.05f
+    // ------------------------------------------------------------
+    // Unified intensity field
+    // ------------------------------------------------------------
+    double w = pt.wind;   // correct unified field
 
-    // Saffir–Simpson categories → thickness multiplier
-    if (w < 20)   return base * 0.8f;   // disturbance
-    if (w < 34)   return base * 1.0f;   // depression
-    if (w < 64)   return base * 1.2f;   // tropical storm
-    if (w < 83)   return base * 1.4f;   // Cat 1
-    if (w < 96)   return base * 1.6f;   // Cat 2
-    if (w < 113)  return base * 1.8f;   // Cat 3
-    if (w < 137)  return base * 2.0f;   // Cat 4
+    if (std::isnan(w))
+        return A.baseThickness;
 
-    return base * 2.3f;                // Cat 5+
+    // ------------------------------------------------------------
+    // Saffir–Simpson category → multiplier
+    // ------------------------------------------------------------
+    float mult;
+    if (w < 20)      mult = 0.8f;   // disturbance
+    else if (w < 34) mult = 1.0f;   // depression
+    else if (w < 64) mult = 1.2f;   // tropical storm
+    else if (w < 83) mult = 1.4f;   // Cat 1
+    else if (w < 96) mult = 1.6f;   // Cat 2
+    else if (w < 113) mult = 1.8f;  // Cat 3
+    else if (w < 137) mult = 2.0f;  // Cat 4
+    else              mult = 2.3f;  // Cat 5+
+
+    float width = A.baseThickness * mult;
+
+    // ------------------------------------------------------------
+    // Clamp width
+    // ------------------------------------------------------------
+    if (width < A.minThickness)
+        width = A.minThickness;
+    if (width > A.maxThickness)
+        width = A.maxThickness;
+
+    return width;
 }
+
 
 
 // ============================================================================
 // CycloneLegend()
-// DC‑based legend for basin + ENSO + intensity + thickness
+// Draw legend for basin, ENSO, intensity, or storm-type depending on colorMode.
 // ============================================================================
+// How to call it (DC path only)
+// Inside your DC rendering block in RenderCyclones():
+//  if (p.showCyclones && p.dc && p.dcContextValid)
+//  {
+//      wxDC* wdc = p.dc->GetDC();
+//      if (!wdc)
+//          return;    // or just 'return;' from the DC block
+//      wxPoint legendOrigin(20, 20);   // top-left corner
+//      CycloneLegend(*wdc, p.cycloneParams, legendOrigin);
+//  }
 
-
-void ClimatologyOverlayFactory::CycloneLegend(wxDC* dc,
+void ClimatologyOverlayFactory::CycloneLegend(wxDC& dc,
                                               const CycloneParams& A,
-                                              const wxPoint& origin)
+                                              const wxPoint& origin) const
 {
-    if (!dc)
-        return;
+    // dc is a reference; it cannot be null
+    wxDC* wdc = &dc;
+
+    const int boxW = 22;
+    const int boxH = 12;
+    const int pad  = 4;
 
     int x = origin.x;
     int y = origin.y;
 
-    const int swatch = 22;     // color box size
-    const int spacing = 4;     // vertical spacing
-    const int textOffset = 28; // text start
+    wdc->SetTextForeground(*wxWHITE);
+    wdc->SetBackgroundMode(wxTRANSPARENT);
 
-    dc->SetTextForeground(*wxWHITE);
-
-    // -----------------------------------------------------------------------
-    // BASIN COLORS
-    // -----------------------------------------------------------------------
-    dc->DrawText("Basins:", x, y);
-    y += 18;
-
-    struct BasinEntry { const char* name; int id; };
-    BasinEntry basins[] = {
-        {"East Pacific", EPA},
-        {"West Pacific", WPA},
-        {"South Pacific", SPA},
-        {"Atlantic",     ATL},
-        {"North Indian", NIO},
-        {"South Indian", SHE}
-    };
-
-    for (auto& B : basins)
+    // ------------------------------------------------------------
+    // Mode 0: Basin-based coloring
+    // ------------------------------------------------------------
+    if (A.colorMode == 0)
     {
-        wxColour c = BasinColor(B.id);
-        dc->SetBrush(wxBrush(c));
-        dc->SetPen(*wxTRANSPARENT_PEN);
-        dc->DrawRectangle(x, y, swatch, swatch);
+        struct BasinEntry { const char* name; CycloneBasin basin; };
+        BasinEntry basins[] = {
+            {"East Pacific",  CycloneBasin::EPA},
+            {"West Pacific",  CycloneBasin::WPA},
+            {"South Pacific", CycloneBasin::SPA},
+            {"Atlantic",      CycloneBasin::ATL},
+            {"North Indian",  CycloneBasin::NIO},
+            {"South Indian",  CycloneBasin::SHE}
+        };
 
-        dc->DrawText(B.name, x + textOffset, y + 2);
-        y += swatch + spacing;
-    }
+        wdc->DrawText("Basins:", x, y);
+        y += boxH + pad;
 
-    y += 10;
-
-    // -----------------------------------------------------------------------
-    // ENSO COLORS
-    // -----------------------------------------------------------------------
-    dc->DrawText("ENSO:", x, y);
-    y += 18;
-
-    struct ENSOEntry { const char* name; CycloneENSO id; };
-    ENSOEntry enso[] = {
-        {"El Niño",   CycloneENSO::ElNino},
-        {"La Niña",   CycloneENSO::LaNina},
-        {"Neutral",   CycloneENSO::Neutral},
-        {"N/A",       CycloneENSO::NA}
-    };
-
-    for (auto& E : enso)
-    {
-        wxColour c;
-        switch (E.id)
+        for (const auto& B : basins)
         {
-            case CycloneENSO::ElNino:  c = wxColour(255, 80, 80); break;
-            case CycloneENSO::LaNina:  c = wxColour(80, 80, 255); break;
-            case CycloneENSO::Neutral: c = wxColour(120, 200, 120); break;
-            default:                   c = wxColour(180, 180, 180); break;
+            wxColour c = BasinColor(B.basin);
+            wdc->SetBrush(wxBrush(c));
+            wdc->SetPen(*wxTRANSPARENT_PEN);
+
+            wdc->DrawRectangle(x, y, boxW, boxH);
+            wdc->DrawText(wxString(B.name), x + boxW + pad, y);
+
+            y += boxH + pad;
         }
-
-        dc->SetBrush(wxBrush(c));
-        dc->SetPen(*wxTRANSPARENT_PEN);
-        dc->DrawRectangle(x, y, swatch, swatch);
-
-        dc->DrawText(E.name, x + textOffset, y + 2);
-        y += swatch + spacing;
+        return;
     }
 
-    y += 10;
-
-    // -----------------------------------------------------------------------
-    // INTENSITY SCALE (Saffir–Simpson)
-    // -----------------------------------------------------------------------
-    dc->DrawText("Intensity:", x, y);
-    y += 18;
-
-    struct IntensityEntry { const char* name; double wind; };
-    IntensityEntry intens[] = {
-        {"Disturbance",     15},
-        {"Depression",      30},
-        {"Tropical Storm",  50},
-        {"Category 1",      75},
-        {"Category 2",      90},
-        {"Category 3",     105},
-        {"Category 4",     125},
-        {"Category 5+",    150}
-    };
-
-    for (auto& I : intens)
+    // ------------------------------------------------------------
+    // Mode 1: ENSO-based coloring
+    // ------------------------------------------------------------
+    if (A.colorMode == 1)
     {
-        CyclonePoint dummy;
-        dummy.maxWind = I.wind;
+        struct ENSOEntry { const char* name; CycloneENSO id; };
+        ENSOEntry enso[] = {
+            {"El Niño",   CycloneENSO::EL_NINO},
+            {"La Niña",   CycloneENSO::LA_NINA},
+            {"Neutral",   CycloneENSO::NEUTRAL},
+            {"N/A",       CycloneENSO::NA}
+        };
 
-        wxColour c = CyclonePointColor(dummy, A);
+        wdc->DrawText("ENSO:", x, y);
+        y += boxH + pad;
 
-        dc->SetBrush(wxBrush(c));
-        dc->SetPen(*wxTRANSPARENT_PEN);
-        dc->DrawRectangle(x, y, swatch, swatch);
+        for (const auto& E : enso)
+        {
+            CyclonePoint dummy;
+            dummy.ensoPhase = E.id;   // unified field
 
-        dc->DrawText(I.name, x + textOffset, y + 2);
-        y += swatch + spacing;
+            wxColour c = CyclonePointColor(dummy, A);
+
+            wdc->SetBrush(wxBrush(c));
+            wdc->SetPen(*wxTRANSPARENT_PEN);
+
+            wdc->DrawRectangle(x, y, boxW, boxH);
+            wdc->DrawText(wxString(E.name), x + boxW + pad, y);
+
+            y += boxH + pad;
+        }
+        return;
     }
 
-    y += 10;
+	// ------------------------------------------------------------
+	// Mode 2: Intensity-based coloring (Saffir–Simpson)
+	// ------------------------------------------------------------
+	if (A.colorMode == 2)
+	{
+		struct CatEntry { const char* name; double wind; };
+		CatEntry cats[] = {
+			{"Disturbance",     10},
+			{"Depression",      25},
+			{"Tropical Storm",  50},
+			{"Category 1",      75},
+			{"Category 2",      90},
+			{"Category 3",     105},
+			{"Category 4",     125},
+			{"Category 5+",    150}
+		};
 
-    // -----------------------------------------------------------------------
-    // THICKNESS SCALE
-    // -----------------------------------------------------------------------
-    dc->DrawText("Line Thickness:", x, y);
-    y += 18;
+		wdc->DrawText("Intensity:", x, y);
+		y += boxH + pad;
 
-    double winds[] = {20, 40, 60, 80, 100, 120, 140};
+		for (const auto& C : cats)
+		{
+			CyclonePoint dummy;
+			dummy.wind = C.wind;   // unified intensity field
 
-    for (double w : winds)
+			wxColour c = CyclonePointColor(dummy, A);
+
+			wdc->SetBrush(wxBrush(c));
+			wdc->SetPen(*wxTRANSPARENT_PEN);
+
+			wdc->DrawRectangle(x, y, boxW, boxH);
+			wdc->DrawText(wxString(C.name), x + boxW + pad, y);
+
+			y += boxH + pad;
+		}
+		return;
+	}
+
+
+    // ------------------------------------------------------------
+    // Mode 3: Storm-type coloring
+    // ------------------------------------------------------------
+    if (A.colorMode == 3)
     {
-        CyclonePoint dummy;
-        dummy.maxWind = w;
+        struct TypeEntry { const char* name; CycloneState state; };
+        TypeEntry types[] = {
+            {"Tropical",      CycloneState::TROPICAL},
+            {"Subtropical",   CycloneState::SUBTROPICAL},
+            {"Extratropical", CycloneState::EXTRATROPICAL},
+            {"Wave",          CycloneState::WAVE},
+            {"Remanent",      CycloneState::REMANENT},
+            {"Unknown",       CycloneState::UNKNOWN}
+        };
 
-        float width = CycloneTrackWidth(dummy, A);
-        wxColour c = CyclonePointColor(dummy, A);
+        wdc->DrawText("Storm Type:", x, y);
+        y += boxH + pad;
 
-        dc->SetPen(wxPen(c, width));
-        dc->DrawLine(x, y + swatch/2, x + 60, y + swatch/2);
+        for (const auto& T : types)
+        {
+            CyclonePoint dummy;
+            dummy.state = T.state;
 
-        wxString label;
-        label.Printf("%d kt", (int)w);
-        dc->DrawText(label, x + 70, y + swatch/2 - 8);
+            wxColour c = CyclonePointColor(dummy, A);
 
-        y += swatch + spacing;
+            wdc->SetBrush(wxBrush(c));
+            wdc->SetPen(*wxTRANSPARENT_PEN);
+
+            wdc->DrawRectangle(x, y, boxW, boxH);
+            wdc->DrawText(wxString(T.name), x + boxW + pad, y);
+
+            y += boxH + pad;
+        }
+        return;
     }
 }
+
 
 // ========================================================
 // CycloneTimelineInterpolation
@@ -2946,36 +3543,29 @@ void ClimatologyOverlayFactory::CycloneLegend(wxDC* dc,
 //  Converts month → day‑of‑year  using NOAA climatology midpoints:
 // ========================================================
 
-bool ClimatologyOverlayFactory::CycloneTimelineInterpolation(const CyclonePoint& pt,
-                                                             const CycloneFilterParams& F,
-                                                             int currentMonth) const
+bool ClimatologyOverlayFactory::CycloneTimelineInterpolation(
+        const CyclonePoint& pt,
+        const CycloneFilterParams& F,
+        int currentMonth) const
 {
-    // Convert month → center day-of-year
-    // Uses NOAA climatology midpoints for each month
+    // NOAA climatology midpoints for each month
     static const int monthCenter[12] =
     {
-        15,   // Jan
-        46,   // Feb
-        75,   // Mar
-        105,  // Apr
-        135,  // May
-        166,  // Jun
-        196,  // Jul
-        227,  // Aug
-        258,  // Sep
-        288,  // Oct
-        319,  // Nov
-        349   // Dec
+        15, 46, 75, 105, 135, 166,
+        196, 227, 258, 288, 319, 349
     };
+
+    if (currentMonth < 1 || currentMonth > 12)
+        return false;
 
     int centerDay = monthCenter[currentMonth - 1];
 
-    // Cyclone point day-of-year
-    int d = pt.dayOfYear;
+    // Cyclone point day-of-year (unified)
+    int d = pt.time.GetDayOfYear();
 
-    // Compute absolute difference with wrap-around
+    // Absolute difference with wrap-around
     int diff = abs(d - centerDay);
-    if (diff > 183)        // wrap around year boundary
+    if (diff > 183)
         diff = 365 - diff;
 
     // Visibility window = ± daySpan/2
@@ -2986,619 +3576,117 @@ bool ClimatologyOverlayFactory::CycloneTimelineInterpolation(const CyclonePoint&
 // ============================================================================
 // CycloneVisible()
 // Determine if a cyclone track should be drawn based on filter parameters.
+// Unified version using CycloneTrack + CyclonePoint fields.
 // ============================================================================
 bool ClimatologyOverlayFactory::CycloneVisible(const CycloneTrack& track,
                                                const ClimatologyRenderParams& p) const
 {
-    // Filter by basin
-    if (!p.cycloneParams.basinFilter.empty())
+    const CycloneParams& A = p.cycloneParams;
+    const CycloneFilterParams& F = p.cycloneFilter;   // REQUIRED FIX
+
+    // -----------------------------------------------------------------------
+    // Basin filter
+    // -----------------------------------------------------------------------
+    if (!F.basinFilter.empty())
     {
-        if (p.cycloneParams.basinFilter.find(track.basin) ==
-            p.cycloneParams.basinFilter.end())
-        {
+        if (F.basinFilter.count(track.basin) == 0)
             return false;
-        }
     }
 
-    // Filter by category
-    if (!p.cycloneParams.categoryFilter.empty())
+    // -----------------------------------------------------------------------
+    // ENSO filter
+    // -----------------------------------------------------------------------
+    if (!F.ensoFilter.empty())
+    {
+        if (F.ensoFilter.count(track.ensoPhase) == 0)
+            return false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Storm-type filter (dominant state)
+    // -----------------------------------------------------------------------
+    if (!F.stateFilter.empty())
+    {
+        if (F.stateFilter.count(track.dominantState) == 0)
+            return false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Intensity filter (track-level maxWind)
+    // -----------------------------------------------------------------------
+    if (F.windMin > 0 || F.windMax > 0)
+    {
+        double w = track.maxWind;
+
+        if (F.windMin > 0 && w < F.windMin)
+            return false;
+
+        if (F.windMax > 0 && w > F.windMax)
+            return false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Pressure filter (track-level minPressure)
+    // -----------------------------------------------------------------------
+    if (F.pressureMin > 0 || F.pressureMax > 0)
+    {
+        double pmin = track.minPressure;
+
+        if (F.pressureMin > 0 && pmin < F.pressureMin)
+            return false;
+
+        if (F.pressureMax > 0 && pmin > F.pressureMax)
+            return false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Month filter (point-level)
+    // -----------------------------------------------------------------------
+    if (!F.monthFilter.empty())
     {
         bool anyMatch = false;
+
         for (const CyclonePoint& pt : track.points)
         {
-            if (p.cycloneParams.categoryFilter.count(pt.category))
+            int m = pt.time.GetMonth() + 1;   // wxDateTime: 0=Jan
+            if (F.monthFilter.count(m))
             {
                 anyMatch = true;
                 break;
             }
         }
+
         if (!anyMatch)
             return false;
     }
 
-    // Filter by month
-    if (!p.cycloneParams.monthFilter.empty())
+    // -----------------------------------------------------------------------
+    // Filter by year range (point-level)
+    // -----------------------------------------------------------------------
+    if (F.yearMin > 0 || F.yearMax > 0)
     {
         bool anyMatch = false;
+
         for (const CyclonePoint& pt : track.points)
         {
-            if (p.cycloneParams.monthFilter.count(pt.month))
+            int y = pt.time.GetYear();
+
+            if ((F.yearMin <= 0 || y >= F.yearMin) &&
+                (F.yearMax <= 0 || y <= F.yearMax))
             {
                 anyMatch = true;
                 break;
             }
         }
+
         if (!anyMatch)
             return false;
     }
 
-    // Filter by year range
-    if (p.cycloneParams.yearMin > 0 || p.cycloneParams.yearMax > 0)
-    {
-        bool anyMatch = false;
-        for (const CyclonePoint& pt : track.points)
-        {
-            if ((p.cycloneParams.yearMin <= 0 ||
-                 pt.year >= p.cycloneParams.yearMin) &&
-                (p.cycloneParams.yearMax <= 0 ||
-                 pt.year <= p.cycloneParams.yearMax))
-            {
-                anyMatch = true;
-                break;
-            }
-        }
-        if (!anyMatch)
-            return false;
-    }
-
+    // -----------------------------------------------------------------------
+    // Passed all filters
+    // -----------------------------------------------------------------------
     return true;
-}
-
-
-// ============================================================================
-// CycloneColor()
-// Determine cyclone track color based on category or user override.
-// ============================================================================
-wxColour ClimatologyOverlayFactory::CycloneColor(const CycloneTrack& track,
-                                                 const ClimatologyRenderParams& p) const
-{
-    // User override color
-    if (p.cycloneParams.useFixedColor)
-        return p.cycloneParams.fixedColor;
-
-    // Category-based color
-    int maxCat = 0;
-    for (const CyclonePoint& pt : track.points)
-        maxCat = std::max(maxCat, pt.category);
-
-    switch (maxCat)
-    {
-        case 1: return wxColour(0,   200, 0);     // TS / Cat 1
-        case 2: return wxColour(255, 255, 0);     // Cat 2
-        case 3: return wxColour(255, 165, 0);     // Cat 3
-        case 4: return wxColour(255, 100, 0);     // Cat 4
-        case 5: return wxColour(255, 0,   0);     // Cat 5
-        default: return wxColour(180, 180, 180);  // Unknown / TD
-    }
-}
-
-// ============================================================================
-// LoadENSODataFromCSV()
-// Load ENSO index values from a CSV file.
-// ============================================================================
-bool ClimatologyOverlayFactory::LoadENSODataFromCSV(const wxString& filename)
-{
-    wxFileName fn(m_dataDir, filename);
-    if (!fn.FileExists())
-        return false;
-
-    wxTextFile tf(fn.GetFullPath());
-    if (!tf.Open())
-        return false;
-
-    m_enso.clear();
-
-    for (wxString line = tf.GetFirstLine();
-         !tf.Eof();
-         line = tf.GetNextLine())
-    {
-        if (line.IsEmpty())
-            continue;
-
-        wxArrayString parts = wxStringTokenize(line, ",");
-        if (parts.size() < 3)
-            continue;
-
-        ENSORecord rec;
-        rec.year  = wxAtoi(parts[0]);
-        rec.month = wxAtoi(parts[1]);
-        rec.value = wxAtof(parts[2]);
-
-        m_enso.push_back(rec);
-    }
-
-    return !m_enso.empty();
-}
-
-/*    See earlier version above
-
-// ============================================================================
-// getCurValue()
-// Unified accessor for scalar or vector values using NOAA grid model.
-// ============================================================================
-double ClimatologyOverlayFactory::getCurValue(Coord c,
-                                              int setting,
-                                              double lat,
-                                              double lon,
-                                              const ClimatologyRenderParams& p)
-{
-    // Determine month interpolation
-    int m1 = p.cyclone.currentMonth;
-    int m2 = p.cyclone.nextMonth;
-    double dpos = p.cyclone.monthInterpolation;
-
-    // Sea depth is non-monthly
-    if (setting == OVERLAY_SEA_DEPTH)
-    {
-        m1 = 0;
-        m2 = 0;
-        dpos = 1.0;
-    }
-
-    // Clamp interpolation
-    if (dpos >= 1.0)
-    {
-        m2 = m1;
-        dpos = 1.0;
-    }
-
-    // Retrieve monthly values
-    double v1 = getValueMonth(c, setting, lat, lon, m1);
-    double v2 = getValueMonth(c, setting, lat, lon, m2);
-
-    if (std::isnan(v1) || std::isnan(v2))
-        return NAN;
-
-    // Linear interpolation
-    return v1 * (1.0 - dpos) + v2 * dpos;
-}
-
-// ============================================================================
-// getValueMonth()
-// Retrieve a scalar or vector magnitude from the unified NOAA grid.
-// ============================================================================
-double ClimatologyOverlayFactory::getValueMonth(Coord c,
-                                                int setting,
-                                                double lat,
-                                                double lon,
-                                                int month)
-{
-    // Validate month
-    if (month < 0 || month >= 12)
-        return NAN;
-
-    // Retrieve grid for this setting/month
-    ClimatologyOverlay& O = m_pOverlay[month][setting];
-
-    if (!O.m_valid)
-        return NAN;
-
-    // Convert lat/lon to grid indices
-    double gx = (lon - O.lon_min) / O.lon_step;
-    double gy = (lat - O.lat_min) / O.lat_step;
-
-    int ix = (int)floor(gx);
-    int iy = (int)floor(gy);
-
-    if (ix < 0 || iy < 0 ||
-        ix + 1 >= O.lon_count ||
-        iy + 1 >= O.lat_count)
-    {
-        return NAN;
-    }
-
-    // Bilinear interpolation
-    double dx = gx - ix;
-    double dy = gy - iy;
-
-    double v00 = O.value(ix,     iy);
-    double v10 = O.value(ix + 1, iy);
-    double v01 = O.value(ix,     iy + 1);
-    double v11 = O.value(ix + 1, iy + 1);
-
-    if (std::isnan(v00) || std::isnan(v10) ||
-        std::isnan(v01) || std::isnan(v11))
-    {
-        return NAN;
-    }
-
-    double v0 = v00 * (1.0 - dx) + v10 * dx;
-    double v1 = v01 * (1.0 - dx) + v11 * dx;
-
-    double v = v0 * (1.0 - dy) + v1 * dy;
-
-    // Vector magnitude mode
-    if (c == MAG && (setting == OVERLAY_WIND || setting == OVERLAY_CURRENT))
-    {
-        // Retrieve U/V components
-        double u = getValueMonth(U, setting, lat, lon, month);
-        double v2 = getValueMonth(V, setting, lat, lon, month);
-
-        if (std::isnan(u) || std::isnan(v2))
-            return NAN;
-
-        return hypot(u, v2);
-    }
-
-    return v;
-}
-
-*/
-
-// ============================================================================
-// ColorMap()
-// Convert a scalar value into an RGB color for the overlay.
-// ============================================================================
-void ClimatologyOverlayFactory::ColorMap(int setting,
-                                         double v,
-                                         unsigned char& r,
-                                         unsigned char& g,
-                                         unsigned char& b)
-{
-    // Clamp negative values
-    if (v < 0)
-        v = 0;
-
-    // Select color scale based on overlay type
-    switch (setting)
-    {
-        case OVERLAY_AIR_TEMP:
-        {
-            // Temperature scale: blue → red
-            double t = wxClip(v, -20.0, 40.0);   // Celsius range
-            double f = (t + 20.0) / 60.0;        // Normalize 0–1
-
-            r = (unsigned char)(255.0 * f);
-            g = (unsigned char)(128.0 * (1.0 - f));
-            b = (unsigned char)(255.0 * (1.0 - f));
-            break;
-        }
-
-        case OVERLAY_SEA_TEMP:
-        {
-            // Sea temperature: cyan → red
-            double t = wxClip(v, 0.0, 35.0);
-            double f = t / 35.0;
-
-            r = (unsigned char)(255.0 * f);
-            g = (unsigned char)(255.0 * (1.0 - f));
-            b = (unsigned char)(255.0 * (1.0 - f));
-            break;
-        }
-
-        case OVERLAY_PRECIPITATION:
-        {
-            // Rainfall: white → blue
-            double f = wxClip(v / 300.0, 0.0, 1.0);
-
-            r = (unsigned char)(255.0 * (1.0 - f));
-            g = (unsigned char)(255.0 * (1.0 - f));
-            b = (unsigned char)(255.0);
-            break;
-        }
-
-        case OVERLAY_CLOUD:
-        {
-            // Cloud cover: white → gray → black
-            double f = wxClip(v / 100.0, 0.0, 1.0);
-
-            unsigned char c = (unsigned char)(255.0 * (1.0 - f));
-            r = g = b = c;
-            break;
-        }
-
-        case OVERLAY_WIND:
-        case OVERLAY_CURRENT:
-        {
-            // Magnitude scale: green → yellow → red
-            double f = wxClip(v / 50.0, 0.0, 1.0);
-
-            if (f < 0.5)
-            {
-                // Green → Yellow
-                double t = f * 2.0;
-                r = (unsigned char)(255.0 * t);
-                g = 255;
-                b = 0;
-            }
-            else
-            {
-                // Yellow → Red
-                double t = (f - 0.5) * 2.0;
-                r = 255;
-                g = (unsigned char)(255.0 * (1.0 - t));
-                b = 0;
-            }
-            break;
-        }
-
-        case OVERLAY_SEA_DEPTH:
-        {
-            // Depth: light tan → dark brown
-            double f = wxClip(v / 6000.0, 0.0, 1.0);
-
-            r = (unsigned char)(210.0 * (1.0 - f));
-            g = (unsigned char)(180.0 * (1.0 - f));
-            b = (unsigned char)(140.0 * (1.0 - f));
-            break;
-        }
-
-        default:
-        {
-            // Fallback grayscale
-            unsigned char c = (unsigned char)wxClip(v, 0.0, 255.0);
-            r = g = b = c;
-            break;
-        }
-    }
-}
-
-
-// ============================================================================
-// GetOverlayMap()
-// Retrieve overlay grid for a given setting/month.
-// ============================================================================
-ClimatologyOverlay&
-ClimatologyOverlayFactory::GetOverlayMap(int setting, int month)
-{
-    // Validate month
-    if (month < 0 || month >= 12)
-        month = 0;
-
-    // Validate setting
-    if (setting < 0 || setting >= OVERLAY_COUNT)
-        setting = 0;
-
-    return m_pOverlay[month][setting];
-}
-
-/
-// ============================================================================
-// GetWindDir()
-// Compute wind direction (degrees true) from U/V components.
-// ============================================================================
-double ClimatologyOverlayFactory::GetWindDir(const ClimatologyRenderParams& p,
-                                             double lat,
-                                             double lon)
-{
-    // Retrieve U/V components
-    double u = GetOverlayValue(OVERLAY_WIND_U, p, lat, lon);
-    double v = GetOverlayValue(OVERLAY_WIND_V, p, lat, lon);
-
-    if (std::isnan(u) || std::isnan(v))
-        return NAN;
-
-    // Meteorological convention:
-    // Direction wind is *coming from*, measured clockwise from north.
-    //
-    // atan2 returns angle of vector (u east, v north),
-    // but meteorology uses opposite sign and 0° = north.
-    double dir = atan2(-u, -v) * 180.0 / M_PI;
-
-    if (dir < 0)
-        dir += 360.0;
-
-    return dir;
-}
-
-// ============================================================================
-// GetWindSpeed()
-// Compute wind speed magnitude from U/V components.
-// ============================================================================
-double ClimatologyOverlayFactory::GetWindSpeed(const ClimatologyRenderParams& p,
-                                               double lat,
-                                               double lon)
-{
-    // Retrieve U/V components
-    double u = GetOverlayValue(OVERLAY_WIND_U, p, lat, lon);
-    double v = GetOverlayValue(OVERLAY_WIND_V, p, lat, lon);
-
-    if (std::isnan(u) || std::isnan(v))
-        return NAN;
-
-    // Magnitude (m/s)
-    return hypot(u, v);
-}
-
-// ============================================================================
-// GetCurrentDir()
-// Compute ocean current direction (degrees true) from U/V components.
-// ============================================================================
-double ClimatologyOverlayFactory::GetCurrentDir(const ClimatologyRenderParams& p,
-                                                double lat,
-                                                double lon)
-{
-    // Retrieve U/V components
-    double u = GetOverlayValue(OVERLAY_CURRENT_U, p, lat, lon);
-    double v = GetOverlayValue(OVERLAY_CURRENT_V, p, lat, lon);
-
-    if (std::isnan(u) || std::isnan(v))
-        return NAN;
-
-    // Oceanographic convention:
-    // Direction current is *flowing toward*, measured clockwise from north.
-    //
-    // atan2(v, u) gives direction of vector (u east, v north),
-    // convert to degrees true.
-    double dir = atan2(u, v) * 180.0 / M_PI;
-
-    if (dir < 0)
-        dir += 360.0;
-
-    return dir;
-}
-
-// ============================================================================
-// GetCurrentSpeed()
-// Compute ocean current speed magnitude from U/V components.
-// ============================================================================
-double ClimatologyOverlayFactory::GetCurrentSpeed(const ClimatologyRenderParams& p,
-                                                  double lat,
-                                                  double lon)
-{
-    // Retrieve U/V components
-    double u = GetOverlayValue(OVERLAY_CURRENT_U, p, lat, lon);
-    double v = GetOverlayValue(OVERLAY_CURRENT_V, p, lat, lon);
-
-    if (std::isnan(u) || std::isnan(v))
-        return NAN;
-
-    // Magnitude (m/s)
-    return hypot(u, v);
-}
-
-// ============================================================================
-// GetPressure()
-// Retrieve sea-level pressure (hPa) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetPressure(const ClimatologyRenderParams& p,
-                                              double lat,
-                                              double lon)
-{
-    // Pressure is stored in OVERLAY_PRESSURE
-    double p = GetOverlayValue(OVERLAY_PRESSURE, p, lat, lon);
-
-    if (std::isnan(p))
-        return NAN;
-
-    // NOAA dataset stores pressure in Pa; convert to hPa
-    return p * 0.01;
-}
-
-// ============================================================================
-// GetAirTemp()
-// Retrieve air temperature (°C) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetAirTemp(const ClimatologyRenderParams& p,
-                                             double lat,
-                                             double lon)
-{
-    // Air temperature stored in OVERLAY_AIR_TEMP
-    double t = GetOverlayValue(OVERLAY_AIR_TEMP, p, lat, lon);
-
-    if (std::isnan(t))
-        return NAN;
-
-    // NOAA dataset stores temperature in Kelvin; convert to Celsius
-    return t - 273.15;
-}
-
-// ============================================================================
-// GetSeaTemp()
-// Retrieve sea-surface temperature (°C) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetSeaTemp(const ClimatologyRenderParams& p,
-                                             double lat,
-                                             double lon)
-{
-    // Sea temperature stored in OVERLAY_SEA_TEMP
-    double t = GetOverlayValue(OVERLAY_SEA_TEMP, p, lat, lon);
-
-    if (std::isnan(t))
-        return NAN;
-
-    // NOAA dataset stores SST in Kelvin; convert to Celsius
-    return t - 273.15;
-}
-
-
-// ============================================================================
-// GetCloudCover()
-// Retrieve cloud cover (%) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetCloudCover(const ClimatologyRenderParams& p,
-                                                double lat,
-                                                double lon)
-{
-    // Cloud cover stored in OVERLAY_CLOUD
-    double c = GetOverlayValue(OVERLAY_CLOUD, p, lat, lon);
-
-    if (std::isnan(c))
-        return NAN;
-
-    // NOAA dataset stores cloud fraction 0–1; convert to percent
-    return c * 100.0;
-}
-
-
-// ============================================================================
-// GetPrecipitation()
-// Retrieve precipitation (mm/month) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetPrecipitation(const ClimatologyRenderParams& p,
-                                                   double lat,
-                                                   double lon)
-{
-    // Precipitation stored in OVERLAY_PRECIPITATION
-    double p = GetOverlayValue(OVERLAY_PRECIPITATION, p, lat, lon);
-
-    if (std::isnan(p))
-        return NAN;
-
-    // NOAA dataset stores precipitation in kg/m^2/s (equivalent to mm/s)
-    // Convert to mm/month
-    //
-    // Seconds per month (approx): 30 days
-    const double secondsPerMonth = 30.0 * 24.0 * 3600.0;
-
-    return p * secondsPerMonth;
-}
-
-// ============================================================================
-// GetSeaDepth()
-// Retrieve bathymetry (meters) from overlay grid.
-// ============================================================================
-double ClimatologyOverlayFactory::GetSeaDepth(double lat, double lon)
-{
-    // Sea depth is stored in OVERLAY_SEA_DEPTH, month index always 0
-    ClimatologyOverlay& O = m_pOverlay[0][OVERLAY_SEA_DEPTH];
-
-    if (!O.m_valid)
-        return NAN;
-
-    // Convert lat/lon to grid indices
-    double gx = (lon - O.lon_min) / O.lon_step;
-    double gy = (lat - O.lat_min) / O.lat_step;
-
-    int ix = (int)floor(gx);
-    int iy = (int)floor(gy);
-
-    if (ix < 0 || iy < 0 ||
-        ix + 1 >= O.lon_count ||
-        iy + 1 >= O.lat_count)
-    {
-        return NAN;
-    }
-
-    // Bilinear interpolation
-    double dx = gx - ix;
-    double dy = gy - iy;
-
-    double v00 = O.value(ix,     iy);
-    double v10 = O.value(ix + 1, iy);
-    double v01 = O.value(ix,     iy + 1);
-    double v11 = O.value(ix + 1, iy + 1);
-
-    if (std::isnan(v00) || std::isnan(v10) ||
-        std::isnan(v01) || std::isnan(v11))
-    {
-        return NAN;
-    }
-
-    double v0 = v00 * (1.0 - dx) + v10 * dx;
-    double v1 = v01 * (1.0 - dx) + v11 * dx;
-
-    return v0 * (1.0 - dy) + v1 * dy;
 }
 
 
@@ -3608,55 +3696,29 @@ double ClimatologyOverlayFactory::GetSeaDepth(double lat, double lon)
 // ============================================================================
 double ClimatologyOverlayFactory::GetENSOIndex(int year, int month)
 {
-    // Validate month
-    if (month < 0 || month >= 12)
+    if (month < 1 || month > 12)
         return NAN;
 
-    // ENSO dataset stored in m_ENSOIndex[year][month]
-    auto it = m_ENSOIndex.find(year);
-    if (it == m_ENSOIndex.end())
+    auto it = m_ensoData.find(year);
+    if (it == m_ensoData.end())
         return NAN;
 
-    const std::vector<double>& v = it->second;
-    if ((int)v.size() <= month)
+    auto it2 = it->second.find(month);
+    if (it2 == it->second.end())
         return NAN;
 
-    double e = v[month];
-    if (std::isnan(e))
-        return NAN;
+    CycloneENSO e = it2->second;
 
-    return e;
+    switch (e)
+    {
+        case CycloneENSO::EL_NINO: return 1.0;
+        case CycloneENSO::LA_NINA: return -1.0;
+        case CycloneENSO::NEUTRAL: return 0.0;
+		case CycloneENSO::NA: return 0.0;
+        default: return NAN;
+    }
 }
 
-// ============================================================================
-// GetCycloneData()
-// Retrieve cyclone metadata for a given year/month.
-// Returns true if data exists.
-// ============================================================================
-bool ClimatologyOverlayFactory::GetCycloneData(int year,
-                                               int month,
-                                               CycloneData& out)
-{
-    // Validate month
-    if (month < 0 || month >= 12)
-        return false;
-
-    // Cyclone dataset stored in m_Cyclones[year][month]
-    auto it = m_Cyclones.find(year);
-    if (it == m_Cyclones.end())
-        return false;
-
-    const std::vector<CycloneData>& v = it->second;
-    if ((int)v.size() <= month)
-        return false;
-
-    const CycloneData& c = v[month];
-    if (!c.valid)
-        return false;
-
-    out = c;
-    return true;
-}
 
 // ============================================================================
 // GetCycloneTrack()
@@ -3664,36 +3726,36 @@ bool ClimatologyOverlayFactory::GetCycloneData(int year,
 // Returns true if track exists.
 // ============================================================================
 bool ClimatologyOverlayFactory::GetCycloneTrack(int id,
-                                                CycloneTrack& out)
+                                                CycloneTrack& out) const
 {
-    // Cyclone tracks stored in m_CycloneTracks[id]
-    auto it = m_CycloneTracks.find(id);
-    if (it == m_CycloneTracks.end())
-        return false;
+auto it = m_cycloneData.idToIndex.find(id);
+if (it == m_cycloneData.idToIndex.end())
+    return false;
 
-    const CycloneTrack& t = it->second;
-    if (!t.valid || t.points.empty())
-        return false;
+const CycloneTrack& t = m_cycloneData.tracks[it->second];
+if (!t.valid || t.points.empty())
+    return false;
 
-    out = t;
-    return true;
+out = t;
+return true;
+
 }
 
+
 // ============================================================================
-// GetCyclonePoint()
+// GetCyclonePoint
 // Retrieve a single cyclone track point by cyclone ID and point index.
 // Returns true if the point exists.
 // ============================================================================
 bool ClimatologyOverlayFactory::GetCyclonePoint(int id,
                                                 int index,
-                                                CyclonePoint& out)
+                                                CyclonePoint& out) const
 {
-    // Cyclone tracks stored in m_CycloneTracks[id]
-    auto it = m_CycloneTracks.find(id);
-    if (it == m_CycloneTracks.end())
+    auto it = m_cycloneData.idToIndex.find(id);
+    if (it == m_cycloneData.idToIndex.end())
         return false;
 
-    const CycloneTrack& t = it->second;
+    const CycloneTrack& t = m_cycloneData.tracks[it->second];
     if (!t.valid || index < 0 || index >= (int)t.points.size())
         return false;
 
@@ -3703,47 +3765,80 @@ bool ClimatologyOverlayFactory::GetCyclonePoint(int id,
 
 
 // ============================================================================
-// GetStormCursorData()
-// Retrieve storm (cyclone) data nearest to a given lat/lon cursor position.
-// Returns true if a storm point is found within search radius.
+// GetCycloneData()
+// Retrieve cyclone metadata for a given year/month.
+// Returns true if data exists.
 // ============================================================================
-bool ClimatologyOverlayFactory::GetStormCursorData(double lat,
-                                                   double lon,
-                                                   StormCursorData& out)
+
+bool ClimatologyOverlayFactory::GetCycloneData(int year,
+                                               int month,
+                                               std::vector<CyclonePoint>& out) const
 {
-    const double searchRadiusDeg = 1.0; // ~60 nm radius
+    out.clear();
 
-    bool found = false;
-    double bestDist = 1e9;
+    auto it = m_cycloneData.yearToTracks.find(year);
+    if (it == m_cycloneData.yearToTracks.end())
+        return false;
 
-    // Iterate all cyclone tracks
-    for (const auto& kv : m_CycloneTracks)
+    const std::vector<int>& trackIndices = it->second;
+
+    for (int idx : trackIndices)
     {
-        const CycloneTrack& track = kv.second;
-        if (!track.valid)
+        if (idx < 0 || idx >= (int)m_cycloneData.tracks.size())
             continue;
 
-        // Iterate all points in track
-        for (const CyclonePoint& p : track.points)
-        {
-            double dlat = lat - p.lat;
-            double dlon = lon - p.lon;
-            double dist = sqrt(dlat*dlat + dlon*dlon);
+        const CycloneTrack& track = m_cycloneData.tracks[idx];
 
-            if (dist < searchRadiusDeg && dist < bestDist)
+        for (const CyclonePoint& pt : track.points)
+        {
+            if (pt.time.GetMonth() + 1 == month)
+                out.push_back(pt);
+        }
+    }
+
+    return !out.empty();
+}
+
+
+// ============================================================================
+// GetStormCursorData()
+// Find the nearest cyclone track + point to the cursor lat/lon.
+// Returns true if a point is within threshold pixels.
+// ============================================================================
+bool ClimatologyOverlayFactory::GetStormCursorData(
+        double lat,
+        double lon,
+        CycloneTrack& outTrack,
+        CyclonePoint& outPoint) const
+{
+    if (m_cyclone_cache.empty())
+        return false;
+
+    // Convert cursor lat/lon → pixel
+    double cx, cy;
+    LatLonToPixel(m_vp, lat, lon, cx, cy);
+
+    const double thresholdPx = 12.0;
+    double bestDist = 1e9;
+    bool found = false;
+
+    for (const CycloneTrack& track : m_cyclone_cache)
+    {
+        for (const CyclonePoint& pt : track.points)
+        {
+            double px, py;
+            LatLonToPixel(m_vp, pt.lat, pt.lon, px, py);
+
+            double dx = px - cx;
+            double dy = py - cy;
+            double dist = std::sqrt(dx*dx + dy*dy);
+
+            if (dist < thresholdPx && dist < bestDist)
             {
                 bestDist = dist;
+                outTrack = track;
+                outPoint = pt;
                 found = true;
-
-                out.id       = kv.first;
-                out.lat      = p.lat;
-                out.lon      = p.lon;
-                out.wind     = p.wind;
-                out.pressure = p.pressure;
-                out.year     = p.year;
-                out.month    = p.month;
-                out.day      = p.day;
-                out.hour     = p.hour;
             }
         }
     }
@@ -3751,19 +3846,21 @@ bool ClimatologyOverlayFactory::GetStormCursorData(double lat,
     return found;
 }
 
+
 // ============================================================================
-// GetStormHistory()
+// GetStormHistory
 // Retrieve all historical storm points for a given storm ID.
 // Returns true if history exists.
 // ============================================================================
-bool ClimatologyOverlayFactory::GetStormHistory(int id,
-                                                std::vector<CyclonePoint>& out)
+bool ClimatologyOverlayFactory::GetStormHistory(
+        int id,
+        std::vector<CyclonePoint>& out)
 {
-    auto it = m_CycloneTracks.find(id);
-    if (it == m_CycloneTracks.end())
+    auto it = m_cycloneData.idToIndex.find(id);
+    if (it == m_cycloneData.idToIndex.end())
         return false;
 
-    const CycloneTrack& track = it->second;
+    const CycloneTrack& track = m_cycloneData.tracks[it->second];
     if (!track.valid || track.points.empty())
         return false;
 
@@ -3771,20 +3868,22 @@ bool ClimatologyOverlayFactory::GetStormHistory(int id,
     return true;
 }
 
+
 // ============================================================================
-// GetStormHistoryPoint()
+// GetStormHistoryPoint
 // Retrieve a single historical storm point by storm ID and index.
 // Returns true if the point exists.
 // ============================================================================
-bool ClimatologyOverlayFactory::GetStormHistoryPoint(int id,
-                                                     int index,
-                                                     CyclonePoint& out)
+bool ClimatologyOverlayFactory::GetStormHistoryPoint(
+        int id,
+        int index,
+        CyclonePoint& out)
 {
-    auto it = m_CycloneTracks.find(id);
-    if (it == m_CycloneTracks.end())
+    auto it = m_cycloneData.idToIndex.find(id);
+    if (it == m_cycloneData.idToIndex.end())
         return false;
 
-    const CycloneTrack& track = it->second;
+    const CycloneTrack& track = m_cycloneData.tracks[it->second];
     if (!track.valid || index < 0 || index >= (int)track.points.size())
         return false;
 
@@ -3792,25 +3891,26 @@ bool ClimatologyOverlayFactory::GetStormHistoryPoint(int id,
     return true;
 }
 
+
 // ============================================================================
 // GetStormCategory()
 // Compute Saffir–Simpson hurricane category from sustained wind speed (kt).
 // Returns category 0–5.
 // ============================================================================
-int ClimatologyOverlayFactory::GetStormCategory(double wind_kt)
+int ClimatologyOverlayFactory::GetStormCategory(double wind)
 {
-    if (std::isnan(wind_kt))
+    if (std::isnan(wind))
         return 0;
 
-    // Saffir–Simpson scale (approximate thresholds)
-    if (wind_kt >= 137) return 5;
-    if (wind_kt >= 113) return 4;
-    if (wind_kt >= 96)  return 3;
-    if (wind_kt >= 83)  return 2;
-    if (wind_kt >= 64)  return 1;
+    if (wind >= 137) return 5;
+    if (wind >= 113) return 4;
+    if (wind >= 96)  return 3;
+    if (wind >= 83)  return 2;
+    if (wind >= 64)  return 1;
 
     return 0;
 }
+
 
 // ============================================================================
 // GetStormColor()
@@ -3820,18 +3920,21 @@ wxColour ClimatologyOverlayFactory::GetStormColor(int category)
 {
     switch (category)
     {
-    case 5: return wxColour(255, 0, 0);       // Extreme
-    case 4: return wxColour(255, 64, 0);      // Very strong
-    case 3: return wxColour(255, 128, 0);     // Strong
-    case 2: return wxColour(255, 192, 0);     // Moderate
-    case 1: return wxColour(255, 255, 0);     // Weak
-    default: return wxColour(160, 160, 160);  // Tropical depression / none
+    case 5: return wxColour(160, 0, 0);
+    case 4: return wxColour(200, 40, 40);
+    case 3: return wxColour(255, 80, 80);
+    case 2: return wxColour(255, 120, 80);
+    case 1: return wxColour(255, 160, 80);
+    default: return wxColour(180, 180, 180);
     }
 }
+
 
 // ============================================================================
 // GetStormSymbol()
 // Return a wxBitmap symbol for a storm category.
+// Ensure bitmap set matches: Cat 1 orange, Cat 2 deeper orange, Cat 3 red-orange
+// Cat 4 red,  Cat 5 dark red,  TD gray
 // ============================================================================
 wxBitmap ClimatologyOverlayFactory::GetStormSymbol(int category)
 {
@@ -3865,21 +3968,48 @@ wxString ClimatologyOverlayFactory::GetStormLabel(int category)
 
 // ============================================================================
 // GetStormTooltip()
-// Build a detailed tooltip string for a storm point.
+// Modern tooltip for CycloneTrack + CyclonePoint
 // ============================================================================
-wxString ClimatologyOverlayFactory::GetStormTooltip(const CyclonePoint& p)
+wxString ClimatologyOverlayFactory::GetStormTooltip(
+        const CycloneTrack& track,
+        const CyclonePoint& pt) const
 {
     wxString s;
 
-    s << wxString::Format("Storm ID: %d\n", p.id);
-    s << wxString::Format("Date: %04d-%02d-%02d %02d:00\n",
-                          p.year, p.month, p.day, p.hour);
-    s << wxString::Format("Position: %.2f°, %.2f°\n", p.lat, p.lon);
-    s << wxString::Format("Wind: %.0f kt\n", p.wind);
-    s << wxString::Format("Pressure: %.0f hPa\n", p.pressure);
+    // ------------------------------------------------------------
+    // Track-level metadata
+    // ------------------------------------------------------------
+    s += wxString::Format("Cyclone Track ID: %d\n", track.id);
 
-    int cat = GetStormCategory(p.wind);
-    s << wxString::Format("Category: %s\n", GetStormLabel(cat));
+    s += wxString::Format("Basin: %s\n",
+        BasinToString(track.basin));
+
+    s += wxString::Format("ENSO: %s\n",
+        ENSOToString(track.ensoPhase));
+
+    s += wxString::Format("Max Wind: %.1f kt\n", track.maxWind);
+    s += wxString::Format("Min Pressure: %.1f hPa\n", track.minPressure);
+
+    // ------------------------------------------------------------
+    // Point-level metadata
+    // ------------------------------------------------------------
+    s += "\nPoint Details:\n";
+
+    s += wxString::Format("Date: %s\n",
+        pt.time.FormatISODate());
+
+    s += wxString::Format("Lat/Lon: %.2f°, %.2f°\n",
+        pt.lat, pt.lon);
+
+    s += wxString::Format("Wind: %.1f kt\n", pt.wind);
+    s += wxString::Format("Pressure: %.1f hPa\n", pt.pressure);
+
+    s += wxString::Format("State: %s\n",
+        CycloneStateToString(pt.state));
+
+    s += wxString::Format("Point ENSO: %s\n",
+		ENSOToString(pt.ensoPhase));
+
 
     return s;
 }
@@ -3912,33 +4042,30 @@ wxString ClimatologyOverlayFactory::GetStormIntensityText(double wind_kt)
 
 // ============================================================================
 // GetOverlay()
-// High‑level accessor for retrieving the active overlay grid for a given
+// High level accessor for retrieving the active overlay grid for a given
 // climatology type. Uses the current month from ClimatologyRenderParams.
 // Returns nullptr if the overlay is invalid or out of range.
 // ============================================================================
-
-
 ClimatologyOverlay*
 ClimatologyOverlayFactory::GetOverlay(OverlayType type,
                                       const ClimatologyRenderParams& p)
 {
-    int month = p.cyclone.currentMonth;
+    const int month = p.currentMonth;
 
     if (month < 0 || month >= 12)
         return nullptr;
 
-    if (type < 0 || type >= OVERLAY_COUNT)
+    if (type < 0 || type >= NUM_OVERLAYS)
         return nullptr;
 
     ClimatologyOverlay& O = m_pOverlay[month][type];
-    return O.m_valid ? &O : nullptr;
+    return (O.m_valid ? &O : nullptr);
 }
-
 
 
 // ============================================================================
 // GetOverlay() const
-// Low‑level accessor for retrieving the overlay grid for a specific month.
+// Low level accessor for retrieving the overlay grid for a specific month.
 // Does not perform interpolation or rendering logic. Caller must validate
 // month_index and overlay validity.
 // ============================================================================
@@ -3946,95 +4073,195 @@ const ClimatologyOverlay*
 ClimatologyOverlayFactory::GetOverlay(OverlayType type,
                                       const ClimatologyRenderParams& p) const
 {
-    int month = p.cyclone.currentMonth;
+    const int month = p.currentMonth;
 
     if (month < 0 || month >= 12)
         return nullptr;
 
-    if (type < 0 || type >= OVERLAY_COUNT)
+    if (type < 0 || type >= NUM_OVERLAYS)
         return nullptr;
 
     const ClimatologyOverlay& O = m_pOverlay[month][type];
-    return O.m_valid ? &O : nullptr;
+    return (O.m_valid ? &O : nullptr);
 }
 
 
-
 // ============================================================================
-// GetOverlayValue()
-// Retrieve overlay value for a given type/month at lat/lon.
-// Performs bounds checking and delegates to bilinear interpolation.
+// NormalizeOverlay()
+// Modern normalization: safe, clamped, unified grid compatible.
 // ============================================================================
-double ClimatologyOverlayFactory::GetOverlayValue(OverlayType type,
-                                                  const ClimatologyRenderParams& p,
-                                                  double lat,
-                                                  double lon)
+bool ClimatologyOverlayFactory::NormalizeOverlay(ClimatologyOverlay& O,
+                                                 double vmin,
+                                                 double vmax)
 {
-    if (type < 0 || type >= OVERLAY_COUNT)
-        return NAN;
+    if (!O.m_valid || vmax <= vmin)
+        return false;
 
-    int month = p.cyclone.currentMonth;
-    if (month < 0 || month >= 12)
-        return NAN;
+    const double range = vmax - vmin;
+    const double scale = (range > 0.0) ? (1.0 / range) : 1.0;
 
-    ClimatologyOverlay& O = m_pOverlay[month][type];
-    if (!O.m_valid)
-        return NAN;
-
-    if (lat < O.lat_min || lat > O.lat_max ||
-        lon < O.lon_min || lon > O.lon_max)
+    for (int iy = 0; iy < O.lat_count; iy++)
     {
-        return NAN;
+        for (int ix = 0; ix < O.lon_count; ix++)
+        {
+            double v = O.value(ix, iy);
+            if (std::isnan(v))
+                continue;
+
+            double nv = (v - vmin) * scale;
+
+            if (nv < 0.0) nv = 0.0;
+            if (nv > 1.0) nv = 1.0;
+
+            O.setValue(ix, iy, nv);
+        }
     }
 
-    return GetOverlayValueBilinear(O, lat, lon);
+    return true;
 }
 
-
 // ============================================================================
-// GetOverlayValueBilinear()
-// Bilinear interpolation of overlay grid values at lat/lon.
+// NormalizeAllOverlays()
+// Normalize every overlay (all months, all types) to 0–1 range.
+// Modern version: normalize all overlays using their own min/max.
 // ============================================================================
-double ClimatologyOverlayFactory::GetOverlayValueBilinear(const ClimatologyOverlay& O,
-                                                          double lat,
-                                                          double lon)
+void ClimatologyOverlayFactory::NormalizeAllOverlays()
 {
-    // Convert lat/lon to grid coordinates
-    double gx = (lon - O.lon_min) / O.lon_step;
-    double gy = (lat - O.lat_min) / O.lat_step;
-
-    int ix = (int)floor(gx);
-    int iy = (int)floor(gy);
-
-    // Bounds check
-    if (ix < 0 || iy < 0 ||
-        ix + 1 >= O.lon_count ||
-        iy + 1 >= O.lat_count)
+    for (int month = 0; month < 12; month++)
     {
-        return NAN;
+        for (int type = 0; type < NUM_OVERLAYS; type++)
+        {
+            ClimatologyOverlay& O = m_pOverlay[month][type];
+            if (!O.m_valid)
+                continue;
+
+            double vmin, vmax;
+            if (!GetOverlayMinMax(O, vmin, vmax))
+                continue;
+
+            NormalizeOverlay(O, vmin, vmax);
+        }
     }
-
-    double dx = gx - ix;
-    double dy = gy - iy;
-
-    // Fetch grid values
-    double v00 = O.value(ix,     iy);
-    double v10 = O.value(ix + 1, iy);
-    double v01 = O.value(ix,     iy + 1);
-    double v11 = O.value(ix + 1, iy + 1);
-
-    if (std::isnan(v00) || std::isnan(v10) ||
-        std::isnan(v01) || std::isnan(v11))
-    {
-        return NAN;
-    }
-
-    // Bilinear interpolation
-    double v0 = v00 * (1.0 - dx) + v10 * dx;
-    double v1 = v01 * (1.0 - dx) + v11 * dx;
-
-    return v0 * (1.0 - dy) + v1 * dy;
 }
+
+
+
+
+
+// ============================================================================
+// ComputeOverlayStatistics()
+// Compute mean and standard deviation for an overlay grid.
+// Returns true if valid values were found.
+// ============================================================================
+bool ClimatologyOverlayFactory::ComputeOverlayStatistics(const ClimatologyOverlay& O,
+                                                         double& outMean,
+                                                         double& outStdDev)
+{
+    if (!O.m_valid || O.lon_count <= 0 || O.lat_count <= 0)
+        return false;
+
+    double sum   = 0.0;
+    double sumSq = 0.0;
+    int    count = 0;
+
+    for (int iy = 0; iy < O.lat_count; iy++)
+    {
+        for (int ix = 0; ix < O.lon_count; ix++)
+        {
+            double v = O.value(ix, iy);
+            if (std::isnan(v))
+                continue;
+
+            sum   += v;
+            sumSq += v * v;
+            count++;
+        }
+    }
+
+    if (count == 0)
+        return false;
+
+    outMean = sum / count;
+
+    double variance = (sumSq / count) - (outMean * outMean);
+    if (variance < 0.0)
+        variance = 0.0;
+
+    outStdDev = sqrt(variance);
+    return true;
+}
+
+// ============================================================================
+// ComputeAllOverlayStatistics()
+// Compute mean/stddev for all overlays (all months, all types).
+// ============================================================================
+void ClimatologyOverlayFactory::ComputeAllOverlayStatistics()
+{
+    for (int month = 0; month < 12; month++)
+    {
+        for (int type = 0; type < NUM_OVERLAYS; type++)
+        {
+            ClimatologyOverlay& O = m_pOverlay[month][type];
+            if (!O.m_valid)
+                continue;
+
+            double mean, stddev;
+            if (!ComputeOverlayStatistics(O, mean, stddev))
+                continue;
+
+            O.m_mean   = mean;
+            O.m_stddev = stddev;
+        }
+    }
+}
+
+// ============================================================================
+// ComputeOverlayRange()
+// Compute the numeric range (max - min) of an overlay grid.
+// Returns true if valid values were found.
+// ============================================================================
+bool ClimatologyOverlayFactory::ComputeOverlayRange(const ClimatologyOverlay& O,
+                                                    double& outRange)
+{
+    if (!O.m_valid || O.lon_count <= 0 || O.lat_count <= 0)
+        return false;
+
+    double vmin, vmax;
+    if (!GetOverlayMinMax(O, vmin, vmax))
+        return false;
+
+    outRange = vmax - vmin;
+    if (outRange < 0.0)
+        outRange = 0.0;
+
+    return true;
+}
+
+// ============================================================================
+// ComputeAllOverlayRanges()
+// Compute numeric ranges (max - min) for all overlays.
+// ============================================================================
+void ClimatologyOverlayFactory::ComputeAllOverlayRanges()
+{
+    for (int month = 0; month < 12; month++)
+    {
+        for (int type = 0; type < NUM_OVERLAYS; type++)
+        {
+            ClimatologyOverlay& O = m_pOverlay[month][type];
+            if (!O.m_valid)
+                continue;
+
+            double range;
+            if (!ComputeOverlayRange(O, range))
+                continue;
+
+            O.m_range = range;
+        }
+    }
+}
+
+
+
 
 // ============================================================================
 // GetOverlayGradient()
@@ -4080,6 +4307,8 @@ double ClimatologyOverlayFactory::GetOverlayGradient(const ClimatologyOverlay& O
     return sqrt(d_dx*d_dx + d_dy*d_dy);
 }
 
+
+
 // ============================================================================
 // GetOverlayMinMax()
 // Compute minimum and maximum values in an overlay grid.
@@ -4092,9 +4321,8 @@ bool ClimatologyOverlayFactory::GetOverlayMinMax(const ClimatologyOverlay& O,
     if (!O.m_valid || O.lon_count <= 0 || O.lat_count <= 0)
         return false;
 
-    double vmin = 1e12;
-    double vmax = -1e12;
-    bool found = false;
+    double vmin =  std::numeric_limits<double>::infinity();
+    double vmax = -std::numeric_limits<double>::infinity();
 
     for (int iy = 0; iy < O.lat_count; iy++)
     {
@@ -4104,14 +4332,20 @@ bool ClimatologyOverlayFactory::GetOverlayMinMax(const ClimatologyOverlay& O,
             if (std::isnan(v))
                 continue;
 
-            found = true;
             if (v < vmin) vmin = v;
             if (v > vmax) vmax = v;
         }
     }
 
-    if (!found)
+    if (!std::isfinite(vmin) || !std::isfinite(vmax))
         return false;
+
+    if (vmax <= vmin)
+    {
+        outMin = 0.0;
+        outMax = 1.0;
+        return true;
+    }
 
     outMin = vmin;
     outMax = vmax;
@@ -4119,173 +4353,6 @@ bool ClimatologyOverlayFactory::GetOverlayMinMax(const ClimatologyOverlay& O,
 }
 
 
-// ============================================================================
-// NormalizeOverlay()
-// Normalize overlay values to 0–1 range using provided min/max.
-// ============================================================================
-bool ClimatologyOverlayFactory::NormalizeOverlay(ClimatologyOverlay& O,
-                                                 double vmin,
-                                                 double vmax)
-{
-    if (!O.m_valid || vmax <= vmin)
-        return false;
-
-    double scale = 1.0 / (vmax - vmin);
-
-    for (int iy = 0; iy < O.lat_count; iy++)
-    {
-        for (int ix = 0; ix < O.lon_count; ix++)
-        {
-            double v = O.value(ix, iy);
-            if (std::isnan(v))
-                continue;
-
-            double nv = (v - vmin) * scale;
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            O.setValue(ix, iy, nv);
-        }
-    }
-
-    return true;
-}
-
-// ============================================================================
-// NormalizeAllOverlays()
-// Normalize every overlay (all months, all types) to 0–1 range.
-// ============================================================================
-void ClimatologyOverlayFactory::NormalizeAllOverlays()
-{
-    for (int month = 0; month < 12; month++)
-    {
-        for (int type = 0; type < OVERLAY_COUNT; type++)
-        {
-            ClimatologyOverlay& O = m_pOverlay[month][type];
-            if (!O.m_valid)
-                continue;
-
-            double vmin, vmax;
-            if (!GetOverlayMinMax(O, vmin, vmax))
-                continue;
-
-            NormalizeOverlay(O, vmin, vmax);
-        }
-    }
-}
-
-// ============================================================================
-// ComputeOverlayStatistics()
-// Compute mean and standard deviation for an overlay grid.
-// Returns true if valid values were found.
-// ============================================================================
-bool ClimatologyOverlayFactory::ComputeOverlayStatistics(const ClimatologyOverlay& O,
-                                                         double& outMean,
-                                                         double& outStdDev)
-{
-    if (!O.m_valid || O.lon_count <= 0 || O.lat_count <= 0)
-        return false;
-
-    double sum = 0.0;
-    double sumSq = 0.0;
-    int count = 0;
-
-    for (int iy = 0; iy < O.lat_count; iy++)
-    {
-        for (int ix = 0; ix < O.lon_count; ix++)
-        {
-            double v = O.value(ix, iy);
-            if (std::isnan(v))
-                continue;
-
-            sum += v;
-            sumSq += v * v;
-            count++;
-        }
-    }
-
-    if (count == 0)
-        return false;
-
-    outMean = sum / count;
-
-    double variance = (sumSq / count) - (outMean * outMean);
-    if (variance < 0.0)
-        variance = 0.0;
-
-    outStdDev = sqrt(variance);
-    return true;
-}
-
-// ============================================================================
-// ComputeAllOverlayStatistics()
-// Compute mean/stddev for all overlays (all months, all types).
-// ============================================================================
-void ClimatologyOverlayFactory::ComputeAllOverlayStatistics()
-{
-    for (int month = 0; month < 12; month++)
-    {
-        for (int type = 0; type < OVERLAY_COUNT; type++)
-        {
-            ClimatologyOverlay& O = m_pOverlay[month][type];
-            if (!O.m_valid)
-                continue;
-
-            double mean, stddev;
-            if (!ComputeOverlayStatistics(O, mean, stddev))
-                continue;
-
-            O.m_mean   = mean;
-            O.m_stddev = stddev;
-        }
-    }
-}
-
-// ============================================================================
-// ComputeOverlayRange()
-// Compute the numeric range (max - min) of an overlay grid.
-// Returns true if valid values were found.
-// ============================================================================
-bool ClimatologyOverlayFactory::ComputeOverlayRange(const ClimatologyOverlay& O,
-                                                    double& outRange)
-{
-    if (!O.m_valid || O.lon_count <= 0 || O.lat_count <= 0)
-        return false;
-
-    double vmin, vmax;
-    if (!GetOverlayMinMax(O, vmin, vmax))
-        return false;
-
-    outRange = vmax - vmin;
-    if (outRange < 0.0)
-        outRange = 0.0;
-
-    return true;
-}
-
-
-// ============================================================================
-// ComputeAllOverlayRanges()
-// Compute numeric ranges (max - min) for all overlays.
-// ============================================================================
-void ClimatologyOverlayFactory::ComputeAllOverlayRanges()
-{
-    for (int month = 0; month < 12; month++)
-    {
-        for (int type = 0; type < OVERLAY_COUNT; type++)
-        {
-            ClimatologyOverlay& O = m_pOverlay[month][type];
-            if (!O.m_valid)
-                continue;
-
-            double range;
-            if (!ComputeOverlayRange(O, range))
-                continue;
-
-            O.m_range = range;
-        }
-    }
-}
 
 // ============================================================================
 // GetOverlayColor()
@@ -4299,16 +4366,20 @@ wxColour ClimatologyOverlayFactory::GetOverlayColor(double v)
     if (v < 0.0) v = 0.0;
     if (v > 1.0) v = 1.0;
 
-    int idx = (int)(v * (m_colorPalette.size() - 1));
-    if (idx < 0) idx = 0;
-    if (idx >= (int)m_colorPalette.size())
-        idx = (int)m_colorPalette.size() - 1;
+    const size_t N = m_colorPalette.size();
+    if (N == 0)
+        return wxColour(0, 0, 0);
+
+    size_t idx = static_cast<size_t>(v * (N - 1));
+    if (idx >= N)
+        idx = N - 1;
 
     return m_colorPalette[idx];
 }
 
+
 // ============================================================================
-// GetOverlayColorScaled()
+// GetOverlayColorScaled
 // Map an unnormalized overlay value to a color using min/max scaling.
 // ============================================================================
 wxColour ClimatologyOverlayFactory::GetOverlayColorScaled(double value,
@@ -4321,17 +4392,22 @@ wxColour ClimatologyOverlayFactory::GetOverlayColorScaled(double value,
     if (vmax <= vmin)
         return wxColour(0, 0, 0);
 
-    double v = (value - vmin) / (vmax - vmin);
-    if (v < 0.0) v = 0.0;
-    if (v > 1.0) v = 1.0;
+    double nv = (value - vmin) / (vmax - vmin);
 
-    int idx = (int)(v * (m_colorPalette.size() - 1));
-    if (idx < 0) idx = 0;
-    if (idx >= (int)m_colorPalette.size())
-        idx = (int)m_colorPalette.size() - 1;
+    if (nv < 0.0) nv = 0.0;
+    if (nv > 1.0) nv = 1.0;
+
+    const size_t N = m_colorPalette.size();
+    if (N == 0)
+        return wxColour(0, 0, 0);
+
+    size_t idx = static_cast<size_t>(nv * (N - 1));
+    if (idx >= N)
+        idx = N - 1;
 
     return m_colorPalette[idx];
 }
+
 
 // ============================================================================
 // ApplyColorMap()
@@ -4350,16 +4426,21 @@ void ClimatologyOverlayFactory::ApplyColorMap(const ClimatologyOverlay& O,
         for (int ix = 0; ix < O.lon_count; ix++)
         {
             double v = O.value(ix, iy);
+
             if (std::isnan(v))
             {
                 outGrid.set(ix, iy, wxColour(0, 0, 0));
                 continue;
             }
 
+            // v is already normalized (0–1)
             outGrid.set(ix, iy, GetOverlayColor(v));
         }
     }
 }
+
+
+
 
 // ============================================================================
 // ApplyColorMapScaled()
@@ -4449,65 +4530,19 @@ void ClimatologyOverlayFactory::GenerateColorGridScaled(const ClimatologyOverlay
     }
 }
 
-// ============================================================================
-// GenerateUnifiedColorGrid()
-// Produce a color grid from multiple overlays blended together.
-// Assumes all overlays are normalized (0–1).
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGrid(const std::vector<const ClimatologyOverlay*>& overlays,
-                                                         ClimatologyColorGrid& outGrid)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    outGrid.allocate(base->lon_count, base->lat_count);
-
-    for (int iy = 0; iy < base->lat_count; iy++)
-    {
-        for (int ix = 0; ix < base->lon_count; ix++)
-        {
-            double sum = 0.0;
-            int count = 0;
-
-            for (auto* O : overlays)
-            {
-                if (!O || !O->m_valid)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                sum += v;
-                count++;
-            }
-
-            if (count == 0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            double blended = sum / count;
-            outGrid.set(ix, iy, GetOverlayColor(blended));
-        }
-    }
-}
-
 
 // ============================================================================
 // GenerateUnifiedColorGridScaled()
-// Blend multiple overlays using min/max scaling, then map to color.
+// Modern version: blend overlays using per‑overlay vmin/vmax and final
+// global scaling (global_vmin/global_vmax).
 // ============================================================================
 void ClimatologyOverlayFactory::GenerateUnifiedColorGridScaled(
         const std::vector<const ClimatologyOverlay*>& overlays,
+        const std::vector<double>& vmins,
+        const std::vector<double>& vmaxs,
         ClimatologyColorGrid& outGrid,
-        double vmin,
-        double vmax)
+        double global_vmin,
+        double global_vmax)
 {
     if (overlays.empty())
         return;
@@ -4516,44 +4551,76 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridScaled(
     if (!base || !base->m_valid)
         return;
 
-    outGrid.allocate(base->lon_count, base->lat_count);
+    const int NX = base->lon_count;
+    const int NY = base->lat_count;
 
-    for (int iy = 0; iy < base->lat_count; iy++)
+    outGrid.allocate(NX, NY);
+
+    // ------------------------------------------------------------------------
+    // Helper: normalize a value using per‑overlay vmin/vmax
+    // ------------------------------------------------------------------------
+    auto get_norm = [&](const ClimatologyOverlay* O, int ix, int iy,
+                        double vmin, double vmax) -> double
     {
-        for (int ix = 0; ix < base->lon_count; ix++)
+        if (!O || !O->m_valid)
+            return std::numeric_limits<double>::quiet_NaN();
+
+        double v = O->value(ix, iy);
+        if (std::isnan(v))
+            return std::numeric_limits<double>::quiet_NaN();
+
+        double r = vmax - vmin;
+        if (r <= 0.0)
+            return std::numeric_limits<double>::quiet_NaN();
+
+        return (v - vmin) / r;
+    };
+
+    // ------------------------------------------------------------------------
+    // Main loop: average normalized values across overlays
+    // ------------------------------------------------------------------------
+    for (int iy = 0; iy < NY; iy++)
+    {
+        for (int ix = 0; ix < NX; ix++)
         {
             double sum = 0.0;
             int count = 0;
 
-            for (auto* O : overlays)
+            for (size_t k = 0; k < overlays.size(); k++)
             {
-                if (!O || !O->m_valid)
+                double nv = get_norm(overlays[k], ix, iy,
+                                     vmins[k], vmaxs[k]);
+                if (std::isnan(nv))
                     continue;
 
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                sum += v;
+                sum += nv;
                 count++;
             }
 
-            if (count == 0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
+            double blended = (count > 0) ? (sum / count) : 0.0;
 
-            double blended = sum / count;
-            outGrid.set(ix, iy, GetOverlayColorScaled(blended, vmin, vmax));
+            // ----------------------------------------------------------------
+            // Final global scaling
+            // ----------------------------------------------------------------
+            double gr = global_vmax - global_vmin;
+            double scaled = (gr > 0.0)
+                ? (blended * gr + global_vmin)
+                : blended;
+
+            // Clamp
+            if (scaled < 0.0) scaled = 0.0;
+            if (scaled > 1.0) scaled = 1.0;
+
+            outGrid.set(ix, iy, GetOverlayColor(scaled));
         }
     }
 }
 
+
+
 // ============================================================================
 // GenerateUnifiedColorGridWeighted()
-// Blend multiple overlays using per‑overlay weights, then map to color.
-// Assumes all overlays are normalized (0–1).
+// Modern version: weighted blend of normalized overlay values.
 // ============================================================================
 void ClimatologyOverlayFactory::GenerateUnifiedColorGridWeighted(
         const std::vector<const ClimatologyOverlay*>& overlays,
@@ -4567,19 +4634,22 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridWeighted(
     if (!base || !base->m_valid)
         return;
 
-    outGrid.allocate(base->lon_count, base->lat_count);
+    const int NX = base->lon_count;
+    const int NY = base->lat_count;
 
-    for (int iy = 0; iy < base->lat_count; iy++)
+    outGrid.allocate(NX, NY);
+
+    for (int iy = 0; iy < NY; iy++)
     {
-        for (int ix = 0; ix < base->lon_count; ix++)
+        for (int ix = 0; ix < NX; ix++)
         {
             double sum = 0.0;
             double wsum = 0.0;
 
-            for (size_t i = 0; i < overlays.size(); i++)
+            for (size_t k = 0; k < overlays.size(); k++)
             {
-                const ClimatologyOverlay* O = overlays[i];
-                double w = weights[i];
+                const ClimatologyOverlay* O = overlays[k];
+                double w = weights[k];
 
                 if (!O || !O->m_valid || w <= 0.0)
                     continue;
@@ -4604,66 +4674,11 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridWeighted(
     }
 }
 
-// ============================================================================
-// GenerateUnifiedColorGridWeightedScaled()
-// Blend multiple overlays using per‑overlay weights, apply min/max scaling,
-// then map to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridWeightedScaled(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        const std::vector<double>& weights,
-        ClimatologyColorGrid& outGrid,
-        double vmin,
-        double vmax)
-{
-    if (overlays.empty() || overlays.size() != weights.size())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    outGrid.allocate(base->lon_count, base->lat_count);
-
-    for (int iy = 0; iy < base->lat_count; iy++)
-    {
-        for (int ix = 0; ix < base->lon_count; ix++)
-        {
-            double sum = 0.0;
-            double wsum = 0.0;
-
-            for (size_t i = 0; i < overlays.size(); i++)
-            {
-                const ClimatologyOverlay* O = overlays[i];
-                double w = weights[i];
-
-                if (!O || !O->m_valid || w <= 0.0)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                sum += v * w;
-                wsum += w;
-            }
-
-            if (wsum <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            double blended = sum / wsum;
-            outGrid.set(ix, iy, GetOverlayColorScaled(blended, vmin, vmax));
-        }
-    }
-}
 
 
 // ============================================================================
 // GenerateUnifiedColorGridMultiRange()
-// Blend multiple overlays, each with its own (vmin, vmax) range.
+// Modern version: per-overlay normalization using vmins/vmaxs.
 // ============================================================================
 void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRange(
         const std::vector<const ClimatologyOverlay*>& overlays,
@@ -4680,20 +4695,23 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRange(
     if (!base || !base->m_valid)
         return;
 
-    outGrid.allocate(base->lon_count, base->lat_count);
+    const int NX = base->lon_count;
+    const int NY = base->lat_count;
 
-    for (int iy = 0; iy < base->lat_count; iy++)
+    outGrid.allocate(NX, NY);
+
+    for (int iy = 0; iy < NY; iy++)
     {
-        for (int ix = 0; ix < base->lon_count; ix++)
+        for (int ix = 0; ix < NX; ix++)
         {
             double sum = 0.0;
             int count = 0;
 
-            for (size_t i = 0; i < overlays.size(); i++)
+            for (size_t k = 0; k < overlays.size(); k++)
             {
-                const ClimatologyOverlay* O = overlays[i];
-                double vmin = vmins[i];
-                double vmax = vmaxs[i];
+                const ClimatologyOverlay* O = overlays[k];
+                double vmin = vmins[k];
+                double vmax = vmaxs[k];
 
                 if (!O || !O->m_valid || vmax <= vmin)
                     continue;
@@ -4702,7 +4720,6 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRange(
                 if (std::isnan(v))
                     continue;
 
-                // Normalize per-overlay using its own range
                 double nv = (v - vmin) / (vmax - vmin);
                 if (nv < 0.0) nv = 0.0;
                 if (nv > 1.0) nv = 1.0;
@@ -4724,10 +4741,10 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRange(
 }
 
 
+
 // ============================================================================
 // GenerateUnifiedColorGridMultiRangeScaled()
-// Blend multiple overlays, each with its own (vmin, vmax) range, then apply
-// a final global scaling (global_vmin, global_vmax) before mapping to color.
+// Modern version: per-overlay normalization + global scaling.
 // ============================================================================
 void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeScaled(
         const std::vector<const ClimatologyOverlay*>& overlays,
@@ -4746,20 +4763,27 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeScaled(
     if (!base || !base->m_valid)
         return;
 
-    outGrid.allocate(base->lon_count, base->lat_count);
+    const int NX = base->lon_count;
+    const int NY = base->lat_count;
 
-    for (int iy = 0; iy < base->lat_count; iy++)
+    outGrid.allocate(NX, NY);
+
+    double gr = global_vmax - global_vmin;
+    if (gr <= 0.0)
+        gr = 1.0;
+
+    for (int iy = 0; iy < NY; iy++)
     {
-        for (int ix = 0; ix < base->lon_count; ix++)
+        for (int ix = 0; ix < NX; ix++)
         {
             double sum = 0.0;
             int count = 0;
 
-            for (size_t i = 0; i < overlays.size(); i++)
+            for (size_t k = 0; k < overlays.size(); k++)
             {
-                const ClimatologyOverlay* O = overlays[i];
-                double vmin = vmins[i];
-                double vmax = vmaxs[i];
+                const ClimatologyOverlay* O = overlays[k];
+                double vmin = vmins[k];
+                double vmax = vmaxs[k];
 
                 if (!O || !O->m_valid || vmax <= vmin)
                     continue;
@@ -4768,7 +4792,6 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeScaled(
                 if (std::isnan(v))
                     continue;
 
-                // Normalize per-overlay using its own range
                 double nv = (v - vmin) / (vmax - vmin);
                 if (nv < 0.0) nv = 0.0;
                 if (nv > 1.0) nv = 1.0;
@@ -4785,18 +4808,11 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeScaled(
 
             double blended = sum / count;
 
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double gv = (blended - global_vmin) / (global_vmax - global_vmin);
-                if (gv < 0.0) gv = 0.0;
-                if (gv > 1.0) gv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(gv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-            }
+            double gv = (blended - global_vmin) / gr;
+            if (gv < 0.0) gv = 0.0;
+            if (gv > 1.0) gv = 1.0;
+
+            outGrid.set(ix, iy, GetOverlayColor(gv));
         }
     }
 }
@@ -4949,229 +4965,6 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeWeightedScaled
     }
 }
 
-// ============================================================================
-// GenerateUnifiedColorGridMultiRangeWeightedGlobal()
-// Blend multiple overlays using per‑overlay weights, each overlay having its
-// own (vmin, vmax) range, then apply a final global normalization (0–1) and
-// map to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeWeightedGlobal(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        const std::vector<double>& weights,
-        const std::vector<double>& vmins,
-        const std::vector<double>& vmaxs,
-        ClimatologyColorGrid& outGrid)
-{
-    if (overlays.empty() ||
-        overlays.size() != weights.size() ||
-        overlays.size() != vmins.size() ||
-        overlays.size() != vmaxs.size())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    outGrid.allocate(base->lon_count, base->lat_count);
-
-    // First pass: compute global min/max of blended values
-    double global_min = std::numeric_limits<double>::infinity();
-    double global_max = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> blended_cache(base->lon_count * base->lat_count, 0.0);
-
-    for (int iy = 0; iy < base->lat_count; iy++)
-    {
-        for (int ix = 0; ix < base->lon_count; ix++)
-        {
-            double sum = 0.0;
-            double wsum = 0.0;
-
-            for (size_t i = 0; i < overlays.size(); i++)
-            {
-                const ClimatologyOverlay* O = overlays[i];
-                double w = weights[i];
-                double vmin = vmins[i];
-                double vmax = vmaxs[i];
-
-                if (!O || !O->m_valid || w <= 0.0 || vmax <= vmin)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                // Normalize using per-overlay range
-                double nv = (v - vmin) / (vmax - vmin);
-                if (nv < 0.0) nv = 0.0;
-                if (nv > 1.0) nv = 1.0;
-
-                sum += nv * w;
-                wsum += w;
-            }
-
-            double blended = (wsum > 0.0) ? (sum / wsum) : std::numeric_limits<double>::quiet_NaN();
-            blended_cache[iy * base->lon_count + ix] = blended;
-
-            if (!std::isnan(blended))
-            {
-                if (blended < global_min) global_min = blended;
-                if (blended > global_max) global_max = blended;
-            }
-        }
-    }
-
-    // Second pass: apply global normalization and map to color
-    if (global_max <= global_min)
-    {
-        // Degenerate case: no valid data
-        for (int iy = 0; iy < base->lat_count; iy++)
-            for (int ix = 0; ix < base->lon_count; ix++)
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-        return;
-    }
-
-    for (int iy = 0; iy < base->lat_count; iy++)
-    {
-        for (int ix = 0; ix < base->lon_count; ix++)
-        {
-            double blended = blended_cache[iy * base->lon_count + ix];
-
-            if (std::isnan(blended))
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            double gv = (blended - global_min) / (global_max - global_min);
-            if (gv < 0.0) gv = 0.0;
-            if (gv > 1.0) gv = 1.0;
-
-            outGrid.set(ix, iy, GetOverlayColor(gv));
-        }
-    }
-}
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiRangeWeightedGlobalScaled()
-// Blend overlays using per‑overlay weights and per‑overlay (vmin, vmax) ranges.
-// First compute the global blended min/max, then apply a final global scaling
-// (global_vmin, global_vmax) before mapping to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiRangeWeightedGlobalScaled(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        const std::vector<double>& weights,
-        const std::vector<double>& vmins,
-        const std::vector<double>& vmaxs,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty() ||
-        overlays.size() != weights.size() ||
-        overlays.size() != vmins.size() ||
-        overlays.size() != vmaxs.size())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: compute blended values + global blended min/max
-    // ------------------------------------------------------------------------
-    double blended_min =  std::numeric_limits<double>::infinity();
-    double blended_max = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> blended_cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double sum  = 0.0;
-            double wsum = 0.0;
-
-            for (size_t i = 0; i < overlays.size(); i++)
-            {
-                const ClimatologyOverlay* O = overlays[i];
-                double w    = weights[i];
-                double vmin = vmins[i];
-                double vmax = vmaxs[i];
-
-                if (!O || !O->m_valid || w <= 0.0 || vmax <= vmin)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                // Normalize per-overlay
-                double nv = (v - vmin) / (vmax - vmin);
-                if (nv < 0.0) nv = 0.0;
-                if (nv > 1.0) nv = 1.0;
-
-                sum  += nv * w;
-                wsum += w;
-            }
-
-            double blended = (wsum > 0.0)
-                ? (sum / wsum)
-                : std::numeric_limits<double>::quiet_NaN();
-
-            blended_cache[iy * NX + ix] = blended;
-
-            if (!std::isnan(blended))
-            {
-                if (blended < blended_min) blended_min = blended;
-                if (blended > blended_max) blended_max = blended;
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Second pass: normalize using global blended min/max, then apply
-    // final global scaling (global_vmin/global_vmax)
-    // ------------------------------------------------------------------------
-    const double range_blended = blended_max - blended_min;
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double blended = blended_cache[iy * NX + ix];
-
-            if (std::isnan(blended) || range_blended <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1] using global blended min/max
-            double gv = (blended - blended_min) / range_blended;
-            if (gv < 0.0) gv = 0.0;
-            if (gv > 1.0) gv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (gv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-                if (sv > 1.0) sv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(sv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, GetOverlayColor(gv));
-            }
-        }
-    }
-}
 
 // ============================================================================
 // ApplyGlobalScalingToUnifiedGrid()
@@ -5246,540 +5039,6 @@ void ClimatologyOverlayFactory::ApplyGlobalScalingToUnifiedGrid(
     }
 }
 
-
-// ============================================================================
-// GenerateUnifiedColorGridFromSingleOverlayScaled()
-// Take a single overlay, normalize it using its own (vmin, vmax), compute the
-// global min/max of the normalized field, then apply a final global scaling
-// (global_vmin/global_vmax) before mapping to color.
-// This mirrors the multi-overlay pipeline but for a single source.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridFromSingleOverlayScaled(
-        const ClimatologyOverlay* O,
-        double vmin,
-        double vmax,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (!O || !O->m_valid || vmax <= vmin)
-        return;
-
-    const int NX = O->lon_count;
-    const int NY = O->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: normalize per-overlay and compute global min/max
-    // ------------------------------------------------------------------------
-    double blended_min =  std::numeric_limits<double>::infinity();
-    double blended_max = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double v = O->value(ix, iy);
-            if (std::isnan(v))
-                continue;
-
-            // Normalize using per-overlay range
-            double nv = (v - vmin) / (vmax - vmin);
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            cache[iy * NX + ix] = nv;
-
-            if (nv < blended_min) blended_min = nv;
-            if (nv > blended_max) blended_max = nv;
-        }
-    }
-
-    const double range_blended = blended_max - blended_min;
-
-    // ------------------------------------------------------------------------
-    // Second pass: global normalization + final global scaling
-    // ------------------------------------------------------------------------
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double nv = cache[iy * NX + ix];
-
-            if (std::isnan(nv) || range_blended <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1] using global blended min/max
-            double gv = (nv - blended_min) / range_blended;
-            if (gv < 0.0) gv = 0.0;
-            if (gv > 1.0) gv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (gv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-                if (sv > 1.0) sv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(sv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, GetOverlayColor(gv));
-            }
-        }
-    }
-}
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiOverlayAdditive()
-// Add multiple overlays together directly (no weights, no per-overlay ranges).
-// After summation, compute global min/max of the additive field, then apply
-// final global scaling (global_vmin/global_vmax) before mapping to color.
-// This is the simplest multi-overlay combiner in the unified-grid pipeline.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiOverlayAdditive(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: additive sum + compute global min/max
-    // ------------------------------------------------------------------------
-    double vmin =  std::numeric_limits<double>::infinity();
-    double vmax = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double sum = 0.0;
-
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiOverlayMax()
-// For each (ix, iy), take the maximum value across all overlays.
-// After computing the max field, compute global min/max, then apply final
-// global scaling (global_vmin/global_vmax) before mapping to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiOverlayMax(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: compute max composite + global min/max
-    // ------------------------------------------------------------------------
-    double vmin =  std::numeric_limits<double>::infinity();
-    double vmax = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double best = -std::numeric_limits<double>::infinity();
-            bool valid = false;
-
-            for (const ClimatologyOverlay* O : overlays)
-            {
-                if (!O || !O->m_valid)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                if (v > best)
-                    best = v;
-
-                valid = true;
-            }
-
-            if (!valid)
-                continue;
-
-            cache[iy * NX + ix] = best;
-
-            if (best < vmin) vmin = best;
-            if (best > vmax) vmax = best;
-        }
-    }
-
-    const double range = vmax - vmin;
-
-    // ------------------------------------------------------------------------
-    // Second pass: normalize + final global scaling
-    // ------------------------------------------------------------------------
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double v = cache[iy * NX + ix];
-
-            if (std::isnan(v) || range <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1]
-            double nv = (v - vmin) / range;
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (nv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-                if (sv > 1.0) sv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(sv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, GetOverlayColor(nv));
-            }
-        }
-    }
-}
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiOverlayMin()
-// For each (ix, iy), take the minimum value across all overlays.
-// After computing the min field, compute global min/max, then apply final
-// global scaling (global_vmin/global_vmax) before mapping to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiOverlayMin(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: compute min composite + global min/max
-    // ------------------------------------------------------------------------
-    double vmin =  std::numeric_limits<double>::infinity();
-    double vmax = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double best =  std::numeric_limits<double>::infinity();
-            bool valid = false;
-
-            for (const ClimatologyOverlay* O : overlays)
-            {
-                if (!O || !O->m_valid)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                if (v < best)
-                    best = v;
-
-                valid = true;
-            }
-
-            if (!valid)
-                continue;
-
-            cache[iy * NX + ix] = best;
-
-            if (best < vmin) vmin = best;
-            if (best > vmax) vmax = best;
-        }
-    }
-
-    const double range = vmax - vmin;
-
-    // ------------------------------------------------------------------------
-    // Second pass: normalize + final global scaling
-    // ------------------------------------------------------------------------
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double v = cache[iy * NX + ix];
-
-            if (std::isnan(v) || range <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1]
-            double nv = (v - vmin) / range;
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (nv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiOverlayMean()
-// For each (ix, iy), compute the arithmetic mean across all overlays.
-// After computing the mean field, compute global min/max, then apply final
-// global scaling (global_vmin/global_vmax) before mapping to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiOverlayMean(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: compute mean composite + global min/max
-    // ------------------------------------------------------------------------
-    double vmin =  std::numeric_limits<double>::infinity();
-    double vmax = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double sum = 0.0;
-            int count = 0;
-
-            for (const ClimatologyOverlay* O : overlays)
-            {
-                if (!O || !O->m_valid)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (std::isnan(v))
-                    continue;
-
-                sum += v;
-                count++;
-            }
-
-            if (count == 0)
-                continue;
-
-            double mean = sum / count;
-            cache[iy * NX + ix] = mean;
-
-            if (mean < vmin) vmin = mean;
-            if (mean > vmax) vmax = mean;
-        }
-    }
-
-    const double range = vmax - vmin;
-
-    // ------------------------------------------------------------------------
-    // Second pass: normalize + final global scaling
-    // ------------------------------------------------------------------------
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double v = cache[iy * NX + ix];
-
-            if (std::isnan(v) || range <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1]
-            double nv = (v - vmin) / range;
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (nv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-                if (sv > 1.0) sv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(sv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, GetOverlayColor(nv));
-            }
-        }
-    }
-}
-
-// ============================================================================
-// GenerateUnifiedColorGridMultiOverlayMedian()
-// For each (ix, iy), compute the median value across all overlays.
-// After computing the median field, compute global min/max, then apply final
-// global scaling (global_vmin/global_vmax) before mapping to color.
-// ============================================================================
-void ClimatologyOverlayFactory::GenerateUnifiedColorGridMultiOverlayMedian(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        ClimatologyColorGrid& outGrid,
-        double global_vmin,
-        double global_vmax)
-{
-    if (overlays.empty())
-        return;
-
-    const ClimatologyOverlay* base = overlays[0];
-    if (!base || !base->m_valid)
-        return;
-
-    const int NX = base->lon_count;
-    const int NY = base->lat_count;
-
-    outGrid.allocate(NX, NY);
-
-    // ------------------------------------------------------------------------
-    // First pass: compute median composite + global min/max
-    // ------------------------------------------------------------------------
-    double vmin =  std::numeric_limits<double>::infinity();
-    double vmax = -std::numeric_limits<double>::infinity();
-
-    std::vector<double> cache(NX * NY, std::numeric_limits<double>::quiet_NaN());
-
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            std::vector<double> vals;
-            vals.reserve(overlays.size());
-
-            for (const ClimatologyOverlay* O : overlays)
-            {
-                if (!O || !O->m_valid)
-                    continue;
-
-                double v = O->value(ix, iy);
-                if (!std::isnan(v))
-                    vals.push_back(v);
-            }
-
-            if (vals.empty())
-                continue;
-
-            std::sort(vals.begin(), vals.end());
-
-            double median;
-            const size_t n = vals.size();
-
-            if (n % 2 == 1)
-                median = vals[n / 2];
-            else
-                median = 0.5 * (vals[n / 2 - 1] + vals[n / 2]);
-
-            cache[iy * NX + ix] = median;
-
-            if (median < vmin) vmin = median;
-            if (median > vmax) vmax = median;
-        }
-    }
-
-    const double range = vmax - vmin;
-
-    // ------------------------------------------------------------------------
-    // Second pass: normalize + final global scaling
-    // ------------------------------------------------------------------------
-    for (int iy = 0; iy < NY; iy++)
-    {
-        for (int ix = 0; ix < NX; ix++)
-        {
-            double v = cache[iy * NX + ix];
-
-            if (std::isnan(v) || range <= 0.0)
-            {
-                outGrid.set(ix, iy, wxColour(0, 0, 0));
-                continue;
-            }
-
-            // Normalize to [0,1]
-            double nv = (v - vmin) / range;
-            if (nv < 0.0) nv = 0.0;
-            if (nv > 1.0) nv = 1.0;
-
-            // Apply final global scaling
-            if (global_vmax > global_vmin)
-            {
-                double sv = (nv - global_vmin) / (global_vmax - global_vmin);
-                if (sv < 0.0) sv = 0.0;
-                if (sv > 1.0) sv = 1.0;
-                outGrid.set(ix, iy, GetOverlayColor(sv));
-            }
-            else
-            {
-                outGrid.set(ix, iy, GetOverlayColor(nv));
-            }
-        }
-    }
-}
-
-
-
 // ============================================================================
 // GenerateUnifiedColorGrid()
 // Dispatcher: selects the correct unified‑grid operator based on mode.
@@ -5799,110 +5058,102 @@ void ClimatologyOverlayFactory::GenerateUnifiedColorGrid(
     if (overlays.empty())
         return;
 
+    // Helper: build default weights if none provided
+    auto make_default_weights = [&](size_t n) {
+        std::vector<double> w(n, 1.0);
+        return w;
+    };
+
     switch (mode)
     {
         // ------------------------------------------------------------
-        // Single overlay, scaled
+        // Single overlay, scaled to its own min/max
         // ------------------------------------------------------------
         case DisplayMode::SingleScaled:
         {
-            const ClimatologyOverlay* O = overlays[0];
-            double vmin = vmins.empty() ? 0.0 : vmins[0];
-            double vmax = vmaxs.empty() ? 1.0 : vmaxs[0];
-
-            GenerateUnifiedColorGridFromSingleOverlayScaled(
-                O, vmin, vmax, outGrid, global_vmin, global_vmax);
+            // Use per‑overlay vmin/vmax (vectors) + global scaling
+            GenerateUnifiedColorGridScaled(
+                overlays,
+                vmins,
+                vmaxs,
+                outGrid,
+                global_vmin,
+                global_vmax);
             return;
         }
 
         // ------------------------------------------------------------
-        // Weighted multi‑overlay blend (Chunk 67)
+        // Weighted multi‑overlay blend (full multi‑range + global scaling)
         // ------------------------------------------------------------
         case DisplayMode::WeightedBlend:
         {
-            GenerateUnifiedColorGridMultiRangeWeightedGlobalScaled(
-                overlays, weights, vmins, vmaxs,
-                outGrid, global_vmin, global_vmax);
+            // Use provided weights + per‑overlay ranges + global scaling
+            GenerateUnifiedColorGridMultiRangeWeightedScaled(
+                overlays,
+                weights,
+                vmins,
+                vmaxs,
+                outGrid,
+                global_vmin,
+                global_vmax);
             return;
         }
 
         // ------------------------------------------------------------
-        // Additive composite (Chunk 70)
+        // Additive / Max / Min / Mean / Median composites
+        // All funneled through the same multi‑range weighted‑scaled engine.
         // ------------------------------------------------------------
         case DisplayMode::Additive:
-        {
-            GenerateUnifiedColorGridMultiOverlayAdditive(
-                overlays, outGrid, global_vmin, global_vmax);
-            return;
-        }
-
-        // ------------------------------------------------------------
-        // Max composite (Chunk 71)
-        // ------------------------------------------------------------
         case DisplayMode::MaxComposite:
-        {
-            GenerateUnifiedColorGridMultiOverlayMax(
-                overlays, outGrid, global_vmin, global_vmax);
-            return;
-        }
-
-        // ------------------------------------------------------------
-        // Min composite (Chunk 72)
-        // ------------------------------------------------------------
         case DisplayMode::MinComposite:
-        {
-            GenerateUnifiedColorGridMultiOverlayMin(
-                overlays, outGrid, global_vmin, global_vmax);
-            return;
-        }
-
-        // ------------------------------------------------------------
-        // Mean composite (Chunk 73)
-        // ------------------------------------------------------------
         case DisplayMode::MeanComposite:
-        {
-            GenerateUnifiedColorGridMultiOverlayMean(
-                overlays, outGrid, global_vmin, global_vmax);
-            return;
-        }
-
-        // ------------------------------------------------------------
-        // Median composite (Chunk 74)
-        // ------------------------------------------------------------
         case DisplayMode::MedianComposite:
         {
-            GenerateUnifiedColorGridMultiOverlayMedian(
-                overlays, outGrid, global_vmin, global_vmax);
+            // For now, treat all these as equal‑weight blends over
+            // the selected overlays + per‑overlay ranges + global scaling.
+            std::vector<double> w =
+                weights.empty() ? make_default_weights(overlays.size()) : weights;
+
+            GenerateUnifiedColorGridMultiRangeWeightedScaled(
+                overlays,
+                w,
+                vmins,
+                vmaxs,
+                outGrid,
+                global_vmin,
+                global_vmax);
             return;
         }
 
         // ------------------------------------------------------------
-        // Default: fallback to single overlay
+        // Default: fallback to SingleScaled behavior
         // ------------------------------------------------------------
         default:
         {
-            const ClimatologyOverlay* O = overlays[0];
-            double vmin = vmins.empty() ? 0.0 : vmins[0];
-            double vmax = vmaxs.empty() ? 1.0 : vmaxs[0];
-
-            GenerateUnifiedColorGridFromSingleOverlayScaled(
-                O, vmin, vmax, outGrid, global_vmin, global_vmax);
+            GenerateUnifiedColorGridScaled(
+                overlays,
+                vmins,
+                vmaxs,
+                outGrid,
+                global_vmin,
+                global_vmax);
             return;
         }
     }
 }
 
+
 // ============================================================================
-// GatherOverlaysForMode()
+// GatherOverlaysForMode
 // Selects which overlays should be combined based on the display mode,
 // the selected climatology type, and the current month/season.
 // This is called BEFORE GenerateUnifiedColorGrid().
 // ============================================================================
 std::vector<const ClimatologyOverlay*>
-ClimatologyOverlayFactory::GatherOverlaysForMode(
-        DisplayMode mode,
-        OverlayType type,
-        int month_index)
+ClimatologyOverlayFactory::GatherOverlaysForMode(DisplayMode mode,
+                                                 OverlayType type,
+                                                 int month_index,
+                                                 const ClimatologyRenderParams& p) const
 {
     std::vector<const ClimatologyOverlay*> result;
 
@@ -5915,7 +5166,7 @@ ClimatologyOverlayFactory::GatherOverlaysForMode(
     // ------------------------------------------------------------------------
     if (mode == DisplayMode::SingleScaled)
     {
-        const ClimatologyOverlay* O = GetOverlay(type, month_index);
+        const ClimatologyOverlay* O = GetOverlay(type, p);
         if (O && O->m_valid)
             result.push_back(O);
         return result;
@@ -5926,150 +5177,25 @@ ClimatologyOverlayFactory::GatherOverlaysForMode(
     // These modes require multiple overlays for the same climatology type.
     // Example: seasonal composites, ensemble models, multi-source blends.
     // ------------------------------------------------------------------------
-	const auto vec_const = MakeConstVector(m_overlay_map[type]);  // e.g., all wind overlays
 
-	for (const auto& overlay_ptr : vec_const)
-	{
-		if (!overlay_ptr)
-			continue;
-
-		// Select only overlays matching the requested month
-		if (overlay_ptr->month_index != month_index)
-			continue;
-
-		if (overlay_ptr->m_valid)
-			result.push_back(overlay_ptr);
-	}
-
-	return result;
-
-}	
+    // Convert registry vector (non-const) → const vector
+    const auto vec_const = MakeConstVector(m_overlay_map.at(type));
 
 
-// ============================================================================
-// GatherOverlayMetadata()
-// Produces weights, vmins, vmaxs, and global scaling parameters for the
-// overlays selected by GatherOverlaysForMode().
-// This is called BEFORE GenerateUnifiedColorGrid().
-// ============================================================================
-void ClimatologyOverlayFactory::GatherOverlayMetadata(
-        const std::vector<const ClimatologyOverlay*>& overlays,
-        DisplayMode mode,
-        std::vector<double>& weights,
-        std::vector<double>& vmins,
-        std::vector<double>& vmaxs,
-        double& global_vmin,
-        double& global_vmax)
-{
-    const size_t N = overlays.size();
-
-    weights.clear();
-    vmins.clear();
-    vmaxs.clear();
-
-    // ------------------------------------------------------------------------
-    // 1. Default global scaling
-    // These may be overridden by user settings or mode-specific logic.
-    // ------------------------------------------------------------------------
-    global_vmin = 0.0;
-    global_vmax = 1.0;
-
-    // ------------------------------------------------------------------------
-    // 2. Single overlay mode
-    // ------------------------------------------------------------------------
-    if (mode == DisplayMode::SingleScaled)
+    for (const auto& overlay_ptr : vec_const)
     {
-        if (N == 1 && overlays[0])
-        {
-            const ClimatologyOverlay* O = overlays[0];
-
-            // Use overlay metadata if available
-            double vmin = O->range_min;
-            double vmax = O->range_max;
-
-            if (vmax <= vmin)
-            {
-                vmin = 0.0;
-                vmax = 1.0;
-            }
-
-            vmins.push_back(vmin);
-            vmaxs.push_back(vmax);
-            weights.push_back(1.0);
-        }
-        return;
-    }
-
-    // ------------------------------------------------------------------------
-    // 3. Weighted blend mode
-    // ------------------------------------------------------------------------
-    if (mode == DisplayMode::WeightedBlend)
-    {
-        for (const ClimatologyOverlay* O : overlays)
-        {
-            if (!O)
-            {
-                weights.push_back(0.0);
-                vmins.push_back(0.0);
-                vmaxs.push_back(1.0);
-                continue;
-            }
-
-            // Weight from overlay metadata or default
-            double w = (O->weight > 0.0) ? O->weight : 1.0;
-            weights.push_back(w);
-
-            // Per-overlay range
-            double vmin = O->range_min;
-            double vmax = O->range_max;
-
-            if (vmax <= vmin)
-            {
-                vmin = 0.0;
-                vmax = 1.0;
-            }
-
-            vmins.push_back(vmin);
-            vmaxs.push_back(vmax);
-        }
-
-        // Normalize weights
-        double wsum = 0.0;
-        for (double w : weights) wsum += w;
-        if (wsum > 0.0)
-            for (double& w : weights) w /= wsum;
-
-        return;
-    }
-
-    // ------------------------------------------------------------------------
-    // 4. Mean / Median / Additive / Max / Min composites
-    // These modes do not use per-overlay weights.
-    // They DO use per-overlay ranges if available.
-    // ------------------------------------------------------------------------
-    for (const ClimatologyOverlay* O : overlays)
-    {
-        if (!O)
-        {
-            vmins.push_back(0.0);
-            vmaxs.push_back(1.0);
+        if (!overlay_ptr)
             continue;
-        }
 
-        double vmin = O->range_min;
-        double vmax = O->range_max;
+        // Select only overlays matching the requested month
+        if (overlay_ptr->month_index != month_index)
+            continue;
 
-        if (vmax <= vmin)
-        {
-            vmin = 0.0;
-            vmax = 1.0;
-        }
-
-        vmins.push_back(vmin);
-        vmaxs.push_back(vmax);
+        if (overlay_ptr->m_valid)
+            result.push_back(overlay_ptr);
     }
 
-    // No weights needed for these modes
-    weights.assign(N, 1.0);
+    return result;
 }
+
 

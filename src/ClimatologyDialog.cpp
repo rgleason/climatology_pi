@@ -3,6 +3,12 @@
  ******************************************************************************/
 
 #include <wx/statline.h>
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+#include <wx/progdlg.h>
+
 
 #include "ClimatologyDialog.h"
 #include "ClimatologyOverlayFactory.h"
@@ -11,6 +17,7 @@
 #include "ClimatologyRenderParams.h"
 #include "StandardDisplayParams.h"
 #include "CycloneFilterParams.h"
+#include "CycloneUtils.h"
 
 #include "ocpn_plugin.h"   // for DimeWindow
 
@@ -37,11 +44,13 @@ ClimatologyDialog::ClimatologyDialog(wxWindow*                  parent,
     // Initialize StandardDisplayParams (modern)
     // -----------------------------------------------------------------------
     m_displayParams.overlayType   = OVERLAY_WIND;
-    m_displayParams.transparency  = 0.0;
+	m_displayParams.transparency  = 0.0;   // UI slider initial value
     m_displayParams.smooth        = true;
-    m_displayParams.numberSpacing = 20.0;
+    m_displayParams.numberSpacing = 20.0;  // legacy field still used by dialog
     m_displayParams.mode          = DisplayMode::SingleScaled;
-
+	
+	
+	// Per‑overlay initialization
     for (int i = 0; i < NUM_OVERLAYS; ++i) {
         m_displayParams.alpha[i]           = 1.0;
         m_displayParams.units[i]           = 0;
@@ -101,9 +110,9 @@ ClimatologyDialog::ClimatologyDialog(wxWindow*                  parent,
     // -----------------------------------------------------------------------
     // Initialize CycloneFilterParams (modern)
     // -----------------------------------------------------------------------
-    m_cycloneFilter.statemask         = 0xFFFFFFFF;
-    m_cycloneFilter.minwindspeed      = 0.0;
-    m_cycloneFilter.maxpressure       = 2000.0;
+    m_cycloneFilter.stateMask         = 0xFFFFFFFF;
+    m_cycloneFilter.minWind           = 0.0;
+    m_cycloneFilter.maxPressure       = 2000.0;
     m_cycloneFilter.allowElNino       = true;
     m_cycloneFilter.allowLaNina       = true;
     m_cycloneFilter.allowNeutral      = true;
@@ -175,8 +184,8 @@ wxSizer* ClimatologyDialog::BuildTimelineBar()
         wxDateTime now = wxDateTime::Now();
         m_monthChoice->SetSelection(now.GetMonth());
         m_daySpin->SetValue(now.GetDay());
-        m_displayParams.cyclone.currentMonth = ...now.GetMonth();
-        m_displayParams.centerDay    = now.GetDay();
+		m_displayParams.cyclone.currentMonth = now.GetMonth();
+		m_displayParams.cyclone.centerDay    = now.GetDay();
         PushParamsToFactoryAndRender();
     });
 
@@ -248,13 +257,13 @@ wxSizer* ClimatologyDialog::BuildOverlayList()
 // ---------------------------------------------------------------------------
 void ClimatologyDialog::OnMonthChanged(wxCommandEvent& evt)
 {
-    m_displayParams.cyclone.currentMonth = ...m_monthChoice->GetSelection();
+    m_displayParams.cyclone.currentMonth = m_monthChoice->GetSelection();
     PushParamsToFactoryAndRender();
 }
 
 void ClimatologyDialog::OnDayChanged(wxSpinEvent& evt)
 {
-    m_displayParams.centerDay = m_daySpin->GetValue();
+	m_displayParams.cyclone.centerDay = m_daySpin->GetValue();
     PushParamsToFactoryAndRender();
 }
 
@@ -289,8 +298,8 @@ void ClimatologyDialog::OnOverlayCheck(wxCommandEvent& evt)
 
 void ClimatologyDialog::OnCyclonesConfig(wxCommandEvent& evt)
 {
-    // Second 4-tab config dialog; assumes constructor taking parent + factory
-    ClimatologyConfigDialog cfg(this);
+    // Second 4-tab config dialog; now requires parent + factory
+    ClimatologyConfigDialog cfg(this, m_factory);
     cfg.ShowModal();
     PushParamsToFactoryAndRender();
 }
@@ -350,10 +359,9 @@ void ClimatologyDialog::PushParamsToFactoryAndRender()
     m_renderParams.windAtlas = m_displayParams.windAtlas;
 
     // Cyclone quick toggles
-    m_renderParams.showCyclones      = m_displayParams.cyclone.enabled;
-    m_renderParams.centerDay         = m_displayParams.cyclone.centerDay;
-    m_renderParams.daySpan           = m_displayParams.cyclone.daySpan;
-    m_renderParams.allTimesCyclones  = m_displayParams.cyclone.allTimesCyclones;
+    m_renderParams.showCyclones  = m_displayParams.cyclone.enabled;
+	m_renderParams.cycloneParams = m_displayParams.cyclone;
+
 
     m_renderParams.showElNino  = m_displayParams.cyclone.showElNino;
     m_renderParams.showLaNina  = m_displayParams.cyclone.showLaNina;
@@ -382,32 +390,30 @@ void ClimatologyDialog::PushParamsToFactoryAndRender()
 void ClimatologyDialog::ApplyRenderParams(const ClimatologyRenderParams& p)
 {
     // Overlay type + visibility
-    m_displayParams.overlayType = p.overlayType;
-    m_displayParams.showOverlayType[p.overlayType] = p.overlayEnabled;
+ //   m_displayParams.overlayType = p.overlayType;
+//    m_displayParams.showOverlayType[p.overlayType] = p.overlayEnabled;
 
-    m_displayParams.units[p.overlayType] = p.units;
+//    m_displayParams.units[p.overlayType] = p.units;
     m_displayParams.mode                 = p.mode;
 
-    m_displayParams.showArrows[p.overlayType]   = p.showArrows;
-    m_displayParams.arrowWidth[p.overlayType]   = p.arrowWidth;
-    m_displayParams.arrowSpacing[p.overlayType] = p.arrowSpacing;
-    m_displayParams.arrowSize[p.overlayType]    = p.arrowSize;
-    m_displayParams.arrowMode[p.overlayType]    = p.arrowMode;
+//    m_displayParams.showArrows[p.overlayType]   = p.showArrows;
+//    m_displayParams.arrowWidth[p.overlayType]   = p.arrowWidth;
+//    m_displayParams.arrowSpacing[p.overlayType] = p.arrowSpacing;
+//    m_displayParams.arrowSize[p.overlayType]    = p.arrowSize;
+//    m_displayParams.arrowMode[p.overlayType]    = p.arrowMode;
 
-    m_displayParams.showNumbers[p.overlayType] = p.showNumbers;
-    m_displayParams.numberSpacing              = p.numberSize;
+//   m_displayParams.showNumbers[p.overlayType] = p.showNumbers;
+//    m_displayParams.numberSpacing              = p.numberSize;
 
-    m_displayParams.isoSpacing[p.overlayType] = p.isoBarSpacing;
-    m_displayParams.isoStep[p.overlayType]    = p.isoBarStep;
+//    m_displayParams.isoSpacing[p.overlayType] = p.isoBarSpacing;
+//    m_displayParams.isoStep[p.overlayType]    = p.isoBarStep;
 
     m_displayParams.smooth    = p.smoothing;
     m_displayParams.windAtlas = p.windAtlas;
 
     // Cyclone timeline
-    m_displayParams.cyclone.enabled          = p.showCyclones;
-    m_displayParams.cyclone.centerDay        = p.centerDay;
-    m_displayParams.cyclone.daySpan          = p.daySpan;
-    m_displayParams.cyclone.allTimesCyclones = p.allTimesCyclones;
+    m_displayParams.cyclone.enabled = p.showCyclones;
+	m_displayParams.cyclone         = p.cycloneParams;
 
     m_displayParams.cyclone.showElNino  = p.showElNino;
     m_displayParams.cyclone.showLaNina  = p.showLaNina;
@@ -421,10 +427,10 @@ void ClimatologyDialog::ApplyRenderParams(const ClimatologyRenderParams& p)
     m_displayParams.cyclone.showSHE = p.showSHE;
 
     // Update basic UI
-    if (m_monthChoice)
-        m_monthChoice->SetSelection(p.cyclone.currentMonth);
-    if (m_daySpin)
-        m_daySpin->SetValue(p.cyclone.centerDay);
+//    if (m_monthChoice)
+//        m_monthChoice->SetSelection(p.currentMonth);
+//    if (m_daySpin)
+//        m_daySpin->SetValue(p.centerDay);
 
     for (int i = 0; i < NUM_OVERLAYS; ++i)
         if (m_rows[i].check)

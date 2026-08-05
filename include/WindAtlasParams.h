@@ -21,7 +21,7 @@ struct WindAtlasParams
     bool showFreq = false;
     bool autoScale = false;
 
-    double opacity = 1.0;
+ //   double opacity = 1.0;   // comes from ClimatologyRenderParams.alpha
     bool allTimesWind = false;
     bool allTimesCurrent = false;
 

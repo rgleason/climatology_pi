@@ -172,6 +172,3 @@ private:
 };
 
 #endif // _CLIMATOLOGY_PI_PLUGIN_H_
-
-
-#endif // _CLIMATOLOGY_PI_PLUGIN_H_

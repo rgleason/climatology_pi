@@ -19,16 +19,14 @@
 #include "ClimatologyMonthData.h"      // ClimatologyMonthData
 #include "StandardDisplayParams.h"     // StandardDisplayParams
 #include "CycloneFilterParams.h"       // CycloneFilterParams
+#include "CycloneStructs.h"              // Cyclone struct
+
 
 class ClimatologyDataModel;
 class PlugIn_ViewPort;
-
 class ClimatologyIsoBarMap;
-struct Cyclone;
-struct CyclonePoint;
-struct CycloneTrack;
-struct ElNinoYear;
 
+wxString ClimatologyDataDirectory();
 
 typedef unsigned int GLuint;
 
@@ -37,9 +35,9 @@ typedef unsigned int GLuint;
 // ---------------------------------------------------------------------------
 struct ClimatologyOverlay
 {
-    OverlayType type = OVERLAY_INVALID;   // added
-    double latStep = 0.0;                 // added
-    double lonStep = 0.0;                 // added	
+    OverlayType type = OVERLAY_INVALID;   
+    double latStep = 0.0;                 
+    double lonStep = 0.0;                 	
 	
     ClimatologyOverlay()
         : m_iTexture(0),
@@ -122,8 +120,14 @@ public:
 
     bool Load();
     bool IsCompletedLoading() const { return m_bCompletedLoading; }
-
+	
+	// Store persistent configuration (not used during rendering).
     void SetParams(const StandardDisplayParams& p);
+	
+	// Build render parameters for a single overlay
+	void BuildRenderParams(int overlayIndex,
+                       ClimatologyRenderParams& outParams) const;
+					   
     void SetCycloneFilter(const CycloneFilterParams& params);
     void SetViewPort(PlugIn_ViewPort* vp);
 
@@ -133,6 +137,12 @@ public:
                        double lon,
                        const ClimatologyRenderParams& p) const;
 
+    double getValueMonth(enum Coord coord,
+                         int setting,
+                         double lat,
+                         double lon,
+                         int month) const;
+					   
     bool Render(const ClimatologyRenderParams& p);
 
     // Overlay access
@@ -142,16 +152,14 @@ public:
 	const ClimatologyOverlay* GetOverlay(OverlayType type,
                                      const ClimatologyRenderParams& p) const;
 
-	    // Unified overlay selection / metadata / composite
-    std::vector<const ClimatologyOverlay*>
-    GatherOverlaysForMode(DisplayMode mode,
-                          int overlayType,
-                          int month_index);
+	// Unified overlay selection / metadata / composite
 
-    std::vector<const ClimatologyOverlay*>
-    GatherOverlaysForMode(DisplayMode mode,
-                          OverlayType type,
-                          int month_index);
+	std::vector<const ClimatologyOverlay*>
+	GatherOverlaysForMode(DisplayMode mode,
+						  OverlayType type,
+						  int month_index,
+						  const ClimatologyRenderParams& p) const;
+
 
     void GatherOverlayMetadata(const std::vector<const ClimatologyOverlay*>& overlays,
                                DisplayMode mode,
@@ -169,47 +177,52 @@ public:
                                   const std::vector<double>& vmaxs,
                                   double global_vmin,
                                   double global_vmax);
+								  
+								  
+								  
 
-    // High‑level unified operators
-    void GenerateUnifiedColorGridFromSingleOverlayScaled(
-            const ClimatologyOverlay& O,
-            double vmin, double vmax,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+	// Coordinate Helpers
+	void LatLonToPixel(const PlugIn_ViewPort& vp,
+                       double lat,
+                       double lon,
+                       wxPoint& r) const;
 
-    void GenerateUnifiedColorGridMultiOverlayAdditive(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+    void LatLonToPixel(const PlugIn_ViewPort& vp,
+                       double lat,
+                       double lon,
+                       double& x,
+                       double& y) const;
+	void GetCanvasPixLL(const PlugIn_ViewPort* vp,
+                    wxPoint* r,
+                    double lat,
+                    double lon) const;
+	void GetCanvasLLPix(const PlugIn_ViewPort* vp,
+                    const wxPoint& p,
+                    double* lat,
+                    double* lon) const;	
 
-    void GenerateUnifiedColorGridMultiOverlayMax(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+	//  Buid Overlay and Colormaps
 
-    void GenerateUnifiedColorGridMultiOverlayMin(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+	wxColour GetOverlayColorLegacy(int setting, double value);
 
-    void GenerateUnifiedColorGridMultiOverlayMean(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+	wxColour GetOverlayColorUnified(int setting,
+									double value,
+									double vmin,
+									double vmax,
+									const ClimatologyRenderParams& params);
 
-    void GenerateUnifiedColorGridMultiOverlayMedian(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
+	wxColour GetOverlayColor(double v);
+	wxColour GetOverlayColorScaled(double value, double vmin, double vmax);
 
-    // ENSO
-    bool LoadENSODataFromCSV(const wxString& filename);
+	bool BuildOverlayData(ClimatologyOverlay& O,
+						  int setting,
+						  int month,
+						  const ClimatologyRenderParams& params);
+						  
+	bool GetStormHistory(int stormID, std::vector<CyclonePoint>& out);
+	bool GetStormHistoryPoint(int stormID, int index, CyclonePoint& out);
+
+
 
 private:
     // Core state
@@ -232,14 +245,15 @@ private:
     ClimatologyOverlay m_pOverlay[13][NUM_OVERLAYS];
 
     // Raw NOAA fields
-    float* m_slp[13]     = {};
-    float* m_sst[13]     = {};
-    float* m_at[13]      = {};
-    float* m_cld[13]     = {};
-    float* m_precip[13]  = {};
-    float* m_rhum[13]    = {};
-    float* m_lightn[13]  = {};
-    float* m_seadepth    = nullptr;
+	std::vector<float> m_slp[12];
+	std::vector<float> m_sst[12];
+	std::vector<float> m_at[12];
+	std::vector<float> m_cld[12];
+	std::vector<float> m_precip[12];
+	std::vector<float> m_rhum[12];
+	std::vector<float> m_lightn[12];
+	std::vector<float> m_seadepth;
+
 
     WindData*    m_WindData[13]    = {};
     CurrentData* m_CurrentData[13] = {};
@@ -258,13 +272,18 @@ private:
     // Color palette
     std::vector<wxColour> m_colorPalette;
 
-    // Cyclone / ENSO data
-    std::vector<Cyclone>              m_cyclones;
-    std::vector<CycloneTrack>         m_cyclone_cache;
-    std::vector<ElNinoYear>           m_enso;
-    std::map<int, std::vector<double>> m_ENSOIndex;
-    std::map<int, std::vector<Cyclone>> m_Cyclones;
-    std::map<int, CycloneTrack>        m_CycloneTracks;
+	// Cyclone / ENSO data
+	CycloneData m_cycloneData;
+
+	// Raw cyclone points (before track assembly)
+	std::vector<CyclonePoint> m_rawCyclonePoints;
+
+	// ENSO lookup table: year → month → ENSO phase
+	std::map<int, std::map<int, CycloneENSO>> m_ensoData;
+
+	// Filtered + rendered tracks
+	std::vector<CycloneTrack> m_cyclone_cache;
+
 
     // Storm symbols
     wxBitmap m_bmpStormCat1;
@@ -273,25 +292,28 @@ private:
     wxBitmap m_bmpStormCat4;
     wxBitmap m_bmpStormCat5;
     wxBitmap m_bmpStormTD;
+	
 
-    // Loading / data helpers
+// ==================================================
+// Loading / data helpers
+// ==================================================
+
     bool LoadInternal(wxGenericProgressDialog* progress);
-    void ApplyCycloneFilter();
 	
 	void LoadVectorField(int setting,
-                     int month,
-                     const float* u,
-                     const float* v,
-                     int latCount,
-                     int lonCount,
-                     double lat0,
-                     double lon0,
-                     double latStep,
-                     double lonStep);
+                        int month,
+                        const float *srcU,
+                        const float *srcV,
+                        int latitudes,
+                        int longitudes,
+                        double lat0,
+                        double lon0,
+                        double latStep,
+                        double lonStep);
 
     void LoadScalarField(int setting,
                          int month,
-                         float* src,
+                         const float* src,
                          int latCount,
                          int lonCount,
                          double lat0,
@@ -300,8 +322,8 @@ private:
                          double lonStep);
 	bool AverageWindData();
 	bool AverageCurrentData();
-
-    bool LoadScalarNOAA();
+ 
+	bool LoadScalarNOAA();
     bool LoadWindNOAA();
     bool LoadCurrentNOAA();
     bool ReadNOAAFile(const wxString& name,
@@ -310,24 +332,8 @@ private:
                       int latCount,
                       int lonCount);
 
-    bool HasDataFor(int setting, int month);
-	
-	double getCurValue(Coord coord,
-                   int setting,
-                   double lat,
-                   double lon,
-                   const ClimatologyRenderParams& p);
+	bool HasDataFor(int setting, int month) const;
 
-
-    double getValueMonth(enum Coord coord,
-                         int setting,
-                         double lat,
-                         double lon,
-                         int month);
-
-    bool BuildOverlayData(ClimatologyOverlay& O,
-                          int setting,
-                          int month);
 
     bool CreateGLTexture(ClimatologyOverlay& O);
 
@@ -335,8 +341,11 @@ private:
                        double dpos,
                        PlugIn_ViewPort& vp,
                        double transparency);
-					   
-    // Rendering
+					   		
+// ==================================================
+// Rendering
+// ==================================================
+
     void RenderOverlayMap(const ClimatologyRenderParams& p);
     void RenderUnifiedGrid(const ClimatologyRenderParams& p);
 
@@ -351,124 +360,144 @@ private:
     void RenderDirectionArrowsGL(const ClimatologyRenderParams& p);
     void RenderDirectionArrowsDC(const ClimatologyRenderParams& p);
 
-void DrawArrowGL(double x1, double y1,
-                 double x2, double y2,
-                 const wxColour& color,
-                 int width);
 
-void DrawBarbsGL(double px, double py,
-                double x, double y,
-                double mag,
-                double cstep,
-                const wxColour& c,
-                int width);
+// ==================================================
+// Draw and Render- Arrows,Barbs,Numbers and WindAtlas GL/DC
+// ==================================================
+	
+	void DrawArrowGL(double x1, double y1,
+					 double x2, double y2,
+					 const wxColour& color,
+					 int width);
 
-void DrawArrowDC(wxDC* dc,
-                 double x1, double y1,
-                 double x2, double y2,
-                 const wxColour& color,
-                 int width);
+	void DrawBarbsGL(double px, double py,
+					double x, double y,
+					double mag,
+					double cstep,
+					const wxColour& c,
+					int width);
 
-void DrawBarbsDC(wxDC* dc,
-                 double px, double py,
-                 double x, double y,
-                 double mag,
-                 double cstep,
-                 const wxColour& color,
-                 int width);
+	void DrawArrowDC(wxDC* dc,
+					 double x1, double y1,
+					 double x2, double y2,
+					 const wxColour& color,
+					 int width);
 
+	void DrawBarbsDC(wxDC* dc,
+					 double px, double py,
+					 double x, double y,
+					 double mag,
+					 double cstep,
+					 const wxColour& color,
+					 int width);
 
     void RenderNumbers(const ClimatologyRenderParams& p);
     void RenderNumbersDC(const ClimatologyRenderParams& p);
     void RenderNumbersGL(const ClimatologyRenderParams& p);
-
+    void RenderWindAtlas(const ClimatologyRenderParams& p);
+	
+// ==================================================
+// Isobar Rendering
+// ==================================================
+	
     void RenderIsoBars(const ClimatologyRenderParams& p);
 
     ClimatologyIsoBarMap* GetOrCreateIsoBarMap(int overlayType,
-                                               int month,
-                                               double spacing,
-                                               double step,
-                                               int units,
-                                               const ClimatologyRenderParams& p);
+				int month,
+                double spacing,
+                double step,
+                int units,
+                const ClimatologyRenderParams& p);
 
     void DestroyIsoBarMap(int overlayType, int month);
 
-    void RenderWindAtlas(const ClimatologyRenderParams& p);
+// ============================================================================
+// Cyclone loader pipeline
+// ============================================================================
+	bool LoadCyclonePoints();  // loads raw points into m_rawCyclonePoints
+	bool LoadENSOYears(const wxString& filename);
+	bool ReadCycloneData(const wxString& filename,
+						std::vector<Cyclone>& basinTracks, 
+						bool southernHemisphere);
+	bool BuildCycloneTracks();  // assembles raw points into CycloneTrack objects
+					
     void RenderCyclones(const ClimatologyRenderParams& p);
+	void ApplyCycloneFilter(const CycloneFilterParams& F);
+	
+// ============================================================================
+// Cyclone accessors
+// ============================================================================
+	bool GetCycloneData(int year,
+						int month,
+						std::vector<CyclonePoint>& out) const;
 
-    // Cyclone helpers
-    wxColour BasinColor(int basinId);
+	bool GetCycloneTrack(int id,
+						 CycloneTrack& out) const;
 
-    wxColour CycloneColor(const Cyclone& C,
-                          const CycloneParams& A) const;
-
-    wxColour CyclonePointColor(const CyclonePoint& pt,
-                               const CycloneParams& A) const;
-
-    wxColour CycloneSegmentColor(const CyclonePoint& a,
-                                 const CyclonePoint& b,
-                                 const CycloneParams& A) const;
-
-    wxColour CycloneGradientColor(const Cyclone& C,
-                                  double t,
-                                  const CycloneParams& A) const;
-
-    float CycloneTrackWidth(const CyclonePoint& pt,
-                            const CycloneParams& A) const;
-
-    void CycloneLegend(wxDC* dc,
-                       const CycloneParams& A,
-                       const wxPoint& origin);
-
-    bool CycloneTimelineInterpolation(const CyclonePoint& pt,
-                                      const CycloneFilterParams& F,
-                                      int currentMonth) const;
-
-    bool CycloneVisible(const CycloneTrack& track,
-                        const ClimatologyRenderParams& p) const;
-
-    wxColour CycloneColor(const CycloneTrack& track,
-                          const ClimatologyRenderParams& p) const;
-
-    // ENSO / storm accessors
-    double GetENSOIndex(int year, int month);
-
-    bool GetCycloneData(int year,
-                        int month,
-                        std::vector<CyclonePoint>& out) const;
-
-    bool GetCycloneTrack(int id,
-                         CycloneTrack& out) const;
-
-    bool GetCyclonePoint(int id,
+	bool GetCyclonePoint(int id,
+                         int index,
                          CyclonePoint& out) const;
 
-    bool GetStormCursorData(double lat,
-                            double lon,
-                            CyclonePoint& out) const;
 
-    bool GetStormHistory(int id,
-                         std::vector<CyclonePoint>& out) const;
+// ============================================================================
+// Cyclone rendering helpers
+// ============================================================================
 
-    bool GetStormHistoryPoint(int id,
-                              CyclonePoint& out) const;
+	wxColour BasinColor(CycloneBasin basin) const;
+
+	wxColour CycloneColor(const CycloneTrack& track,
+						  const ClimatologyRenderParams& p) const;
+
+	wxColour CyclonePointColor(const CyclonePoint& pt,
+							   const CycloneParams& A) const;
+
+	wxColour CycloneSegmentColor(const CyclonePoint& a,
+								 const CyclonePoint& b,
+								 const CycloneParams& A) const;
+								 
+	wxColour CycloneGradientColorTrack(const CycloneTrack& track,
+										double t,
+										const CycloneParams& A) const;
+
+	float CycloneTrackWidth(const CyclonePoint& pt,
+							const CycloneParams& A) const;
+
+	bool CycloneVisible(const CycloneTrack& track,
+						const ClimatologyRenderParams& p) const;
+
+	void CycloneLegend(wxDC& dc,
+					   const CycloneParams& A,
+					   const wxPoint& origin) const;
+
+	bool CycloneTimelineInterpolation(const CyclonePoint& pt,
+									  const CycloneFilterParams& F,
+									  int currentMonth) const;
+								  
+// ============================================================================
+// ENSO helpers
+// ============================================================================
+
+	CycloneENSO ENSOFromDate(int year, int month) const;
+
+	double GetENSOIndex(int year, int month);
 
     int      GetStormCategory(double wind_kt);
     wxColour GetStormColor(int category);
     wxBitmap GetStormSymbol(int category);
     wxString GetStormLabel(int category);
-    wxString GetStormTooltip(const CyclonePoint& p);
     wxString GetStormIntensityText(double wind_kt);
 
-    // Overlay value helpers
-	double GetOverlayValue(OverlayType type,
-                       const ClimatologyRenderParams& p,
-                       double lat,
-                       double lon);
+	bool GetStormCursorData(double lat,
+							double lon,
+							CycloneTrack& outTrack,
+							CyclonePoint& outPoint) const;
 
-    double GetOverlayValueBilinear(const ClimatologyOverlay& O,
-                                   double lat,
-                                   double lon);
+	wxString GetStormTooltip(const CycloneTrack& track,
+							 const CyclonePoint& pt) const;
+
+// ============================================================================
+// Overlay value helpers
+// ============================================================================
 
     double GetOverlayGradient(const ClimatologyOverlay& O,
                               double lat,
@@ -478,8 +507,14 @@ void DrawBarbsDC(wxDC* dc,
                           double& vmin,
                           double& vmax);
 
-    bool NormalizeOverlay(ClimatologyOverlay& O);
+	bool NormalizeOverlay(ClimatologyOverlay& O,
+                      double vmin,
+                      double vmax);
+
     void NormalizeAllOverlays();
+	int DayOfYear(int year, int month, int day) const;
+	double NormalizeWind(double wind, CycloneBasin basin) const;
+	double NormalizePressure(double pressure) const;
 
     bool ComputeOverlayStatistics(const ClimatologyOverlay& O,
                                   double& mean,
@@ -491,19 +526,35 @@ void DrawBarbsDC(wxDC* dc,
                              double& range);
 
     void ComputeAllOverlayRanges();
+	
+// ============================================================================
+// Overlay Color 
+// ============================================================================
+	
+	void ColorMapLegacy(int setting,
+						double v,
+						unsigned char& r,
+						unsigned char& g,
+						unsigned char& b);
 
-    wxColour GetOverlayColor(double v);
-    wxColour GetOverlayColorScaled(double value,
-                                   double vmin,
-                                   double vmax);
-
-    void ApplyColorMap(const ClimatologyOverlay& O,
+     void ApplyColorMap(const ClimatologyOverlay& O,
                        ClimatologyColorGrid& grid);
 
     void ApplyColorMapScaled(const ClimatologyOverlay& O,
                              ClimatologyColorGrid& grid,
                              double vmin,
                              double vmax);
+	void ApplyGlobalScalingToUnifiedGrid(
+			const std::vector<double>& blended_cache,
+            int NX,
+            int NY,
+            ClimatologyColorGrid& outGrid,
+            double global_vmin,
+            double global_vmax);
+
+// ============================================================================
+// Unified grid variants (full set)
+// ============================================================================
 
     void GenerateColorGrid(const ClimatologyOverlay& O,
                            ClimatologyColorGrid& grid);
@@ -513,28 +564,22 @@ void DrawBarbsDC(wxDC* dc,
                                  double vmin,
                                  double vmax);
 
-    // Unified grid variants (full set)
-	
-    void GenerateUnifiedColorGrid(const std::vector<const ClimatologyOverlay*>& overlays,
+     void GenerateUnifiedColorGrid(const std::vector<const ClimatologyOverlay*>& overlays,
                                   ClimatologyColorGrid& outGrid);
 
-    void GenerateUnifiedColorGridScaled(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            ClimatologyColorGrid& outGrid,
-            double vmin,
-            double vmax);
+void GenerateUnifiedColorGridScaled(
+    const std::vector<const ClimatologyOverlay*>& overlays,
+    const std::vector<double>& vmins,
+    const std::vector<double>& vmaxs,
+    ClimatologyColorGrid& outGrid,
+    double global_vmin,
+    double global_vmax);
+
 
     void GenerateUnifiedColorGridWeighted(
             const std::vector<const ClimatologyOverlay*>& overlays,
             const std::vector<double>& weights,
             ClimatologyColorGrid& outGrid);
-
-    void GenerateUnifiedColorGridWeightedScaled(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            const std::vector<double>& weights,
-            ClimatologyColorGrid& outGrid,
-            double vmin,
-            double vmax);
 
     void GenerateUnifiedColorGridMultiRange(
             const std::vector<const ClimatologyOverlay*>& overlays,
@@ -565,24 +610,4 @@ void DrawBarbsDC(wxDC* dc,
             ClimatologyColorGrid& outGrid,
             double global_vmin,
             double global_vmax);
-
-    void GenerateUnifiedColorGridMultiRangeWeightedGlobal(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            const std::vector<double>& weights,
-            const std::vector<double>& vmins,
-            const std::vector<double>& vmaxs,
-            ClimatologyColorGrid& outGrid);
-
-    void GenerateUnifiedColorGridMultiRangeWeightedGlobalScaled(
-            const std::vector<const ClimatologyOverlay*>& overlays,
-            const std::vector<double>& weights,
-            const std::vector<double>& vmins,
-            const std::vector<double>& vmaxs,
-            ClimatologyColorGrid& outGrid,
-            double global_vmin,
-            double global_vmax);
-
-    void ApplyGlobalScalingToUnifiedGrid(ClimatologyColorGrid& grid,
-                                         double global_vmin,
-                                         double global_vmax);
 };

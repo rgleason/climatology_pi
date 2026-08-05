@@ -38,6 +38,15 @@
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyRenderParams.h"
 
+#ifndef wxPD_APP_MODAL
+#define wxPD_APP_MODAL 0
+#endif
+
+#ifndef wxPD_AUTO_HIDE
+#define wxPD_AUTO_HIDE 0
+#endif
+
+
 // ------------------------------------------------------------
 // Parameter cache helpers
 // ------------------------------------------------------------
@@ -435,8 +444,11 @@ void DrawLineSeg(piDC* dc, PlugIn_ViewPort& VP,
     GetCanvasPixLL(&VP, &r1, lat1, lon1);
     GetCanvasPixLL(&VP, &r2, lat2, lon2);
 
-    if (dc && dc->GetDC())
-        dc->GetDC()->DrawLine(r1.x, r1.y, r2.x, r2.y);
+    wxDC* wdc = dc ? dc->GetDC() : nullptr;
+    if (!wdc)
+        return;
+
+    wdc->DrawLine(r1.x, r1.y, r2.x, r2.y);
 }
 
 void IsoBarMap::ClearMap()
@@ -495,7 +507,7 @@ void IsoBarMap::DrawContour(piDC *dc, PlugIn_ViewPort& VP,
 }
 
 // ------------------------------------------------------------
-// GL rendering
+// Plot GL rendering
 // ------------------------------------------------------------
 
 void IsoBarMap::PlotGL(PlugIn_ViewPort& vp)
@@ -534,6 +546,58 @@ void IsoBarMap::PlotGL(PlugIn_ViewPort& vp)
             for (auto& seg : m_map[latind][lonind]) {
                 DrawLineSegGL(vp, seg.lat1, seg.lon1, seg.lat2, seg.lon2);
                 DrawContour(nullptr, vp,
+                            seg.contour,
+                            (seg.lat1 + seg.lat2) / 2,
+                            (seg.lon1 + seg.lon2) / 2);
+            }
+
+            if (lonind == endlonind)
+                break;
+        }
+}
+
+
+// ------------------------------------------------------------
+// Plot DC rendering
+// ------------------------------------------------------------
+
+void IsoBarMap::PlotDC(piDC* dc, PlugIn_ViewPort& vp)
+{
+    wxDC* wdc = dc ? dc->GetDC() : nullptr;
+    if (!wdc)
+        return;
+
+    int startlatind = floor((vp.lat_min + MAX_LAT) / ZONE_SIZE);
+    if (startlatind < 0) startlatind = 0;
+
+    int endlatind = floor((vp.lat_max + MAX_LAT) / ZONE_SIZE);
+    if (endlatind > LATITUDE_ZONES - 1) endlatind = LATITUDE_ZONES - 1;
+
+    double lon_min = vp.lon_min;
+    if (lon_min < -180) lon_min += 360;
+    else if (lon_min >= 180) lon_min -= 360;
+
+    int startlonind = floor((lon_min + 180) / ZONE_SIZE);
+    if (startlonind < 0) startlonind = LONGITUDE_ZONES - 1;
+    if (startlonind > LONGITUDE_ZONES - 1) startlonind = 0;
+
+    double lon_max = vp.lon_max;
+    if (lon_max < -180) lon_max += 360;
+    else if (lon_max >= 180) lon_max -= 360;
+
+    int endlonind = floor((lon_max + 180) / ZONE_SIZE);
+    if (endlonind < 0) endlonind = LONGITUDE_ZONES - 1;
+    if (endlonind > LONGITUDE_ZONES - 1) endlonind = 0;
+
+    for (int latind = startlatind; latind <= endlatind; latind++)
+        for (int lonind = startlonind;; lonind++)
+        {
+            if (lonind > LONGITUDE_ZONES - 1)
+                lonind = 0;
+
+            for (auto& seg : m_map[latind][lonind]) {
+                DrawLineSeg(dc, vp, seg.lat1, seg.lon1, seg.lat2, seg.lon2);
+                DrawContour(dc, vp,
                             seg.contour,
                             (seg.lat1 + seg.lat2) / 2,
                             (seg.lon1 + seg.lon2) / 2);

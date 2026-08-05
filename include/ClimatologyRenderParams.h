@@ -17,7 +17,11 @@
 #include "WindData.h"
 #include "CurrentData.h"
 
-
+// ============================================================================
+// ClimatologyRenderParams
+// Unified rendering parameters for all overlays.
+// This struct is the authoritative parameter block passed to the renderer.
+// ============================================================================
 struct ClimatologyRenderParams
 {
     // -----------------------------------------------------------------------
@@ -50,11 +54,14 @@ struct ClimatologyRenderParams
     // -----------------------------------------------------------------------
     double cursorLat = NAN;
     double cursorLon = NAN;
-	
-    bool showWindAtlas = false;
-	
 
-  	
+	// -----------------------------------------------------------------------
+    // Month interpolation (used by getCurValue)
+    // -----------------------------------------------------------------------
+    int    currentMonth      = 1;     // 0–11
+    int    nextMonth         = 2;     // 0–11
+    double monthInterpolation = 0.0;  // 0.0–1.0
+	
 	// -----------------------------------------------------------------------
     // All-times modes
 	// -----------------------------------------------------------------------	
@@ -62,7 +69,7 @@ struct ClimatologyRenderParams
     bool allTimesCurrent  = false;
 
     // -----------------------------------------------------------------------
-    // Resolved per-overlay parameters (from StandardDisplayParams)
+    // Per-overlay parameters (from StandardDisplayParams)
     // -----------------------------------------------------------------------
     int     units        = 0;    // units[overlayType]
 
@@ -79,19 +86,24 @@ struct ClimatologyRenderParams
     int  arrowSize    = 0;
     int  arrowMode    = 0;
 
-    wxColour color;             // color[overlayType]
-
+    wxColour color;       // color[overlayType]
+	
+	double alpha = 1.0;  // Transparency for single overlay being rendered
+	
     // -----------------------------------------------------------------------
     // Wind Atlas (unified nested params)
     // -----------------------------------------------------------------------
+    bool showWindAtlas = false;
+    WindAtlasParams windAtlas;	
 
-  	WindAtlasParams windAtlas; 
-	
-	int currentMonth = 1;
-	int nextMonth = 2;
-	double monthInterpolation = 0.0;
+	// -----------------------------------------------------------------------
+    // Cyclone parameters (unified)
+    // -----------------------------------------------------------------------
+ 	CycloneParams cycloneParams;
+	CycloneFilterParams cycloneFilter;
 
 	bool showCyclones = false;
+	
 	bool showEPA = false;
 	bool showWPA = false;
 	bool showSPA = false;
@@ -103,18 +115,7 @@ struct ClimatologyRenderParams
 	bool showLaNina = false;
 	bool showNeutral = false;
 
-	double transparency = 1.0;
-
-	
 	// -----------------------------------------------------------------------
-    // Cyclone parameters (unified)
-    // -----------------------------------------------------------------------
- 	CycloneParams cycloneParams;
-	CycloneFilterParams cycloneFilter;
-	
-	
-
-    // -----------------------------------------------------------------------
     // Native NOAA grid spacing per overlay (unified model)
     // -----------------------------------------------------------------------
     double latStep[NUM_OVERLAYS] = {0.0};

@@ -544,8 +544,8 @@ void ClimatologyOverlayFactory::Render(const ClimatologyRenderParams& p)
     piDC* dc = p.dc;
 
     // Set transparency
-    dc->SetPen(wxPen(wxColour(0,0,0,0)));
-    dc->SetBrush(wxBrush(wxColour(0,0,0,0)));
+    dc.SetPen(wxPen(wxColour(0,0,0,0)));
+    dc.SetBrush(wxBrush(wxColour(0,0,0,0)));
 
     // Render using wxDC primitives
     RenderDC(*dc, p);

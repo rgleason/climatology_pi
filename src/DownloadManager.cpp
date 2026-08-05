@@ -8,10 +8,20 @@
 #include <wx/log.h>
 #include <wx/zstream.h>
 #include <wx/wfstream.h>
+#include <wx/progdlg.h>
 
 #include <curl/curl.h>
 
 #include "ocpn_plugin.h"
+
+
+#ifndef wxPD_APP_MODAL
+#define wxPD_APP_MODAL 0
+#endif
+
+#ifndef wxPD_AUTO_HIDE
+#define wxPD_AUTO_HIDE 0
+#endif
 
 
 // ------------------------------------------------------------
@@ -96,31 +106,6 @@ bool DownloadManager::AllRequiredAvailable() const
     return true;
 }
 
-void DownloadManager::StartBackgroundDownload(bool interactive)
-{
-    Cancel();
-    m_cancelled = false;
-
-    // Create progress dialog in MAIN THREAD
-    if (interactive) {
-        m_progress = new wxGenericProgressDialog(
-            _("Climatology Data Download"),
-            _("Downloading climatology data…"),
-            100,
-            m_parent,
-            wxPD_APP_MODAL | wxPD_ELAPSED_TIME | wxPD_REMAINING_TIME
-        );
-    }
-
-    // Bind progress event to this manager
-    m_parent->Bind(EVT_DM_PROGRESS,
-                   &DownloadManager::OnDownloadProgress,
-                   this);
-
-    // Start worker thread
-    m_worker = new DownloadWorker(this, interactive);
-    m_worker->Run();
-}
 
 
 void DownloadManager::OnDownloadProgress(wxCommandEvent& event)

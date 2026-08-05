@@ -92,8 +92,8 @@ public:
 
     bool Recompute(wxWindow *parent);
 
-    void Plot(piDC *dc, PlugIn_ViewPort &vp);
     void PlotGL(PlugIn_ViewPort &vp);
+	virtual void PlotDC(piDC* dc, PlugIn_ViewPort& vp);
 
     bool m_bNeedsRecompute, m_bComputing;
 

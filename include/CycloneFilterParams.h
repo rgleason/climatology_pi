@@ -1,52 +1,62 @@
 #ifndef CYCLONE_FILTER_PARAMS_H
 #define CYCLONE_FILTER_PARAMS_H
 
+#include <set>
 #include <wx/datetime.h>
+#include "ClimatologyEnums.h"   // CycloneState, CycloneBasin, CycloneENSO
 
 // ============================================================================
 // CycloneFilterParams
-// Data filtering rules for cyclone tracks.
+// Logical filtering parameters for cyclone tracks/points.
 // NOT used for rendering (CycloneParams handles appearance).
-// Used by the cyclone renderer for visual styling ONLY.
-// Not used by ClimatologyRenderParams.h
-// Used by the cyclone loader and filter engine.
 // ============================================================================
 struct CycloneFilterParams
 {
     // -----------------------------------------------------------------------
-    // Date range filtering (refactored model)
+    // Basin filter
     // -----------------------------------------------------------------------
-    wxDateTime startDate;     // inclusive
-    wxDateTime endDate;       // inclusive
+    std::set<CycloneBasin> basinFilter;   // EPA, WPA, SPA, ATL, NIO, SHE
 
     // -----------------------------------------------------------------------
-    // Intensity filtering
+    // ENSO filter
     // -----------------------------------------------------------------------
-    double minWind     = 0.0;     // knots
-    double maxPressure = 2000.0;  // hPa
+    std::set<CycloneENSO> ensoFilter;     // EL_NINO, LA_NINA, NEUTRAL, NA
 
     // -----------------------------------------------------------------------
-    // Storm-type mask (CycloneState)
+    // Storm-type filter
     // -----------------------------------------------------------------------
-    int stateMask = 0xFFFFFFFF;
+    std::set<CycloneState> stateFilter;   // TROPICAL, SUBTROPICAL, etc.
 
     // -----------------------------------------------------------------------
-    // ENSO filtering (track-level)
+    // Month filter (1–12). Empty = all months.
     // -----------------------------------------------------------------------
-    bool allowElNino       = true;
-    bool allowLaNina       = true;
-    bool allowNeutral      = true;
-    bool allowNotAvailable = true;
+    std::set<int> monthFilter;
 
     // -----------------------------------------------------------------------
-    // Basin filtering (track-level)
+    // Year range filter
     // -----------------------------------------------------------------------
-    bool allowEPA = true;
-    bool allowWPA = true;
-    bool allowSPA = true;
-    bool allowATL = true;
-    bool allowNIO = true;
-    bool allowSHE = true;
+    int yearMin = 0;
+    int yearMax = 9999;
+
+    // -----------------------------------------------------------------------
+    // Intensity filters
+    // -----------------------------------------------------------------------
+    double windMin     = 0.0;     // knots
+    double windMax     = 999.0;   // knots
+
+    double pressureMin = 0.0;     // hPa
+    double pressureMax = 2000.0;  // hPa
+
+    // -----------------------------------------------------------------------
+    // Date range filter (optional, track-level)
+    // -----------------------------------------------------------------------
+    wxDateTime startDate;         // inclusive
+    wxDateTime endDate;           // inclusive
+
+    // -----------------------------------------------------------------------
+    // Timeline window (used by CycloneTimelineInterpolation)
+    // -----------------------------------------------------------------------
+    int daySpan = 30;             // +/- days around center
 };
 
 #endif // CYCLONE_FILTER_PARAMS_H

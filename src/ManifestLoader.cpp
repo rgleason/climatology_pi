@@ -9,6 +9,11 @@
 #include "climatology_pi.h"
 #include "ClimatologyEnums.h"
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+#include <wx/progdlg.h>
 
 #include <wx/file.h>
 #include <wx/filename.h>
