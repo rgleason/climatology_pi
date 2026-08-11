@@ -1,8 +1,7 @@
 #include "UnifiedGrid.h"
 
 // ============================================================================
-// Simplified UnifiedGrid.cpp
-// Matches the simplified UnifiedGrid.h used for structural validation.
+// Full UnifiedGrid.cpp — Modern unified climatology model
 // ============================================================================
 
 UnifiedGrid::UnifiedGrid()
@@ -14,11 +13,19 @@ UnifiedGrid::UnifiedGrid()
     , lonStep(0.0)
     , valid(false)
 {
+    validMonths.assign(12, false);
+    scalar.resize(12);
+    u.resize(12);
+    v.resize(12);
 }
 
-void UnifiedGrid::InitScalar(int r, int c,
-                             double la0, double lo0,
-                             double laStep, double loStep)
+// ----------------------------------------------------------------------------
+// Geometry
+// ----------------------------------------------------------------------------
+
+void UnifiedGrid::InitGeometry(int r, int c,
+                               double la0, double lo0,
+                               double laStep, double loStep)
 {
     rows    = r;
     cols    = c;
@@ -27,27 +34,85 @@ void UnifiedGrid::InitScalar(int r, int c,
     latStep = laStep;
     lonStep = loStep;
 
-    scalar.assign(r * c, 0.0f);
-    u.clear();
-    v.clear();
-
     valid = true;
 }
 
-void UnifiedGrid::InitVector(int r, int c,
-                             double la0, double lo0,
-                             double laStep, double loStep)
+bool UnifiedGrid::IsValid(int month) const
 {
-    rows    = r;
-    cols    = c;
-    lat0    = la0;
-    lon0    = lo0;
-    latStep = laStep;
-    lonStep = loStep;
+    if (month < 0 || month >= 12)
+        return false;
+    return valid && validMonths[month];
+}
 
-    scalar.clear();
-    u.assign(r * c, 0.0f);
-    v.assign(r * c, 0.0f);
+// ----------------------------------------------------------------------------
+// Month-major initialization
+// ----------------------------------------------------------------------------
 
-    valid = true;
+void UnifiedGrid::InitScalarMonth(int month)
+{
+    scalar[month].assign(rows * cols, 0.0f);
+    validMonths[month] = true;
+}
+
+void UnifiedGrid::InitVectorMonth(int month)
+{
+    u[month].assign(rows * cols, 0.0f);
+    v[month].assign(rows * cols, 0.0f);
+    validMonths[month] = true;
+}
+
+// ----------------------------------------------------------------------------
+// Geometry helpers
+// ----------------------------------------------------------------------------
+
+int UnifiedGrid::LatLonToIndex(double lat, double lon) const
+{
+    int r = int((lat - lat0) / latStep);
+    int c = int((lon - lon0) / lonStep);
+
+    if (r < 0 || r >= rows || c < 0 || c >= cols)
+        return -1;
+
+    return r * cols + c;
+}
+
+void UnifiedGrid::IndexToLatLon(int index, double& lat, double& lon) const
+{
+    int r = index / cols;
+    int c = index % cols;
+
+    lat = lat0 + r * latStep;
+    lon = lon0 + c * lonStep;
+}
+
+// ----------------------------------------------------------------------------
+// Normalization
+// ----------------------------------------------------------------------------
+
+float UnifiedGrid::NormalizeRawData(float value) const
+{
+    if (std::isnan(value))
+        return 0.0f;
+
+    // Simple linear normalization placeholder
+    return value;
+}
+
+// ----------------------------------------------------------------------------
+// Month slices
+// ----------------------------------------------------------------------------
+
+const std::vector<float>& UnifiedGrid::GetMonthSliceScalar(int month) const
+{
+    return scalar[month];
+}
+
+const std::vector<float>& UnifiedGrid::GetMonthSliceU(int month) const
+{
+    return u[month];
+}
+
+const std::vector<float>& UnifiedGrid::GetMonthSliceV(int month) const
+{
+    return v[month];
 }
