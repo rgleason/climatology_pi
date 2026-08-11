@@ -2,53 +2,62 @@
 // ClimatologyOverlayFactory.cpp  (Model A — unified render params, safe‑clean)
 // ============================================================================
 
-#include <GL/glew.h>
-#include <wx/glcanvas.h>
-#include <GL/gl.h>
+//=============================================================================
+// ClimatologyOverlayFactory.cpp
+// Unified‑model, GL/DC‑safe, correct include ordering
+//=============================================================================
 
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
 #endif
-#include <wx/progdlg.h>
 
+//=== wxWidgets ===============================================================
+#include <wx/dc.h>
+#include <wx/colour.h>
+#include <wx/progdlg.h>
+#include <wx/generic/progdlgg.h>
+#include <wx/dcclient.h>
+#include <wx/log.h>
+#include <wx/filename.h>
+#include <wx/tokenzr.h>
 #include <wx/wfstream.h>
 #include <wx/zstream.h>
 #include <wx/textfile.h>
-#include <wx/dc.h>
-#include <wx/dcclient.h>
-#include <wx/log.h>
-#include <wx/notifmsg.h>
-#include <wx/filename.h>
-#include <wx/tokenzr.h>
 
+//=== STL =====================================================================
 #include <memory>
 #include <cmath>
 #include <algorithm>
 #include <functional>
 #include <map>
 
+//=== OpenGL (kept OUT of header, required here) ===============================
+#include <GL/glew.h>
+#include <wx/glcanvas.h>
+#include <GL/gl.h>
+
+//=== OpenCPN Plugin API =======================================================
 #include "ocpn_plugin.h"
-#include "IsoBarMap.h"
+
+//=== Climatology Plugin Includes =============================================
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyDataModel.h"
-#include "climatology_shaders.h"
-#include "ClimatologyCoord.h"
 #include "ClimatologyConstants.h"
 #include "ClimatologyEnums.h"
 #include "CycloneFilterParams.h"
 #include "CycloneUtils.h"
 #include "OverlayMapping.h"
+#include "IsoBarMap.h"
+#include "climatology_shaders.h"
 
+//=== Local Helpers / Definitions =============================================
 #include "defs.h"
 
-// Constants needed for Mercator helpers.
-
+//=== Mercator Constants =======================================================
 static constexpr double DEG_TO_RAD = M_PI / 180.0;
 static constexpr double RAD_TO_DEG = 180.0 / M_PI;
-
-// WGS84 Earth radius (meters)
-static constexpr double EARTH_RADIUS_M = 6378137.0;
+static constexpr double EARTH_RADIUS_M = 6378137.0;   // WGS84
 
 // ============================================================================
 // BuildGridInfo()
@@ -267,8 +276,10 @@ ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
 // ============================================================================
 void ClimatologyOverlayFactory::SetParams(const StandardDisplayParams& p)
 {
-    m_params = p;
+    m_displayParams = p;
+    m_cycloneParams = p.cyclone;   // appearance only
 }
+
 
 // ============================================================================
 // BuildRenderParams()
@@ -276,24 +287,73 @@ void ClimatologyOverlayFactory::SetParams(const StandardDisplayParams& p)
 // ClimatologyRenderParams for ONE overlay.
 // ============================================================================
 void ClimatologyOverlayFactory::BuildRenderParams(
-        int overlayIndex,
-        ClimatologyRenderParams& outParams) const
+		int overlayIndex,
+		PlugIn_ViewPort* vp,
+		piDC* dc,
+		ClimatologyRenderParams& outParams) const
 {
-    // Transparency (single value for the overlay being rendered)
-    outParams.alpha = m_params.alpha[overlayIndex];
+	// Copy basic overlay settings
+	outParams.overlayType    = overlayIndex;
+	outParams.overlayEnabled = m_params.showOverlayType[overlayIndex];
+	outParams.units          = m_params.units[overlayIndex];
+	outParams.mode           = m_params.mode;
 
-    // If you later add per-overlay color ramps, thresholds, etc.,
-    // they will also be copied here.
+	// Transparency (single value for the overlay being rendered)
+	outParams.alpha          = m_params.alpha[overlayIndex];
+
+	// IsoBars
+	outParams.showIsoBars    = (m_params.isoSpacing[overlayIndex] > 0);
+	outParams.isoBarSpacing  = m_params.isoSpacing[overlayIndex];
+	outParams.isoBarStep     = m_params.isoStep[overlayIndex];
+
+	// Numbers
+	outParams.showNumbers    = m_params.showNumbers[overlayIndex];
+	outParams.numberSize     = m_params.numberSize[overlayIndex];
+
+	// Arrows
+	outParams.showArrows     = m_params.showArrows[overlayIndex];
+	outParams.arrowWidth     = m_params.arrowWidth[overlayIndex];
+	outParams.arrowSpacing   = m_params.arrowSpacing[overlayIndex];
+	outParams.arrowSize      = m_params.arrowSize[overlayIndex];
+	outParams.arrowMode      = m_params.arrowMode[overlayIndex];
+
+	// Color
+	outParams.color          = m_params.color[overlayIndex];
+
+	// Smoothing
+	outParams.smoothing      = m_params.smooth;
+
+	// Wind Atlas
+	outParams.windAtlas      = m_params.windAtlas;
+
+	// Cyclones
+	outParams.showCyclones   = m_params.cyclone.enabled;
+	outParams.cycloneParams  = m_params.cyclone;
+
+	// Cyclone filter
+	outParams.cycloneFilter  = m_cycloneFilter;
+
+	// Viewport + DC context
+	outParams.vp             = vp;
+	outParams.dc             = dc;
+	outParams.dcContextValid = (dc != nullptr);
+	outParams.glContextValid = (dc == nullptr);
+
+	// Month interpolation (if needed)
+	outParams.currentMonth      = m_params.cyclone.currentMonth;
+	outParams.nextMonth         = (m_params.cyclone.currentMonth + 1) % 12;
+	outParams.monthInterpolation = 1.0; // or compute interpolation
 }
 
+    
 
 // ============================================================================
 // SetCycloneFilter()
-// Store cyclone filter parameters.
+// Store cyclone filter parameters (NOT appearance).
 // ============================================================================
 void ClimatologyOverlayFactory::SetCycloneFilter(const CycloneFilterParams& params)
 {
-    m_cycloneParams = params;
+    m_cycloneFilter = params;   // <-- correct member
 }
 
 // ============================================================================
@@ -422,6 +482,17 @@ bool ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog* progress)
     ok &= BuildCycloneTracks();
 
     return ok;
+	
+	// ------------------------------------------------------------
+	// 6. Build the Modern UnifiedGrid (month-major, multi-dataset)
+		// ------------------------------------------------------------
+	if (progress)
+		progress->Pulse(_("Building unified climatology database…"));
+
+	// TEMPORARY: UnifiedGrid is simplified; no normalization available
+	// m_unifiedGrid.NormalizeRawData();
+
+
 }
 
 // ---------------------------------------------
@@ -1550,6 +1621,114 @@ void ClimatologyOverlayFactory::LatLonToPixel(const PlugIn_ViewPort& vp,
     y = p.y;
 }
 
+// ============================================================================
+// RenderUnifiedGrid()   also old one
+// Scalar overlay via unified NOAA model → ClimatologyColorGrid → GL/DC.
+// Replaces RenderOverlayMap() in the GL path.
+// ============================================================================
+
+void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams& p)
+{
+    if (!IsCompletedLoading())
+        return;
+    if (!p.vp || !p.vp->bValid)
+        return;
+    if (!p.overlayEnabled || !p.overlayMap)
+        return;
+
+    PlugIn_ViewPort& vp = *p.vp;
+	
+    // NOAA type for unified-grid metadata/scaling
+ //   const NoaaOverlayType noaaType =
+ //       ToNoaa(static_cast<OverlayType>(p.overlayType));
+	
+    // ------------------------------------------------------------------------
+    // 1. Gather overlays for this mode/type/month
+    // ------------------------------------------------------------------------
+	const OverlayType uiType = static_cast<OverlayType>(p.overlayType);
+    auto overlays = GatherOverlaysForMode(p.mode, uiType, p.currentMonth, p);
+
+
+    if (overlays.empty())
+        return;
+
+    // ------------------------------------------------------------------------
+    // 2. Gather metadata (weights, vmins, vmaxs, global scaling)
+    // ------------------------------------------------------------------------
+    std::vector<double> weights, vmins, vmaxs;
+    double global_vmin = 0.0;
+    double global_vmax = 1.0;
+
+    GatherOverlayMetadata(overlays, p.mode,
+                          weights, vmins, vmaxs,
+                          global_vmin, global_vmax);
+
+    // ------------------------------------------------------------------------
+    // 3. Build modern RenderGrid from Modern UnifiedGrid
+    // ------------------------------------------------------------------------
+    RenderGrid rgrid;
+
+    // TEMP: simple month_float until interpolation is wired
+    float month_float = static_cast<float>(p.currentMonth);
+
+    rgrid.BuildFromUnifiedGrid(
+        m_unifiedGrid,             // Modern unified database
+        p,                         // ClimatologyRenderParams
+        m_displayParams,           // StandardDisplayParams
+        m_displayParams.windAtlas, // WindAtlasParams
+        m_cycloneParams,           // CycloneParams
+        m_cycloneFilter,           // CycloneFilterParams
+        month_float
+    );
+
+
+    // ------------------------------------------------------------------------
+    // 4. Render via GL or DC (new signatures, currently no-op)
+    // ------------------------------------------------------------------------
+	/*
+	See new methods below for 
+	Still calling legacy renderer  which causes error "cannot convert 1 arg to ...
+    if (p.useGL && p.glContextValid)
+    {
+        RenderGridGL(rgrid, p);
+        return;
+    }
+
+    if (p.dc && p.dcContextValid)
+    {
+        wxDC* wdc = p.dc->GetDC();
+        if (wdc)
+            RenderGridDC(rgrid, *wdc, p);
+    }
+	*/
+
+	// ------------------------------------------------------------------------
+	// 4. Convert modern RenderGrid → legacy ClimatologyColorGrid this is a shim to get it working.  
+	// legacy renderer still expects ClimatologyColorGrid  
+	// The conversion shim produces ClimatologyColorGrid
+	// ------------------------------------------------------------------------
+	ClimatologyColorGrid cg;
+	rgrid.ToColorGrid(cg);
+	
+	// ------------------------------------------------------------------------
+	// 5. Render via GL or DC (legacy renderer)
+	// ------------------------------------------------------------------------
+	if (p.useGL && p.glContextValid)
+	{
+		RenderGridGL(cg, p);
+		return;
+	}
+
+	if (p.dc && p.dcContextValid)
+	{
+		wxDC* wdc = p.dc->GetDC();
+		if (wdc)
+			RenderGridDC(cg, *wdc, p);
+	}
+}
+
+
+
 
 
 
@@ -1558,6 +1737,8 @@ void ClimatologyOverlayFactory::LatLonToPixel(const PlugIn_ViewPort& vp,
 // Scalar overlay via unified NOAA model → ClimatologyColorGrid → GL/DC.
 // Replaces RenderOverlayMap() in the GL path.
 // ============================================================================
+
+/*
 void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams& p)
 {
     if (!IsCompletedLoading())
@@ -1592,6 +1773,7 @@ void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams&
     GatherOverlayMetadata(overlays, p.mode,
                           weights, vmins, vmaxs,
                           global_vmin, global_vmax);
+						  
 
     // ------------------------------------------------------------------------
     // 3. Compute unified color grid via DisplayMode operator
@@ -1607,11 +1789,75 @@ void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams&
                              global_vmax);
 
 	// ------------------------------------------------------------------------
+	// 3. Build modern RenderGrid from Modern UnifiedGrid
+	// ------------------------------------------------------------------------
+	RenderGrid rgrid;
+
+	// You’ll eventually pass real display/wind/cyclone params and month_float.
+	// For now, keep it compiling with placeholders.
+	float month_float = static_cast<float>(p.currentMonth);  // simple stub
+
+	rgrid.BuildFromUnifiedGrid(
+		m_unifiedGrid,
+		p,               // ClimatologyRenderParams
+		m_displayParams, // StandardDisplayParams
+		params.windAtlas,
+		m_cycloneParams,
+		m_cycloneFilter,
+		month_float
+	);
+
+	// ------------------------------------------------------------------------
+	// 4. Render via GL or DC (new signatures, currently no-op)
+	// ------------------------------------------------------------------------
+	if (p.useGL && p.glContextValid)
+	{
+		RenderGridGL(rgrid, p);
+		return;
+	}
+
+	if (p.dc && p.dcContextValid)
+	{
+		wxDC* wdc = p.dc->GetDC();
+		if (wdc)
+			RenderGridDC(rgrid, *wdc, p);
+	}
+	
+
+
+
+					 
+	// ===================================================================
+	// NEW Modern UnifiedGrid → RenderGrid pipeline (temporary no-op rendering)
+	// ===================================================================
+
+	// 1. Build the modern RenderGrid frame (harmless for now)
+	RenderGrid rgrid;
+	rgrid.BuildFromUnifiedGrid(unifiedGrid, p, displayParams, wparams, cparams, fparams, month_float);
+
+	// 2. Render via GL or DC (new signatures, currently no-op)
+	if (p.useGL && p.glContextValid)
+	{
+		RenderGridGL(rgrid, p);     // NEW FUNCTION
+		return;
+	}
+
+	if (p.dc && p.dcContextValid)
+	{
+		wxDC* wdc = p.dc->GetDC();
+		if (wdc)
+			RenderGridDC(rgrid, *wdc, p);   // NEW FUNCTION
+	}
+								 
+							 
+
+	// ------------------------------------------------------------------------
 	// 4. Render via GL or DC
 	// ------------------------------------------------------------------------
     if (p.useGL && p.glContextValid)
     {
         RenderGridGL(grid, p);
+			
         return;
     }
 	
@@ -1624,9 +1870,13 @@ void ClimatologyOverlayFactory::RenderUnifiedGrid(const ClimatologyRenderParams&
         if (wdc)
             RenderGridDC(grid, *wdc, p);
     }	
+
 	
 	
 }
+*/	
+
+
 
 
 // ============================================================================
@@ -1765,7 +2015,24 @@ void ClimatologyOverlayFactory::GatherOverlayMetadata(
 }
 
 
+// =================================
+// STUBS
+// =================================
 
+void ClimatologyOverlayFactory::RenderGridGL(const RenderGrid& rgrid,
+                                             const ClimatologyRenderParams& p)
+{
+    // TEMP: do nothing
+}
+
+void ClimatologyOverlayFactory::RenderGridDC(const RenderGrid& rgrid,
+                                             wxDC& dc,
+                                             const ClimatologyRenderParams& p)
+{
+    // TEMP: do nothing
+}
+
+/*
 // ============================================================================
 // RenderGridGL()
 // Upload ClimatologyColorGrid as a texture and draw full‑screen quad.
@@ -1924,6 +2191,10 @@ void ClimatologyOverlayFactory::RenderGridDC(const ClimatologyColorGrid& grid,
         }
     }
 }
+
+*/
+
+
 
 // ============================================================================
 // CreateGLTexture()
@@ -2723,69 +2994,39 @@ static bool PointPassesIntensityAndState(const CyclonePoint& pt,
 
 
 
-// ==============================================
-// ApplyCycloneFilter   Track Level Filter
-// ==============================================
 // ============================================================================
-// ApplyCycloneFilter()
-// Unified cyclone filtering: basin, ENSO, intensity, pressure, month, year,
-// and point-level filtering. Produces m_cyclone_cache (CycloneTrack).
+// ApplyCycloneFilter   Track Level Filter
+// Full unified cyclone filtering: basin, ENSO, state, wind, pressure,
+// month, year, date range, and timeline/daySpan.
+// Produces m_cyclone_cache (filtered CycloneTrack list).
 // ============================================================================
 void ClimatologyOverlayFactory::ApplyCycloneFilter(const CycloneFilterParams& F)
 {
     m_cyclone_cache.clear();
 
-    // Track-level filtering first
     for (const CycloneTrack& t : m_cycloneData.tracks)
     {
         // ------------------------------------------------------------
-        // Basin filter
+        // Track-level filters
         // ------------------------------------------------------------
-        if (!F.basinFilter.empty())
-        {
-            if (F.basinFilter.count(t.basin) == 0)
-                continue;
-        }
-
-        // ------------------------------------------------------------
-        // ENSO filter
-        // ------------------------------------------------------------
-        if (!F.ensoFilter.empty())
-        {
-            if (F.ensoFilter.count(t.ensoPhase) == 0)
-                continue;
-        }
-
-        // ------------------------------------------------------------
-        // Storm-type filter (dominant state)
-        // ------------------------------------------------------------
-        if (!F.stateFilter.empty())
-        {
-            if (F.stateFilter.count(t.dominantState) == 0)
-                continue;
-        }
-
-        // ------------------------------------------------------------
-        // Track-level intensity filter (maxWind)
-        // ------------------------------------------------------------
-        if (F.windMin > 0 && t.maxWind < F.windMin)
+        if (!F.basinFilter.empty() &&
+            F.basinFilter.count(t.basin) == 0)
             continue;
 
-        if (F.windMax > 0 && t.maxWind > F.windMax)
+        if (!F.ensoFilter.empty() &&
+            F.ensoFilter.count(t.ensoPhase) == 0)
             continue;
 
-        // ------------------------------------------------------------
-        // Track-level pressure filter (minPressure)
-        // ------------------------------------------------------------
-        if (F.pressureMin > 0 && t.minPressure < F.pressureMin)
+        if (!F.stateFilter.empty() &&
+            F.stateFilter.count(t.dominantState) == 0)
             continue;
 
-        if (F.pressureMax > 0 && t.minPressure > F.pressureMax)
+        if (t.maxWind < F.windMin || t.maxWind > F.windMax)
             continue;
 
-        // ------------------------------------------------------------
-        // Track-level date range filter
-        // ------------------------------------------------------------
+        if (t.minPressure < F.pressureMin || t.minPressure > F.pressureMax)
+            continue;
+
         if (F.startDate.IsValid() && t.endDate < F.startDate)
             continue;
 
@@ -2793,7 +3034,7 @@ void ClimatologyOverlayFactory::ApplyCycloneFilter(const CycloneFilterParams& F)
             continue;
 
         // ------------------------------------------------------------
-        // Point-level filtering
+        // Point-level filtering + timeline/daySpan
         // ------------------------------------------------------------
         CycloneTrack filtered = t;
         filtered.points.clear();
@@ -2804,44 +3045,35 @@ void ClimatologyOverlayFactory::ApplyCycloneFilter(const CycloneFilterParams& F)
             int month = pt.time.GetMonth() + 1;
 
             // Month filter
-            if (!F.monthFilter.empty())
-            {
-                if (F.monthFilter.count(month) == 0)
-                    continue;
-            }
+            if (!F.monthFilter.empty() &&
+                F.monthFilter.count(month) == 0)
+                continue;
 
             // Year filter
-            if (F.yearMin > 0 && year < F.yearMin)
+            if ((F.yearMin > 0 && year < F.yearMin) ||
+                (F.yearMax > 0 && year > F.yearMax))
                 continue;
 
-            if (F.yearMax > 0 && year > F.yearMax)
+            // Point-level intensity
+            if (pt.wind < F.windMin || pt.wind > F.windMax)
                 continue;
 
-            // Point-level intensity filter
-            if (F.windMin > 0 && pt.wind < F.windMin)
+            // Point-level pressure
+            if (pt.pressure < F.pressureMin || pt.pressure > F.pressureMax)
                 continue;
 
-            if (F.windMax > 0 && pt.wind > F.windMax)
+            // Point-level storm state
+            if (!F.stateFilter.empty() &&
+                F.stateFilter.count(pt.state) == 0)
                 continue;
 
-            // Point-level pressure filter
-            if (F.pressureMin > 0 && pt.pressure < F.pressureMin)
-                continue;
-
-            if (F.pressureMax > 0 && pt.pressure > F.pressureMax)
-                continue;
-
-            // Point-level storm-type filter
-            if (!F.stateFilter.empty())
-            {
-                if (F.stateFilter.count(pt.state) == 0)
-                    continue;
-            }
+			// Timeline/daySpan filter
+			if (!CycloneTimelineInterpolation(pt, F, month))
+				continue;
 
             filtered.points.push_back(pt);
         }
 
-        // Only keep tracks with at least one surviving point
         if (!filtered.points.empty())
             m_cyclone_cache.push_back(filtered);
     }
@@ -2849,9 +3081,10 @@ void ClimatologyOverlayFactory::ApplyCycloneFilter(const CycloneFilterParams& F)
 
 				
 // ============================================================================
-// RenderCyclones()
-// Draw cyclone tracks using GL or wxDC. (CycloneTrack version)
+// RenderCyclones()  Uses m_cyclone_cache only.
+// Draw cyclone tracks using GL or wxDC. 
 // ============================================================================
+
 void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
 {
     if (!m_hasCycloneData)
@@ -2860,14 +3093,12 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
         return;
     if (!p.vp || !p.vp->bValid)
         return;
-
-    const PlugIn_ViewPort& vp = *p.vp;
-
     if (m_cyclone_cache.empty())
         return;
 
-    const CycloneParams& A = p.cycloneParams;
-
+    const PlugIn_ViewPort& vp = *p.vp;
+    const CycloneParams& A    = p.cycloneParams;
+	
     // -----------------------------------------------------------------------
     // GL path
     // -----------------------------------------------------------------------
@@ -2878,8 +3109,9 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
 
         for (const CycloneTrack& track : m_cyclone_cache)
         {
-            if (!CycloneVisible(track, p))
-                continue;
+//  	Commented out for fast version that draws only the filtered cache
+//            if (!CycloneVisible(track, p))
+//                continue;
 
             for (size_t i = 1; i < track.points.size(); i++)
             {
@@ -2911,10 +3143,8 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
                 // Default: track‑level color
                 wxColour color = CycloneColor(track, p);
 
-                double ax, ay;
+                double ax, ay, bx, by;
                 LatLonToPixel(vp, a.lat, a.lon, ax, ay);
-
-                double bx, by;
                 LatLonToPixel(vp, b.lat, b.lon, bx, by);
 
                 glColor4ub(color.Red(), color.Green(), color.Blue(),
@@ -2942,14 +3172,15 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
 
         for (const CycloneTrack& track : m_cyclone_cache)
         {
-            if (!CycloneVisible(track, p))
-                continue;
+//  	Commented out for fast version that draws only the filtered cache
+//            if (!CycloneVisible(track, p))
+//                continue;
 
             for (size_t i = 1; i < track.points.size(); i++)
             {
                 const CyclonePoint& a = track.points[i - 1];
                 const CyclonePoint& b = track.points[i];
-
+				
                 // ============================================================
                 // Same three options for DC:
                 // ============================================================
@@ -2980,10 +3211,8 @@ void ClimatologyOverlayFactory::RenderCyclones(const ClimatologyRenderParams& p)
 
                 wxColour color = CycloneColor(track, p);
 
-                double ax, ay;
+                double ax, ay, bx, by;
                 LatLonToPixel(vp, a.lat, a.lon, ax, ay);
-
-                double bx, by;
                 LatLonToPixel(vp, b.lat, b.lon, bx, by);
 
                 // THIS is the correct version
@@ -3575,119 +3804,27 @@ bool ClimatologyOverlayFactory::CycloneTimelineInterpolation(
 
 // ============================================================================
 // CycloneVisible()
-// Determine if a cyclone track should be drawn based on filter parameters.
-// Unified version using CycloneTrack + CyclonePoint fields.
+// Reduced to timeline-only visibility.
 // ============================================================================
 bool ClimatologyOverlayFactory::CycloneVisible(const CycloneTrack& track,
                                                const ClimatologyRenderParams& p) const
 {
-    const CycloneParams& A = p.cycloneParams;
-    const CycloneFilterParams& F = p.cycloneFilter;   // REQUIRED FIX
+    const CycloneFilterParams& F = p.cycloneFilter;
 
-    // -----------------------------------------------------------------------
-    // Basin filter
-    // -----------------------------------------------------------------------
-    if (!F.basinFilter.empty())
+    // If timeline filtering is disabled, everything is visible
+    if (F.daySpan <= 0)
+        return true;
+
+    // Check any point in the track for timeline visibility
+    for (const CyclonePoint& pt : track.points)
     {
-        if (F.basinFilter.count(track.basin) == 0)
-            return false;
+		int month = pt.time.GetMonth() + 1;
+		if (CycloneTimelineInterpolation(pt, F, month))
+            return true;
     }
-
-    // -----------------------------------------------------------------------
-    // ENSO filter
-    // -----------------------------------------------------------------------
-    if (!F.ensoFilter.empty())
-    {
-        if (F.ensoFilter.count(track.ensoPhase) == 0)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Storm-type filter (dominant state)
-    // -----------------------------------------------------------------------
-    if (!F.stateFilter.empty())
-    {
-        if (F.stateFilter.count(track.dominantState) == 0)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Intensity filter (track-level maxWind)
-    // -----------------------------------------------------------------------
-    if (F.windMin > 0 || F.windMax > 0)
-    {
-        double w = track.maxWind;
-
-        if (F.windMin > 0 && w < F.windMin)
-            return false;
-
-        if (F.windMax > 0 && w > F.windMax)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Pressure filter (track-level minPressure)
-    // -----------------------------------------------------------------------
-    if (F.pressureMin > 0 || F.pressureMax > 0)
-    {
-        double pmin = track.minPressure;
-
-        if (F.pressureMin > 0 && pmin < F.pressureMin)
-            return false;
-
-        if (F.pressureMax > 0 && pmin > F.pressureMax)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Month filter (point-level)
-    // -----------------------------------------------------------------------
-    if (!F.monthFilter.empty())
-    {
-        bool anyMatch = false;
-
-        for (const CyclonePoint& pt : track.points)
-        {
-            int m = pt.time.GetMonth() + 1;   // wxDateTime: 0=Jan
-            if (F.monthFilter.count(m))
-            {
-                anyMatch = true;
-                break;
-            }
-        }
-
-        if (!anyMatch)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Filter by year range (point-level)
-    // -----------------------------------------------------------------------
-    if (F.yearMin > 0 || F.yearMax > 0)
-    {
-        bool anyMatch = false;
-
-        for (const CyclonePoint& pt : track.points)
-        {
-            int y = pt.time.GetYear();
-
-            if ((F.yearMin <= 0 || y >= F.yearMin) &&
-                (F.yearMax <= 0 || y <= F.yearMax))
-            {
-                anyMatch = true;
-                break;
-            }
-        }
-
-        if (!anyMatch)
-            return false;
-    }
-
-    // -----------------------------------------------------------------------
-    // Passed all filters
-    // -----------------------------------------------------------------------
-    return true;
+    return false;
 }
+
 
 
 // ============================================================================

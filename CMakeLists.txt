@@ -153,6 +153,7 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
  set(SRCS
     src/climatology_pi.cpp
 	src/climatology_shaders.cpp
+	src/climatology_curl.cpp
     src/ClimatologyConfigDialog.cpp
 	src/ClimatologyConstants.cpp
 	src/ClimatologyDataModel.cpp
@@ -161,10 +162,24 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
     src/DownloadManager.cpp
     src/icons.cpp
     src/IsoBarMap.cpp
-	src//OverlayMapping.cpp
-    src/ManifestLoader.cpp
+	src/OverlayMapping.cpp
+	src/ManifestLoader.cpp
     src/zuFile.cpp
+# Modern UnifiedGrid (will be modernized in Step 2)
+# Not fully modernized. Need to disable it.
+# Now AI built modernized version, enabling it.
+    src/UnifiedGrid.cpp
+# Legacy grid implementations (disabled)	
+#	src/UnifiedGridLegacy.cpp
+#	src/UnifiedGridRawCell.cpp
+# Modern RenderGrid (disabled until UnifiedGrid.cpp is modern)
+#    src/RenderGrid.cpp
+# Temporary stub
+	src/RenderGridStub.cpp
+	src/ClimatologyColorGrid.cpp
 )
+
+
 
  set(HDRS
 #    include/climatology_pi.h
@@ -202,6 +217,11 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # ---------------------------------------------------------------------------
 # Standard OpenCPN plugin setup
 # ---------------------------------------------------------------------------
+
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 
 add_library(${PACKAGE_NAME} SHARED ${SRCS} ${HDRS})
 

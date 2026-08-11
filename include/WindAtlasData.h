@@ -2,7 +2,9 @@
 #include <vector>
 #include <cmath>
 
-#include "ClimatologyCoord.h"
+#include "ClimatologyEnums.h"
+
+
 
 struct WindAtlasData
 {

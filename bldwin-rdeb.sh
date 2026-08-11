@@ -39,8 +39,8 @@ cmake -G "Visual Studio 17 2022" \
   -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets \
   -DCMAKE_BUILD_TYPE="$Build_Type" \
   -DCMAKE_INSTALL_PREFIX="$OPENCPN_BUILD" \
-  ..
-
+   "$PLUGIN_ROOT"
+   
 # --- BUILD + INSTALL -------------------------------------------------
 cmake --build . --config "$Build_Type" --target package >"$PLUGIN_ROOT"/OUTPUT.txt
 cmake --build . --config "$Build_Type" --target install

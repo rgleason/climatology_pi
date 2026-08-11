@@ -6,36 +6,44 @@
  *
  ***************************************************************************
  */
-
+ 
 #ifndef CLIMATOLOGY_CONFIG_DIALOG_H
 #define CLIMATOLOGY_CONFIG_DIALOG_H
 
-#include <wx/wxprec.h>
-#include <wx/fileconf.h>
 
-#ifndef WX_PRECOMP
-#include <wx/wx.h>
-#endif
-
-#include <wx/notebook.h>
-#include <wx/clrpicker.h>
-#include <wx/datectrl.h>
-#include <wx/dateevt.h>
-#include <wx/spinctrl.h>
-#include <wx/checkbox.h>
-#include <wx/slider.h>
-#include <wx/timer.h>
-#include <wx/html/htmlwin.h>
-
-#include "DisplayMode.h"             // DisplayMode enum
-#include "ClimatologyEnums.h"
-#include "StandardDisplayParams.h"   // UI-facing persistent overlay params
-#include "CycloneParams.h"           // Persistent cyclone appearance params
-#include "CycloneFilterParams.h"     // Runtime cyclone filter params
+// --- Forward declarations (wxWidgets) ---
+class wxNotebook;
+class wxPanel;
+class wxChoice;
+class wxSpinCtrl;
+class wxCheckBox;
+class wxSlider;
+class wxTimer;
+class wxHtmlWindow;
+class wxColourPickerEvent;
+class wxColourPickerCtrl;
+class wxDateEvent;
+class wxDatePickerCtrl;
+class wxSpinEvent;
+class wxStaticText;
+class wxSizer;
+class wxDateEvent;
+class wxCommandEvent;
 
 
+// --- Forward declarations (plugin classes) ---
 class ClimatologyOverlayFactory;
 class ClimatologyDialog;
+
+// --- Includes required for member variables ---
+#include "DisplayMode.h"
+#include "StandardDisplayParams.h"
+#include "CycloneParams.h"
+#include "CycloneFilterParams.h"
+
+// ---------------------------------------------------------------------------
+// Class declaration
+// ---------------------------------------------------------------------------
 
 /**
  * @brief 4-tab configuration dialog for the Climatology plugin.
@@ -59,6 +67,9 @@ public:
     // @param displayParams   Reference to global StandardDisplayParams.
     // @param cycloneParams   Reference to global CycloneParams.
      
+    ClimatologyConfigDialog(wxWindow* parent,
+                            ClimatologyOverlayFactory* factory);
+
     ClimatologyConfigDialog(ClimatologyDialog* parent,
                             StandardDisplayParams& displayParams,
                             CycloneParams& cycloneParams);
@@ -67,24 +78,41 @@ public:
 
     // Persist all settings to wxFileConfig.
     // Writes StandardDisplayParams and CycloneParams to the config file.
-   
+	CycloneFilterParams GetCycloneFilterParams() const;
+		
     void Save();
-
-    // Build a CycloneFilterParams snapshot from current UI.
-    // Used by ClimatologyOverlayFactory to filter cyclone tracks.
-   
-    CycloneFilterParams GetCycloneFilterParams() const;
+   // --- Persistence helpers ----------------------------------------------
+    void LoadSettings();
+    void SaveSettings();
 	
+	// No cycloneParams stored here anymore
+    // No GetCycloneParams() here
+    // No m_parent->anything() here
+
 	// Construct the dialog for 4-tab Config cyclones
-    ClimatologyConfigDialog(wxWindow* parent, ClimatologyOverlayFactory* factory);
+    // ClimatologyConfigDialog(wxWindow* parent, ClimatologyOverlayFactory* factory);
 
 
 private:
-    // --- Persistence helpers ----------------------------------------------
-    void LoadSettings();
-    void SaveSettings();
+ 
+    ClimatologyDialog* m_parent;
+
+    // Model references (no legacy structs)
+    StandardDisplayParams m_displayParams;
+	
+	// --- Internal helpers -------------------------------------------------
+    int  GetCycloneStateMask() const;
+    void ApplyTheme();   // wraps DimeWindow(this)
+
+    // Owner
+       wxTimer                m_refreshTimer;
+
+     // Last selected overlay type index (UI state)
+	int m_lastOverlayType = OVERLAY_WIND;
 
     // --- UI <-> model sync -------------------------------------------------
+
+	
     void SyncStandardTabFromModel();
     void SyncStandardTabToModel();
 
@@ -104,11 +132,12 @@ private:
     void OnUpdateColor(wxColourPickerEvent& e)  { OnUpdate(); }
 
     void OnUpdateOverlayConfig(wxCommandEvent& event);
-    void OnUpdateCyclones(wxCommandEvent& event);
-    void OnCycloneFilterChanged(wxCommandEvent& event);
 
-    void OnCyclonesDateChanged(wxDateEvent& event) { OnUpdateCyclones(event); }
-    void OnCyclonesSpin(wxSpinEvent& event)        { OnUpdateCyclones(event); }
+ 	void OnUpdateCyclones(wxEvent& event);
+	void OnUpdateCyclonesSpin(wxSpinEvent& event);
+	void OnUpdateCyclonesDate(wxDateEvent& event);
+	void OnCycloneFilterChanged(wxCommandEvent& event);
+    void OnCyclonesDateChanged(wxDateEvent& event);
 
     void OnPaintKey(wxPaintEvent& event);
     void OnEnabled(wxCommandEvent& event);
@@ -116,21 +145,7 @@ private:
     void OnClose(wxCommandEvent& event) { Hide(); }
     void OnRefreshTimer(wxTimerEvent& event);
 
-    // --- Internal helpers --------------------------------------------------
-    int  GetCycloneStateMask() const;
-    void ApplyTheme();   // wraps DimeWindow(this)
 
-private:
-    // Owner
-    ClimatologyDialog*     m_parent;
-    wxTimer                m_refreshTimer;
-
-    // Model references (no legacy structs)
-    StandardDisplayParams& m_displayParams;
-    CycloneParams&         m_cycloneParams;
-
-    // Last selected overlay type index (UI state)
-    int                    m_lastOverlayType = OVERLAY_WIND;
 
     // --- Notebook + tabs ---------------------------------------------------
     wxNotebook* m_notebook = nullptr;

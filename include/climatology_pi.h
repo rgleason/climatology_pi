@@ -56,15 +56,17 @@
 #include "ocpn_plugin.h"
 #include "json/json.h"
 
-#include "ClimatologyDialog.h"          // Quick access dialog
-#include "ClimatologyConfigDialog.h"    // Modal 4‑tab configuration dialog
-#include "ClimatologyOverlayFactory.h"  // Unified-grid renderer
+
 #include "StandardDisplayParams.h"      // Persistent + runtime settings
 #include "CycloneParams.h"
 #include "CycloneFilterParams.h"
 #include "WindAtlasParams.h"
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
+
+class ClimatologyDialog;
+class ClimatologyConfigDialog;
+class ClimatologyOverlayFactory;
 
 // Global overlay factory pointer
 extern ClimatologyOverlayFactory* g_pOverlayFactory;
@@ -85,6 +87,8 @@ wxString ClimatologyDataDirectory();
  *   - Provide cursor lat/lon to dialogs
  *   - Persist dialog geometry
  */
+ 
+
 class climatology_pi : public opencpn_plugin_120
 {
 public:
@@ -123,8 +127,8 @@ public:
     void SetCursorLatLon(double lat, double lon) override;
 
     // Dialog geometry persistence
-    bool LoadConfig(void) override;
-    bool SaveConfig(void) override;
+    bool LoadConfig(void);
+    bool SaveConfig(void);
 
     void SetColorScheme(PI_ColorScheme cs) override;
 

@@ -34,6 +34,13 @@
 #include <wx/progdlg.h>
 #include <cmath>
 
+#include "piDC.h"
+#include "ocpn_plugin.h"
+#include <wx/colour.h>
+#include <wx/string.h>
+#include <GL/glew.h>
+#include "gldefs.h"
+
 #include "ClimatologyEnums.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyRenderParams.h"

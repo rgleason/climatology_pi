@@ -1,0 +1,76 @@
+TODO — Climatology Modernization Roadmap
+
+0. Stabilize build
+   - Add stubs for Modern UnifiedGrid and RenderGrid.
+   - Comment out broken rendering paths temporarily.
+   - Ensure dialogs compile even if non-functional.
+
+1. Freeze legacy code
+   - Rename old UnifiedGrid → UnifiedGridRaw.
+   - Stop modifying UnifiedGridRaw entirely.
+
+2. Finish Modern UnifiedGrid
+   - Implement geometry fields (rows, cols, lat0, lon0, steps).
+   - Implement scalar/u/v month-major arrays.
+   - Implement cyclone_tracks, wind_atlas, enso_index.
+   - Implement LatLonToIndex(), GetMonthSlice(), GetStormCategory(), GetENSOIndex().
+   - Implement NormalizeRawData() (empty for now).
+
+3. Stabilize ClimatologyDataModel
+   - Ensure raw loaders (WindData, CurrentData, CycloneStructs, WindAtlasData) compile.
+   - Do NOT connect them to rendering yet.
+   - Prepare them to feed Modern UnifiedGrid.
+
+4. Create RenderGrid (empty but compiling)
+   - Implement empty BuildFromUnifiedGrid().
+   - Implement empty InterpolateMonth(), ApplyColorMap(), ApplyTransparency().
+   - Implement empty ApplyCycloneOverlay(), ApplyWindAtlasOverlay().
+
+5. Stabilize dialogs
+   - Ensure dialogs ONLY write params:
+       climatologyrenderparams
+       standarddisplayparams
+       windatlasparams
+       cycloneparams
+       cyclonefilterparams
+   - Remove any direct access to UnifiedGridRaw or Modern UnifiedGrid.
+   - Ensure dialogs compile and produce valid params.
+
+6. Stabilize ClimatologyOverlayFactory
+   - Factory owns Modern UnifiedGrid.
+   - Factory owns RenderGrid.
+   - Factory calls RenderGrid::BuildFromUnifiedGrid() (stub for now).
+   - Remove direct access to raw structs.
+
+7. Migrate SST layer (pilot migration)
+   - Load SST into Modern UnifiedGrid.
+   - Implement InterpolateMonth() for scalar only.
+   - Implement ApplyColorMap() for SST.
+   - Switch renderer to use RenderGrid for SST only.
+   - Compare output to legacy pipeline.
+
+8. Migrate remaining scalar layers
+   - SLP, AT, CLOUD, PRECIP, RH, LIGHTNING.
+   - One layer at a time.
+   - After each layer: compile + visual check.
+
+9. Migrate vector layers
+   - WIND (u/v)
+   - CURRENT (u/v)
+   - Implement vector interpolation + color maps.
+   - Switch renderer to RenderGrid for these.
+
+10. Migrate overlays
+   - Cyclones: category, ENSO, symbols.
+   - Wind atlas: glyphs, shading.
+   - Switch renderer to RenderGrid overlays.
+
+11. Remove legacy paths
+   - Delete UnifiedGridRaw rendering code.
+   - Delete old overlay code.
+   - Delete old loader structs if fully replaced.
+
+12. Final cleanup
+   - Remove unused includes.
+   - Remove dead code.
+   - Document Modern UnifiedGrid + RenderGrid architecture.

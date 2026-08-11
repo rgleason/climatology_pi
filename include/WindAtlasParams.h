@@ -2,6 +2,19 @@
 #define WINDATLAS_PARAMS_H
 
 #include <wx/colour.h>
+#include "ClimatologyEnums.h"
+
+
+
+struct WindAtlasEntry
+{
+    int month = 0;          // 0–11
+    float direction = 0.0f; // degrees
+    float speed = 0.0f;     // knots or m/s
+    float frequency = 0.0f; // probability (0–1)
+};
+
+
 
 // UI-facing Wind Atlas parameters.
 // StandardDisplayParams stores this.
@@ -31,3 +44,4 @@ struct WindAtlasParams
 };
 
 #endif
+

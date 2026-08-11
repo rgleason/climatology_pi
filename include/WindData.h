@@ -1,6 +1,9 @@
 #pragma once
 #include <vector>
 
+// Raw NOAA U/V vector fields
+// Used by legacy vector loader.
+
 struct WindData
 {
     int latitudes;

@@ -9,7 +9,6 @@
 #include <wx/colour.h>
 
 #include "DisplayMode.h"
-#include "ClimatologyCoord.h"
 #include "ClimatologyEnums.h"          // defines OVERLAY_SEA_TEMP, etc.
 #include "WindAtlasParams.h"
 #include "CycloneParams.h" // Cyclone Parameters
@@ -18,7 +17,7 @@
 #include "CurrentData.h"
 
 // ============================================================================
-// ClimatologyRenderParams
+// ClimatologyRenderPaclrams
 // Unified rendering parameters for all overlays.
 // This struct is the authoritative parameter block passed to the renderer.
 // ============================================================================

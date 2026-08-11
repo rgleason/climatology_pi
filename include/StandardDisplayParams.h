@@ -7,6 +7,8 @@
 #include "ClimatologyEnums.h"
 #include "CycloneParams.h"               // Unified cyclone params
 #include "WindAtlasParams.h"
+#include "DisplayMode.h"
+
 
 
 
