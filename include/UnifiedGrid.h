@@ -3,11 +3,15 @@
 #include <vector>
 #include <cmath>
 
+#include "CycloneStructs.h"
+
 // ============================================================================
 // Full UnifiedGrid.h — Header  - Modern unified climatology model
 // ============================================================================
 
 // Forward declarations
+
+/*
 struct CyclonePoint {
     double lat;
     double lon;
@@ -20,6 +24,10 @@ struct CycloneTrack {
     int month;     // 0–11
     int basin;     // enum CycloneBasin
 };
+*/
+
+
+
 
 struct WindAtlasCell {
     float speed;

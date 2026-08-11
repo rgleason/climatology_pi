@@ -94,14 +94,13 @@ void ClimatologyDataModel::LoadScalar(int setting, int month,
 {
     UnifiedGrid& g = m_grids[setting][month];
 
-    // Use simplified geometry initializer
-    g.InitScalar(rows, cols, lat0, lon0, latStep, lonStep);
+    g.InitGeometry(rows, cols, lat0, lon0, latStep, lonStep);
+    g.InitScalarMonth(month);
 
-    // Flat storage (no month-major)
-    g.scalar.assign(rows * cols, 0.0f);
+    g.scalar[month].resize(rows * cols);
 
     for (int i = 0; i < rows * cols; i++)
-        g.scalar[i] = buf[i];
+        g.scalar[month][i] = buf[i];
 }
 
 
@@ -139,6 +138,7 @@ void ClimatologyDataModel::LoadVector(int setting, int month,
     g.validMonths.resize(12);
     g.validMonths[month] = true;
 }
+
 */
 
 void ClimatologyDataModel::LoadVector(int setting, int month,
@@ -149,16 +149,15 @@ void ClimatologyDataModel::LoadVector(int setting, int month,
 {
     UnifiedGrid& g = m_grids[setting][month];
 
-    // Use simplified geometry initializer
-    g.InitVector(rows, cols, lat0, lon0, latStep, lonStep);
+    g.InitGeometry(rows, cols, lat0, lon0, latStep, lonStep);
+    g.InitVectorMonth(month);
 
-    // Flat storage (no month-major)
-    g.u.assign(rows * cols, 0.0f);
-    g.v.assign(rows * cols, 0.0f);
+    g.u[month].resize(rows * cols);
+    g.v[month].resize(rows * cols);
 
     for (int i = 0; i < rows * cols; i++)
     {
-        g.u[i] = uBuf[i];
-        g.v[i] = vBuf[i];
+        g.u[month][i] = uBuf[i];
+        g.v[month][i] = vBuf[i];
     }
 }
