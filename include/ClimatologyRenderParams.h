@@ -1,11 +1,7 @@
-#ifndef __CLIMATOLOGY_RENDER_PARAMS_H__
-#define __CLIMATOLOGY_RENDER_PARAMS_H__
-
 #pragma once
+
 #include "piDC.h"
-
 #include "ocpn_plugin.h"    // ensures PlugIn_ViewPort is fully known
-
 #include <wx/colour.h>
 
 #include "DisplayMode.h"
@@ -126,4 +122,3 @@ struct ClimatologyRenderParams
     bool smoothing = true;
 };
 
-#endif // __CLIMATOLOGY_RENDER_PARAMS_H__

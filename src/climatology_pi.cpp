@@ -3,15 +3,19 @@
  * Modern unified‑grid architecture
  ******************************************************************************/
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+
 #include "climatology_pi.h"
-#include "icons.h"
 #include "ClimatologyDialog.h"
 #include "ClimatologyConfigDialog.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ManifestLoader.hpp"
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
-
+#include "icons.h"
 
 #include <wx/filename.h>
 #include <wx/progdlg.h>
@@ -204,6 +208,14 @@ void climatology_pi::OnStartupTimer(wxTimerEvent& event)
     m_downloadManager->StartBackgroundDownload(true);
     m_bCompletedLoading = false;
 }
+
+
+void climatology_pi::BootstrapDataDirectory()
+{
+    wxString dir = ClimatologyDataDirectory();
+    wxFileName::Mkdir(dir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
+}
+
 
 // ---------------------------------------------------------------------------
 // Download complete
@@ -406,7 +418,6 @@ void climatology_pi::FreeData()
 }
 
 
-
 // ---------------------------------------------------------------------------
 // Plugin metadata exports
 // ---------------------------------------------------------------------------
@@ -441,4 +452,16 @@ void climatology_pi::SetColorScheme(PI_ColorScheme cs)
 {
     // No-op: dialogs auto-dime via DimeWindow()
 }
+// Necessary for API120
+// void climatology_pi::UpdateFollowState(int mode, bool enabled)
+// {
+//     // No-op stub for API compatibility
+// }
+
+// Necessary for API120
+// void climatology_pi::OnTideCurrentClick(TCClickInfo info)
+// {
+//    // No-op stub for API compatibility
+//}
+
 

@@ -52,7 +52,6 @@
 #include <wx/notifmsg.h>
 #include <memory>
 
-#include "version.h"
 #include "ocpn_plugin.h"
 #include "json/json.h"
 
@@ -93,7 +92,10 @@ class climatology_pi : public opencpn_plugin_120
 {
 public:
     climatology_pi(void* ppimgr);
-    ~climatology_pi();
+    virtual ~climatology_pi();
+
+    //virtual void UpdateFollowState(int mode, bool enabled) override;  //api121
+    //virtual void OnTideCurrentClick(TCClickInfo info) override;     //api121
 
     // Required plugin API
     int  Init(void) override;
@@ -110,7 +112,7 @@ public:
     wxString  GetCommonName() override;
     wxString  GetShortDescription() override;
     wxString  GetLongDescription() override;
-
+	
     // Toolbar + dialogs
     void OnToolbarToolCallback(int id) override;
 
@@ -132,7 +134,7 @@ public:
 
     void SetColorScheme(PI_ColorScheme cs) override;
 
-private:
+	private:
     // Internal helpers
     void CreateOverlayFactory();
     void FreeData();
@@ -171,8 +173,6 @@ private:
     // Startup
     wxTimer m_startupTimer;
     bool    m_bCompletedLoading = false;
-
-    wxDECLARE_EVENT_TABLE();
-};
+}	
 
 #endif // _CLIMATOLOGY_PI_PLUGIN_H_

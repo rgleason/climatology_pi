@@ -1,22 +1,22 @@
 TODO — Climatology Modernization Roadmap
 
-0. Stabilize build
+0. Stabilize build - Done
    - Add stubs for Modern UnifiedGrid and RenderGrid.
    - Comment out broken rendering paths temporarily.
    - Ensure dialogs compile even if non-functional.
 
-1. Freeze legacy code
+1. Freeze legacy code - Done
    - Rename old UnifiedGrid → UnifiedGridRaw.
    - Stop modifying UnifiedGridRaw entirely.
 
-2. Finish Modern UnifiedGrid
+2. Finish Modern UnifiedGrid - Done
    - Implement geometry fields (rows, cols, lat0, lon0, steps).
    - Implement scalar/u/v month-major arrays.
    - Implement cyclone_tracks, wind_atlas, enso_index.
    - Implement LatLonToIndex(), GetMonthSlice(), GetStormCategory(), GetENSOIndex().
    - Implement NormalizeRawData() (empty for now).
 
-3. Stabilize ClimatologyDataModel
+3. Stabilize ClimatologyDataModel - Done
    - Ensure raw loaders (WindData, CurrentData, CycloneStructs, WindAtlasData) compile.
    - Do NOT connect them to rendering yet.
    - Prepare them to feed Modern UnifiedGrid.

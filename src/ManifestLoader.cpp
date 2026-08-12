@@ -1,20 +1,14 @@
-
-// GLEW MUST be first
-//#define GLEW_STATIC
 #include <GL/glew.h>
 #include "gldefs.h"
 
 #include "ManifestLoader.hpp"
 #include "ManifestEntry.hpp"
-#include "climatology_pi.h"
-#include "ClimatologyEnums.h"
 
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
 #endif
 #include <wx/progdlg.h>
-
 #include <wx/file.h>
 #include <wx/filename.h>
 #include <wx/log.h>

@@ -53,11 +53,6 @@ public:
                       const wxPoint& pos,
                       const wxSize& size);
 					  
-//	void UpdateFollowState(int mode, bool enabled) override;   Removed for Step 0 add in step 5
-//    void OnTideCurrentClick(TCClickInfo info) override;   Removed for Step 0 add in step 5
-//  	void UpdateFollowState(int mode, bool enabled);
-//    void OnTideCurrentClick(TCClickInfo info);
-
     // Event handlers
     void OnClose(wxCloseEvent& evt);
     void OnMonthChanged(wxCommandEvent& evt);
