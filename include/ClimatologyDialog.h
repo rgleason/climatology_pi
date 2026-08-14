@@ -5,8 +5,19 @@
 #ifndef __CLIMATOLOGY_DIALOG_H__
 #define __CLIMATOLOGY_DIALOG_H__
 
+// wxWidgets must be first
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#   include <wx/wx.h>
+#endif
+
+// now wx headers are safe
+#include <wx/dialog.h>
+#include <wx/notebook.h>
+#include <wx/event.h>
+
+
 // Forward declarations for wx
-class wxDialog;
 class wxWindow;
 class wxStaticLine;
 class wxProgressDialog;

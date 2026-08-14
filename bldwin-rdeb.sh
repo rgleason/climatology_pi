@@ -34,13 +34,63 @@ mkdir -p "$BUILD_DIR" "$OPENCPN_INSTALL"
 cd "$BUILD_DIR"
 
 # --- CONFIGURE -------------------------------------------------------
+#cmake -G "Visual Studio 17 2022" \
+#  -A Win32 \
+#  -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets/lib/mswud 
+#  -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets 
+#  -CMAKE_BUILD_TYPE="$Build_Type" \
+#  -CMAKE_INSTALL_PREFIX="$OPENCPN_BUILD" \
+#   "$PLUGIN_ROOT"
+
+#cmake -G "Visual Studio 17 2022" \
+#  -cmake -T v143 -A Win32 -DOCPN_TARGET=MSVC .. \
+#  -DwxWidgets_INCLUDE_DIRS=/c/Users/fcgle/source/ocpn_wxWidgets/lib/vc_dll/mswud \
+#  -DwxWidgets_LIBRARIES=/c/Users/fcgle/source/ocpn_wxWidgets/lib/vc_dll \
+#  -DMAKE_BUILD_TYPE="$Build_Type" \
+#  -DMAKE_INSTALL_PREFIX="$OPENCPN_BUILD" \
+#  "$PLUGIN_ROOT"
+
 cmake -G "Visual Studio 17 2022" \
   -A Win32 \
   -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets \
+  -DwxWidgets_INCLUDE_DIRS=/c/Users/fcgle/source/ocpn_wxWidgets/include \
+  -DwxWidgets_LIB_DIR=/c/Users/fcgle/source/ocpn_wxWidgets/lib/vc_dll \
+  -DwxWidgets_LIBRARIES="wxmsw32u_core;wxmsw32u_base;wxmsw32u_gl;wxmsw32u_html;wxmsw32u_adv;wxmsw32u_aui;wxmsw32u_xml;wxmsw32u_net" \
   -DCMAKE_BUILD_TYPE="$Build_Type" \
   -DCMAKE_INSTALL_PREFIX="$OPENCPN_BUILD" \
-   "$PLUGIN_ROOT"
-   
+  "$PLUGIN_ROOT"
+
+# ORIGINAL
+#cmake -G "Visual Studio 17 2022" \
+#  -A Win32 \
+#  -DwxWidgets_ROOT_DIR=/c/Users/fcgle/source/ocpn_wxWidgets \
+#  -DwxWidgets_CONFIG=mswud \
+#  -DCMAKE_BUILD_TYPE="$Build_Type" \
+#  -DCMAKE_INSTALL_PREFIX="$OPENCPN_BUILD" \
+#  "$PLUGIN_ROOT"
+
+
+# wxWidgets settings 
+#set "wxDIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
+#set "wxWIN=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
+#set "wxWidgets_ROOT_DIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets" 
+#set "wxWidgets_LIB_DIR=C:\Users\fcgle\source\opencpn\..\ocpn_wxWidgets\lib\vc_dll" 
+#set "VCver=17" 
+#set "VCstr=Visual Studio 17" 
+
+# build the plugin with cmake
+# Remove build dir and make a new one
+#rm -rf build
+#mkdir build
+#cd build
+#cmake -T v143 -A Win32 -DOCPN_TARGET=MSVC ..
+#cmake --build . --target package --config relwithdebinfo >output.txt
+	
+# Bash script completes tarball prep adding metadata into it.
+
+
+
+ 
 # --- BUILD + INSTALL -------------------------------------------------
 cmake --build . --config "$Build_Type" --target package >"$PLUGIN_ROOT"/OUTPUT.txt
 cmake --build . --config "$Build_Type" --target install

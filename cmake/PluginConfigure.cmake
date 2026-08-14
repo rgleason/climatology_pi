@@ -724,6 +724,7 @@ if (NOT QT_ANDROID)
   set(wxWidgets_USE_UNIVERSAL OFF)
   set(wxWidgets_USE_STATIC OFF)
 
+  # Version override logic (unchanged)
   set(WXWIDGETS_FORCE_VERSION
       CACHE STRING "Force usage of a specific wxWidgets version."
   )
@@ -740,17 +741,35 @@ if (NOT QT_ANDROID)
   endif ()
   message(STATUS "${CMLOC}wxWidgets_Version: ${WXWIDGETS_FORCE_VERSION}")
 
-  if (WXWIDGETS_FORCE_VERSION)
-    set(wxWidgets_CONFIG_OPTIONS --version=${WXWIDGETS_FORCE_VERSION})
-  endif ()
+# REMOVE auto-detection
+  # find_package(wxWidgets REQUIRED COMPONENTS ${wxWidgets_USE_LIBS})
+  # include(${wxWidgets_USE_FILE})
 
-  message(STATUS "${CMLOC}wxWidgets components: ${wxWidgets_USE_LIBS}")
-  find_package(wxWidgets REQUIRED COMPONENTS ${wxWidgets_USE_LIBS})
-
+  # Manual override for Windows/MSVC
   if (MSVC)
     # Exclude wxexpat.lib, since we use our own version. Other things are
     # excluded as well, but we don't need them
-    set(wxWidgets_EXCLUDE_COMMON_LIBRARIES TRUE)
+    # set(wxWidgets_EXCLUDE_COMMON_LIBRARIES TRUE)
+	
+  # Manual override for Windows/MSVC
+  set(wxWidgets_INCLUDE_DIRS "C:/Users/fcgle/source/ocpn_wxWidgets/include")
+  
+  set(wxWidgets_ROOT_DIR "C:/Users/fcgle/source/ocpn_wxWidgets" CACHE PATH "wxWidgets root" FORCE)
+  set(wxWidgets_INCLUDE_DIR "${wxWidgets_ROOT_DIR}/include" CACHE PATH "wxWidgets include" FORCE)
+  set(wxWidgets_LIB_DIR "${wxWidgets_ROOT_DIR}/lib/vc_dll" CACHE PATH "wxWidgets libs" FORCE)
+
+
+  set(wxWidgets_LIBRARIES
+    wxmsw32u_core
+    wxmsw32u_base
+    wxmsw32u_gl
+    wxmsw32u_html
+    wxmsw32u_adv
+    wxmsw32u_aui
+    wxmsw32u_xml
+    wxmsw32u_net
+  )	
+	
   endif (MSVC)
 
   if (WIN32
@@ -769,7 +788,7 @@ if (NOT QT_ANDROID)
     OR QT_ANDROID
   )
 
-  include(${wxWidgets_USE_FILE})
+##  include(${wxWidgets_USE_FILE})
 
   message(STATUS "${CMLOC}Found wxWidgets...")
   message(STATUS "${CMLOC} wxWidgets Include: ${wxWidgets_INCLUDE_DIRS}")

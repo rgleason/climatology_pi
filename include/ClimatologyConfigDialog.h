@@ -10,15 +10,17 @@
 #ifndef CLIMATOLOGY_CONFIG_DIALOG_H
 #define CLIMATOLOGY_CONFIG_DIALOG_H
 
+#include <wx/timer.h>
+#include <wx/notebook.h>
+#include <wx/event.h>
+
 
 // --- Forward declarations (wxWidgets) ---
-class wxNotebook;
 class wxPanel;
 class wxChoice;
 class wxSpinCtrl;
 class wxCheckBox;
 class wxSlider;
-class wxTimer;
 class wxHtmlWindow;
 class wxColourPickerEvent;
 class wxColourPickerCtrl;
@@ -29,7 +31,6 @@ class wxStaticText;
 class wxSizer;
 class wxDateEvent;
 class wxCommandEvent;
-
 
 // --- Forward declarations (plugin classes) ---
 class ClimatologyOverlayFactory;

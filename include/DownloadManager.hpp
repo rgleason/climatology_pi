@@ -1,5 +1,12 @@
 #pragma once
 
+// wxWidgets must be first
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#   include <wx/wx.h>
+#endif
+
+// now wx headers are safe
 #include <wx/string.h>
 #include <wx/window.h>
 #include <wx/thread.h>

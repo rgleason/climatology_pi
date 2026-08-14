@@ -19,22 +19,43 @@ endif ()
 
 # Export variables used in plugin setup: GIT_HASH, GIT_COMMIT, PKG_TARGET,
 # PKG_TARGET_VERSION and PKG_NVR
-if (NOT ${PACKAGE} MATCHES "(.*)_pi")
-  set(PACKAGE_NAME ${PACKAGE}_pi)
-  set(PACKAGE_FILE_NAME "${PACKAGE}_pi")
-else (NOT ${PACKAGE} MATCHES "(.*)_pi")
-  set(PACKAGE_NAME ${PACKAGE})
-  set(PACKAGE_FILE_NAME "${PACKAGE}")
-endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
-string(TOUPPER "${PACKAGE}" TITLE_NAME)
+#if (NOT ${PACKAGE} MATCHES "(.*)_pi")
+#  set(PACKAGE_NAME ${PACKAGE}_pi)
+#  set(PACKAGE_FILE_NAME "${PACKAGE}_pi")
+#else (NOT ${PACKAGE} MATCHES "(.*)_pi")
+#  set(PACKAGE_NAME ${PACKAGE})
+#  set(PACKAGE_FILE_NAME "${PACKAGE}")
+#endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
+#string(TOUPPER "${PACKAGE}" TITLE_NAME)
+#PluginSetup overwrites PACKAGE_NAME
+#causing issues finding targets
 
-# add library for use later
+# Use this instead
+# Use locked PACKAGE_NAME from main CMakeLists
+set(PACKAGE_NAME "${PACKAGE_NAME_LOCKED}")
+set(PACKAGE_FILE_NAME "${PACKAGE_NAME_LOCKED}")
+#This guarantees:
+#PluginSetup does not overwrite PACKAGE_NAME
+#The target name is stable
+#Metadata still uses the correct name
+#Packaging still uses the correct name
+#target_sources() and target_link_libraries() 
+#now refer to a real target
+
+# Add plugin library target
 add_library(${PACKAGE_NAME} SHARED)
 
-project(
-  ${PACKAGE}
-  VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}
+# IMPORTANT:
+# Do NOT call project() here.
+# The main CMakeLists.txt already defines the project and version.
+# Calling project() again breaks compiler detection and metadata generation.
+
+# Instead, manually set PROJECT_VERSION so PluginPackage still works.
+set(PROJECT_VERSION
+    "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}"
+    CACHE INTERNAL "Plugin version"
 )
+
 message(STATUS "${CMLOC}PROJECT_VERSION: ${PROJECT_VERSION}")
 
 set(PACKAGE_VERSION

@@ -46,15 +46,21 @@
 #ifndef _CLIMATOLOGY_PI_PLUGIN_H_
 #define _CLIMATOLOGY_PI_PLUGIN_H_
 
-#include <wx/wx.h>
+// wxWidgets must be first
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#   include <wx/wx.h>
+#endif
+
+// now wx headers are safe
 #include <wx/timer.h>
 #include <wx/glcanvas.h>
 #include <wx/notifmsg.h>
 #include <memory>
+#include <wx/jsonreader.h>
+#include <wx/jsonwriter.h>
 
 #include "ocpn_plugin.h"
-#include "json/json.h"
-
 
 #include "StandardDisplayParams.h"      // Persistent + runtime settings
 #include "CycloneParams.h"

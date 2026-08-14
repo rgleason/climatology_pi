@@ -65,6 +65,10 @@ if (MSVC)
     add_compile_options(/std:c++17)
 endif()
 
+project ("climatology_pi_project")
+# project(${PACKAGE_NAME})
+# project(climatology_pi_project)
+
 # Plugin metadata
 set(VERBOSE_NAME Climatology)
 set(COMMON_NAME "Climatology")
@@ -73,7 +77,6 @@ set(PACKAGE "climatology")
 set(PACKAGE_NAME "climatology_pi")
 set(PACKAGE_NAME_LOCKED "${PACKAGE_NAME}")
 
-project(${PACKAGE_NAME})
 
 # Force GL ON before PluginSetup and PluginConfigure
 set(PLUGIN_USE_GL ON CACHE BOOL "Use GL" FORCE)
@@ -139,18 +142,22 @@ message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 # ----- Statements below used to setup standard variables required by the CMAKE  -##
 # ----- process -- Do not remove -##
 
+# Ensures that the cmake pluginxxxx.cmake files are found
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
+# Optional Directory hints.
 set(PLUGIN_SRC_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-
 set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 
+# IMPORTANT: PluginSetup must run BEFORE add_subdirectory()
+# ---------------------------------------------------------------------------
+include("PluginSetup")
+include("PluginConfigure")
 # ---------------------------------------------------------------------------
 # Plugin sources
 # ---------------------------------------------------------------------------
 
- set(SRCS
+ set(SRC_LIST
     src/climatology_pi.cpp
 	src/climatology_shaders.cpp
 	src/climatology_curl.cpp
@@ -158,12 +165,13 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 	src/ClimatologyConstants.cpp
 	src/ClimatologyDataModel.cpp
     src/ClimatologyDialog.cpp
+	src/ClimatologyOverlay.cpp
+	src/DownloadManager.cpp
+	src/ManifestLoader.cpp	
     src/ClimatologyOverlayFactory.cpp
-    src/DownloadManager.cpp
+	src/OverlayMapping.cpp
     src/icons.cpp
     src/IsoBarMap.cpp
-	src/OverlayMapping.cpp
-	src/ManifestLoader.cpp
     src/zuFile.cpp
 # Modern UnifiedGrid (will be modernized in Step 2)
 # Not fully modernized. Need to disable it.
@@ -172,16 +180,14 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # Legacy grid implementations (disabled)	
 #	src/UnifiedGridLegacy.cpp
 #	src/UnifiedGridRawCell.cpp
-# Modern RenderGrid (disabled until UnifiedGrid.cpp is modern)
+# Modern RenderGrid (UnifiedGrid.cpp is modern)
 #    src/RenderGrid.cpp
 # Temporary stub
-	src/RenderGridStub.cpp
 	src/ClimatologyColorGrid.cpp
 )
 
-
-
- set(HDRS
+# Header files are not normally listed. They are just a list and not actionable.
+# set(HDRS
 #    include/climatology_pi.h
 #	include/climatology_shaders.h
 #    include/ClimatologyConfigDialog.h
@@ -213,27 +219,31 @@ set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 #	include/StandardDisplayParams.h
 #	include/WindAtlasParams.h
 #   include/zuFile.h
-)
-# ---------------------------------------------------------------------------
-# Standard OpenCPN plugin setup
-# ---------------------------------------------------------------------------
+#  )
+
+# End of source files: Add list to PluginSetup add_library(${PACKAGE_NAME} SHARED) on line 32
+target_sources(${PACKAGE_NAME} PRIVATE ${SRC_LIST})
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# include_directories(
+#    ${CMAKE_SOURCE_DIR}/opencpn-libs/api-20
+# )
 
-add_library(${PACKAGE_NAME} SHARED ${SRCS} ${HDRS})
+# ocpn_wxWidgets Headers 
+# Correct wxWidgets include directory (raw headers)
+target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
+    "C:/Users/fcgle/source/ocpn_wxWidgets/include"
+)
+
+# ---------------------------------------------------------------------------
+# Standard OpenCPN plugin setup
+# ---------------------------------------------------------------------------
 
 set(CMAKE_VERBOSE_MAKEFILE "Activate verbose mode for make files" ON)
 option(Plugin_CXX11 "Use c++11" OFF)
-
-include("PluginConfigure")
-
-set(CMAKE_VERBOSE_MAKEFILE "Activate verbose mode for make files" ON)
-option(Plugin_CXX11 "Use c++11" OFF)
-
-include("PluginConfigure")
 
 # ---------------------------------------------------------------------------
 # Other opencpn-libs
@@ -242,6 +252,14 @@ add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
 add_subdirectory(opencpn-libs/tinyxml)
 add_subdirectory(opencpn-libs/jsonlib)
 add_subdirectory(opencpn-libs/wxJSON)
+
+target_include_directories(WXJSON PUBLIC
+    "C:/Users/fcgle/source/ocpn_wxWidgets/include"
+	"C:/Users/fcgle/source/ocpn_wxWidgets/lib/vc_dll/mswud"
+)
+
+
+
 
 if(NOT UNIX)
     add_subdirectory(opencpn-libs/bzip2)
@@ -252,12 +270,12 @@ if(WIN32 AND MSVC)
 endif()
 
 
+
+
 # ---------------------------------------------------------------------------
 # Linking order
 # ---------------------------------------------------------------------------
 set(GLEW_ROOT "C:/Users/fcgle/source/vcpkg/installed/x86-windows")
-
-
 
 if(TARGET ${PACKAGE_NAME})
     target_link_libraries(${PACKAGE_NAME}
@@ -270,7 +288,7 @@ if(TARGET ${PACKAGE_NAME})
     )
 
     target_include_directories(${PACKAGE_NAME} PRIVATE
-        ${OCPN_API_INCLUDE_DIR}
+#        ${OCPN_API_INCLUDE_DIR}
         ${GLEW_ROOT}/include
         ${CURL_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -317,6 +335,7 @@ else()
     find_package(CURL REQUIRED)
     target_link_libraries(${PACKAGE_NAME}  CURL::libcurl)
 endif()
+
 
 # ---------------------------------------------------------------------------
 # Cleanup vcpkg pollution

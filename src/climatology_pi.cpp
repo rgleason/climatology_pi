@@ -3,11 +3,19 @@
  * Modern unified‑grid architecture
  ******************************************************************************/
 
+// wxWidgets must be first
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
-    #include <wx/wx.h>
+#include <wx/wx.h>
 #endif
 
+// wx extras
+#include <wx/fileconf.h>
+
+// jsoncpp
+#include <json/json.h>
+
+// plugin headers
 #include "climatology_pi.h"
 #include "ClimatologyDialog.h"
 #include "ClimatologyConfigDialog.h"
@@ -17,7 +25,9 @@
 #include "DownloadFileEntry.hpp"
 #include "icons.h"
 
-#include <wx/filename.h>
+// MUST COME AFTER wx includes
+#include "version.h"
+
 #include <wx/progdlg.h>
 #include <wx/generic/progdlgg.h>
 #include <wx/aui/aui.h>
@@ -320,10 +330,14 @@ void climatology_pi::SetPluginMessage(wxString& message_id,
         if (!m_pClimatologyDialog)
             return;
 
-        Json::Reader reader;
+       // Modern jsoncpp reader
+        Json::CharReaderBuilder builder;
+        std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
         Json::Value root;
-
-        if (!reader.parse(message_body.ToStdString(), root))
+        std::string errs;
+		
+        std::string msg = message_body.ToStdString();
+        if (!reader->parse(msg.c_str(), msg.c_str() + msg.size(), &root, &errs))
             return;
 
         int day   = root.get("Day",   -1).asInt();
