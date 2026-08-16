@@ -1,97 +1,86 @@
 ##---------------------------------------------------------------------------
-## Author: Sean d'Epagnier and Rick Gleason
+## Climatology Plugin — Modernized CMake Build System
 ##---------------------------------------------------------------------------
-# - License:     GPLv3+
-# - This program is free software; you can redistribute it and/or modify  *
-# - it under the terms of the GNU General Public License as published by  *
-# - the Free Software Foundation; either version 2 of the License, or     *
-# - (at your option) any later version.                                   *
-# - *
-# - This program is distributed in the hope that it will be useful,       *
-# - but WITHOUT ANY WARRANTY; without even the implied warranty of        *
-# - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-# - GNU General Public License for more details.                          *
-# - *
-# - You should have received a copy of the GNU General Public License     *
-# - along with this program; if not, write to the                         *
-# - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,                                       *
-# - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                                       *
-# -----------------------------------------------------------------------------
-# Frontend2 Author: Jon Gough Testplugin(TP) v1.0.362.0 19/06/2026 DD/MM/YYYY
-# format buildCI:yes useODAPI:yes validateJSON:yes
-# ---------------------------------------------------------------------------
-## -- When changing this file do NOT change the order of the sections.    -- ##
-## -- Make changes only between the section blocks identified             -- ##
-## -- The whole configuration process relies on this sequence for success.-- ##
+## Architecture:
+##   1. Define project + metadata
+##   2. Load PluginSetup.cmake  (creates PACKAGE_NAME + target)
+##   3. Load PluginConfigure.cmake (detects wxWidgets, OpenGL, CURL, etc.)
+##   4. Add plugin sources
+##   5. Add include + link directories
+##   6. Add opencpn-libs subdirectories
+##   7. Link plugin against opencpn-libs
+##   8. Install, localize, package
 ##
-## -- Modify section below to include all the details for your plugin.    -- ##
-
-set(CMLOC "CMakeLists: ")
+## IMPORTANT:
+##   - PluginSetup.cmake MUST run before any target_* commands.
+##   - PACKAGE must be defined before PluginSetup.cmake.
+##   - All target_include_directories() must use PRIVATE or BEFORE PRIVATE.
+##---------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.15)
 
-# Policies
+set(CMLOC "CMakeLists: ")
+
+##---------------------------------------------------------------------------
+## CMake Policies (modern defaults)
+##---------------------------------------------------------------------------
 if(COMMAND cmake_policy)
-  if (POLICY CMP0043)
-    cmake_policy(SET CMP0043 NEW)
-  endif (POLICY CMP0043)
-  cmake_policy(SET CMP0048 NEW)
-  if (POLICY CMP0068)
-    cmake_policy(SET CMP0068 NEW)
-  endif (POLICY CMP0068)
-  if (POLICY CMP0076)
-    cmake_policy(SET CMP0076 NEW)
-  endif (POLICY CMP0076)
-  if (POLICY CMP0077)
-    cmake_policy(SET CMP0077 NEW)
-  endif (POLICY CMP0077)
-  if (POLICY CMP0079)
-    cmake_policy(SET CMP0079 NEW)
-  endif (POLICY CMP0079)
-  if (POLICY CMP0175)
-    cmake_policy(SET CMP0175 NEW)
-  endif (POLICY CMP0175)
-  if (POLICY CMP0177)
-    cmake_policy(SET CMP0177 NEW)
-  endif (POLICY CMP0177)
-endif (COMMAND cmake_policy)
+    cmake_policy(SET CMP0048 NEW)   # project() VERSION handling
+    cmake_policy(SET CMP0076 NEW)   # target_sources() behavior
+    cmake_policy(SET CMP0077 NEW)   # option() honors normal variables
+    cmake_policy(SET CMP0079 NEW)   # target_link_libraries() behavior
+endif()
 
-set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)   # MSVC runtime library selection
+endif()
 
+##---------------------------------------------------------------------------
+## Compiler Settings
+##---------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if (MSVC)
+if(MSVC)
     add_compile_options(/std:c++17)
 endif()
 
-project ("climatology_pi_project")
-# project(${PACKAGE_NAME})
-# project(climatology_pi_project)
+##---------------------------------------------------------------------------
+## Project + Plugin Identity
+##---------------------------------------------------------------------------
+# Keep project name very short or it will conflict with MSVC compiling
+project(climatology LANGUAGES CXX)
 
-# Plugin metadata
-set(VERBOSE_NAME Climatology)
-set(COMMON_NAME "Climatology")
-set(TITLE_NAME "climatology")
+## Tell Visual Studio   “Build the plugin target, not the auto‑generated one.”
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PACKAGE_NAME})
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+
+# PACKAGE is used by PluginSetup.cmake to compute PACKAGE_NAME
 set(PACKAGE "climatology")
-set(PACKAGE_NAME "climatology_pi")
-set(PACKAGE_NAME_LOCKED "${PACKAGE_NAME}")
 
+# Make cmake/ directory visible to include()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# Force GL ON before PluginSetup and PluginConfigure
-set(PLUGIN_USE_GL ON CACHE BOOL "Use GL" FORCE)
-set(OCPN_USE_GL ON CACHE BOOL "Enable OpenGL" FORCE)
+set(CMAKE_VERBOSE_MAKEFILE OFF)
+
+##---------------------------------------------------------------------------
+## Plugin Metadata
+##---------------------------------------------------------------------------
+set(VERBOSE_NAME "Climatology")
+set(COMMON_NAME  "Climatology")
+set(TITLE_NAME   "climatology")
 
 set(SHORT_DESCRIPTION "Climatology PlugIn: 32 years of monthly NOAA Data")
-set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic weather data...")
+set(LONG_DESCRIPTION  "Climatology provides overlay capabilities for historic weather data...")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "6")
 set(VERSION_PATCH "47")
 set(VERSION_TWEAK "0")
 set(VERSION_DATE  "06/30/2026")
-set(OCPN_MIN_VERSION "ov58")
 
+set(OCPN_MIN_VERSION "ov58")
 set(OCPN_API_VERSION_MAJOR "1")
 set(OCPN_API_VERSION_MINOR "20")
 
@@ -100,246 +89,192 @@ set(WX_VER_PATCH "8")
 
 set(PARENT "opencpn")
 
-# Use to set up a local webserver with git installed. Default is github.com.
-# Now set in PluginSetup.cmake set(GIT_REPOSITORY_SERVER "github.com")
+##---------------------------------------------------------------------------
+## Cloudsmith / CI Metadata
+##---------------------------------------------------------------------------
+set(PROD  "prod")
+set(BETA  "beta")
+set(ALPHA "alpha")
 
-## Specifies Cloudsmith upload repository suffix for each catalog
-set(PROD "prod")   #Standard Repos
-set(BETA "beta")   #Standard Repos
-set(ALPHA "alpha") #Standard Repos
-
-# Set if  Cloudsmith Base Repository name does not match your Git Repository name.
-#set (CLOUDSMITH_BASE_REPOSITORY "${GIT_REPOSITORY_NAME}"															  
 set(CLOUDSMITH_BASE_REPOSITORY "climatology")
 set(CLOUDSMITH_USER "opencpn")
 
 set(XML_INFO_URL "https://opencpn.org/OpenCPN/plugins/climatology.html")
-set(XML_SUMMARY ${SHORT_DESCRIPTION})
+set(XML_SUMMARY  ${SHORT_DESCRIPTION})
 set(XML_DESCRIPTION ${LONG_DESCRIPTION})
 
+##---------------------------------------------------------------------------
+## Graphics / OpenGL Options
+##---------------------------------------------------------------------------
+# Climatology requires OpenGL for rendering overlays.
+# This option is used by PluginConfigure.cmake to enable OpenGL detection.
+option(USE_GL "Enable OpenGL support (required)" ON)
+message(STATUS "${CMLOC}OpenGL enabled: ${USE_GL}")
+
+# Enable SVG icons (used by many plugins)
 option(PLUGIN_USE_SVG "Use SVG graphics" ON)
 
-# Use local version of GLU library requires libs/glu directory
-set(USE_LOCAL_GLU FALSE)
-# Prefer libGL.so to libOpenGL.so, see CMP0072
-set(OpenGL_GL_PREFERENCE "LEGACY") # not operational
+# OpenCPN core prefers legacy OpenGL (compatibility profile)
+set(OpenGL_GL_PREFERENCE "LEGACY")
 
-option(USE_GL "Enable OpenGL support" ON)
-message(STATUS "${CMLOC}USE_GL: ${USE_GL}")
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
-  set(CMAKE_BUILD_TYPE
-      "Release"
-      CACHE STRING "Choose the type of build" FORCE
-  )
-endif ("${CMAKE_BUILD_TYPE}" STREQUAL "")
-set_property(
-  CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "" "Debug" "Release" "RelWithDebInfo"
-                                  "MinSizeRel"
-)
+# Default build type (Release unless explicitly set)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
 message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 
-# ----- Statements below used to setup standard variables required by the CMAKE  -##
-# ----- process -- Do not remove -##
+##---------------------------------------------------------------------------
+## wxWidgets Paths (Windows/MSVC only, local dev)  Run before PluginSetup
+##---------------------------------------------------------------------------
+if(WIN32 AND MSVC)
+    set(wxWidgets_ROOT "C:/Users/fcgle/source/ocpn_wxWidgets-3.2.2.1")
 
-# Ensures that the cmake pluginxxxx.cmake files are found
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-# Optional Directory hints.
+    set(wxWidgets_INCLUDE_DIRS
+        "${wxWidgets_ROOT}/include"
+        "${wxWidgets_ROOT}/build/lib/vc_dll/mswu"
+    )
+
+    set(wxWidgets_LIB_DIR "${wxWidgets_ROOT}/build/lib/vc_dll")
+
+    set(wxWidgets_LIBRARIES
+        wxmsw32u_core.lib
+        wxmsw32u_gl.lib
+        wxbase32u.lib
+        wxmsw32u_xml.lib
+        wxmsw32u_xrc.lib
+        wxmsw32u_aui.lib
+    )
+endif()
+
+##---------------------------------------------------------------------------
+## 1. PluginSetup — MUST RUN FIRST
+##    Creates PACKAGE_NAME and add_library(${PACKAGE_NAME} SHARED)
+##---------------------------------------------------------------------------
+include(PluginSetup)
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PACKAGE_NAME})
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+
+##---------------------------------------------------------------------------
+## wxWidgets Paths (Windows/MSVC only, local dev)
+##---------------------------------------------------------------------------
 set(PLUGIN_SRC_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+##---------------------------------------------------------------------------
+## 2. PluginConfigure — detects wxWidgets, OpenGL, CURL, etc.
+##---------------------------------------------------------------------------
+include(PluginConfigure)
 
-# IMPORTANT: PluginSetup must run BEFORE add_subdirectory()
-# ---------------------------------------------------------------------------
-include("PluginSetup")
-include("PluginConfigure")
-# ---------------------------------------------------------------------------
-# Plugin sources
-# ---------------------------------------------------------------------------
-
- set(SRC_LIST
+##---------------------------------------------------------------------------
+## Plugin Sources
+##---------------------------------------------------------------------------
+set(SRC_LIST
     src/climatology_pi.cpp
-	src/climatology_shaders.cpp
-	src/climatology_curl.cpp
+    src/climatology_shaders.cpp
+    src/climatology_curl.cpp
     src/ClimatologyConfigDialog.cpp
-	src/ClimatologyConstants.cpp
-	src/ClimatologyDataModel.cpp
+    src/ClimatologyConstants.cpp
+    src/ClimatologyDataModel.cpp
     src/ClimatologyDialog.cpp
-	src/ClimatologyOverlay.cpp
-	src/DownloadManager.cpp
-	src/ManifestLoader.cpp	
+    src/ClimatologyOverlay.cpp
+    src/DownloadManager.cpp
+    src/ManifestLoader.cpp
     src/ClimatologyOverlayFactory.cpp
-	src/OverlayMapping.cpp
+    src/OverlayMapping.cpp
     src/icons.cpp
     src/IsoBarMap.cpp
     src/zuFile.cpp
-# Modern UnifiedGrid (will be modernized in Step 2)
-# Not fully modernized. Need to disable it.
-# Now AI built modernized version, enabling it.
     src/UnifiedGrid.cpp
-# Legacy grid implementations (disabled)	
-#	src/UnifiedGridLegacy.cpp
-#	src/UnifiedGridRawCell.cpp
-# Modern RenderGrid (UnifiedGrid.cpp is modern)
-#    src/RenderGrid.cpp
-# Temporary stub
-	src/ClimatologyColorGrid.cpp
+    src/ClimatologyColorGrid.cpp
 )
 
-# Header files are not normally listed. They are just a list and not actionable.
-# set(HDRS
-#    include/climatology_pi.h
-#	include/climatology_shaders.h
-#    include/ClimatologyConfigDialog.h
-#	include/ClimatologyConstants.h	
-#  	include/ClimatologyCoord.h
-#	include/ClimatologyDataModel.h
-#    include/ClimatologyDialog.h
-#	include/ClimatologyMonthData.h
-#    include/ClimatologyOverlayFactory.h
-# 	include/ClimatologyRenderParams.h
-# 	include/CycloneFilterParams.h
-#	include/CycloneParams.h
-#	include/CycloneTypes.h
-#    include/defs.h
-#	include/DisplayMode.h	
-#    include/DownloadFileEntry.hpp
-#    include/DownloadManager.hpp
-# 	include/gldefs.h
-#	include/GridInfo.h
-#    include/icons.h
-#    include/IsoBarMap.h
-#    include/linmath.h
-#    include/ManifestEntry.hpp
-#    include/ManifestLoader.hpp
-#	include/NoaaOverlayTypes.h
-#	include/OverlayMapping.h
-#	include/OverlayTypes.h
-#	include/piDC.h
-#	include/StandardDisplayParams.h
-#	include/WindAtlasParams.h
-#   include/zuFile.h
-#  )
-
-# End of source files: Add list to PluginSetup add_library(${PACKAGE_NAME} SHARED) on line 32
 target_sources(${PACKAGE_NAME} PRIVATE ${SRC_LIST})
 
-include_directories(
+##---------------------------------------------------------------------------
+## Plugin Include Paths
+##---------------------------------------------------------------------------
+target_include_directories(${PACKAGE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/api-${OCPN_API_VERSION_MINOR}
 )
 
-# include_directories(
-#    ${CMAKE_SOURCE_DIR}/opencpn-libs/api-20
-# )
-
-# ocpn_wxWidgets Headers 
-# Correct wxWidgets include directory (raw headers)
-target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
-    "C:/Users/fcgle/source/ocpn_wxWidgets/include"
-)
-
-# ---------------------------------------------------------------------------
-# Standard OpenCPN plugin setup
-# ---------------------------------------------------------------------------
-
-set(CMAKE_VERBOSE_MAKEFILE "Activate verbose mode for make files" ON)
-option(Plugin_CXX11 "Use c++11" OFF)
-
-# ---------------------------------------------------------------------------
-# Other opencpn-libs
-# ---------------------------------------------------------------------------
+##---------------------------------------------------------------------------
+## Standard OpenCPN Libraries
+##---------------------------------------------------------------------------
 add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
 add_subdirectory(opencpn-libs/tinyxml)
-add_subdirectory(opencpn-libs/jsonlib)
-add_subdirectory(opencpn-libs/wxJSON)
-
-target_include_directories(WXJSON PUBLIC
-    "C:/Users/fcgle/source/ocpn_wxWidgets/include"
-	"C:/Users/fcgle/source/ocpn_wxWidgets/lib/vc_dll/mswud"
-)
-
-
-
 
 if(NOT UNIX)
     add_subdirectory(opencpn-libs/bzip2)
+
+    # bzip2 library does not declare its language; force C linker
+    set_target_properties(LIB_BZIP_WR PROPERTIES LINKER_LANGUAGE C)
 endif()
 
 if(WIN32 AND MSVC)
     add_subdirectory(opencpn-libs/zlib)
 endif()
 
+target_link_libraries(${PACKAGE_NAME}
+    ocpn::api
+    ocpn::tinyxml
+    ocpn::bzip2
+    ocpn::zlib
+)
 
-
-
-# ---------------------------------------------------------------------------
-# Linking order
-# ---------------------------------------------------------------------------
+##---------------------------------------------------------------------------
+## GLEW
+##---------------------------------------------------------------------------
 set(GLEW_ROOT "C:/Users/fcgle/source/vcpkg/installed/x86-windows")
 
-if(TARGET ${PACKAGE_NAME})
-    target_link_libraries(${PACKAGE_NAME}
-        ocpn::api
-        ocpn::tinyxml
-        ocpn::jsonlib
-        ocpn::wxjson
-        ocpn::bzip2
-        ocpn::zlib
-    )
+target_include_directories(${PACKAGE_NAME} PRIVATE
+    ${GLEW_ROOT}/include
+)
 
-    target_include_directories(${PACKAGE_NAME} PRIVATE
-#        ${OCPN_API_INCLUDE_DIR}
-        ${GLEW_ROOT}/include
-        ${CURL_INCLUDE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
+target_link_libraries(${PACKAGE_NAME}
+    ${GLEW_ROOT}/lib/glew32.lib
+)
 
-    target_link_libraries(${PACKAGE_NAME} ${GLEW_ROOT}/lib/glew32.lib)
-
-    if(WIN32)
-        target_link_libraries(${PACKAGE_NAME} ${CURL_LIBRARY})
-    endif()
-endif()
-
-	
-# ---------------------------------------------------------------------------
-# Install, localization, packaging
-# ---------------------------------------------------------------------------
-include("PluginInstall")
-include("PluginLocalization")
-include("PluginPackage")
-
-# ---------------------------------------------------------------------------
-# Curl integration
-# ---------------------------------------------------------------------------
+##---------------------------------------------------------------------------
+## CURL
+##---------------------------------------------------------------------------
 if(WIN32)
-
-    # already added above with PRIVATE, so remove:
-    # target_include_directories(${PACKAGE_NAME} ${CURL_INCLUDE_DIR})
-   # target_link_libraries(${PACKAGE_NAME} ${CURL_LIBRARY})
-
-#    message(STATUS "${CMLOC}Configuring curl integration for Windows")
-#    set(CURL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/win_curl/output32/include")
-#    set(CURL_LIBRARY "${CMAKE_SOURCE_DIR}/win_curl/output32/lib/libcurl_imp.lib")
-
- #   target_include_directories(${PACKAGE_NAME} ${CURL_INCLUDE_DIR})
-  #  target_link_libraries(${PACKAGE_NAME} ${CURL_LIBRARY})
-
-    install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
-        DESTINATION plugins/climatology_pi)
-		
-	install(FILES "C:/Users/fcgle/source/vcpkg/installed/x86-windows/bin/glew32.dll"
-        DESTINATION plugins/climatology_pi)
-	
+    target_link_libraries(${PACKAGE_NAME} ${CURL_LIBRARY})
 else()
     find_package(CURL REQUIRED)
-    target_link_libraries(${PACKAGE_NAME}  CURL::libcurl)
+    target_link_libraries(${PACKAGE_NAME} CURL::libcurl)
 endif()
 
+##---------------------------------------------------------------------------
+## Ensure plugin include directory overrides opencpn-libs
+##---------------------------------------------------------------------------
+target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
-# ---------------------------------------------------------------------------
-# Cleanup vcpkg pollution
-# ---------------------------------------------------------------------------
+##---------------------------------------------------------------------------
+## Install, Localization, Packaging
+##---------------------------------------------------------------------------
+include(PluginInstall)
+include(PluginLocalization)
+include(PluginPackage)
+
+##---------------------------------------------------------------------------
+## Windows Runtime Dependencies
+##---------------------------------------------------------------------------
+if(WIN32)
+    install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
+        DESTINATION plugins/climatology_pi)
+
+    install(FILES "C:/Users/fcgle/source/vcpkg/installed/x86-windows/bin/glew32.dll"
+        DESTINATION plugins/climatology_pi)
+endif()
+
+##---------------------------------------------------------------------------
+## Cleanup vcpkg include pollution
+##---------------------------------------------------------------------------
 get_target_property(_incs ${PACKAGE_NAME} INCLUDE_DIRECTORIES)
 if(_incs)
     list(FILTER _incs EXCLUDE REGEX "vcpkg")

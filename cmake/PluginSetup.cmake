@@ -28,13 +28,38 @@ else (NOT ${PACKAGE} MATCHES "(.*)_pi")
 endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
 string(TOUPPER "${PACKAGE}" TITLE_NAME)
 
+project(
+    ${PACKAGE}
+    LANGUAGES CXX
+    VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}
+)
+
 # add library for use later
 add_library(${PACKAGE_NAME} SHARED)
 
-project(
-  ${PACKAGE}
-  VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}
-)
+# ---------------------------------------------------------------------------
+# wxWidgets include/link (Windows/MSVC only) — MUST be applied before compile
+# ---------------------------------------------------------------------------
+# Apply before anything, immediately after add_library
+
+if(WIN32 AND MSVC)
+    message(STATUS "${CMLOC}Applying MSVC wxWidgets include/link paths (EARLY)")
+
+    target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
+        ${wxWidgets_INCLUDE_DIRS}
+    )
+
+    target_link_directories(${PACKAGE_NAME} BEFORE PRIVATE
+        ${wxWidgets_LIB_DIR}
+    )
+
+    target_link_libraries(${PACKAGE_NAME}
+        ${wxWidgets_LIBRARIES}
+    )
+endif()
+
+
+
 message(STATUS "${CMLOC}PROJECT_VERSION: ${PROJECT_VERSION}")
 
 set(PACKAGE_VERSION
@@ -453,3 +478,45 @@ if (HAVE_LD_SO) # linux.
 endif ()
 
 set(CMLOC ${SAVE_CMLOC})
+
+
+# ---------------------------------------------------------------------------
+# Packaging name generation (required by PluginPackage.cmake)
+# ---------------------------------------------------------------------------
+
+# Build the base packaging name
+set(PACKAGING_NAME
+    "${PKG_NVR}-${PKG_TARGET}-${ARCH}${PKG_TARGET_WX_VER}-${PKG_TARGET_VERSION}"
+)
+
+# XML packaging name (used for plugin.xml)
+set(PACKAGING_NAME_XML
+    "${PKG_NVR}-${PKG_TARGET}-${ARCH}${PKG_TARGET_WX_VER}-${PKG_TARGET_VERSION}"
+)
+
+# CPack package file name
+set(CPACK_PACKAGE_FILE_NAME "${PACKAGING_NAME}")
+
+message(STATUS "${CMLOC}PACKAGING_NAME: ${PACKAGING_NAME}")
+message(STATUS "${CMLOC}PACKAGING_NAME_XML: ${PACKAGING_NAME_XML}")
+message(STATUS "${CMLOC}CPACK_PACKAGE_FILE_NAME: ${CPACK_PACKAGE_FILE_NAME}")
+
+# ---------------------------------------------------------------------------
+# FILE (actual output archive name)
+# ---------------------------------------------------------------------------
+
+if(OCPN_FLATPAK_CONFIG OR OCPN_FLATPAK_BUILD)
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.flatpak")
+elseif(PKG_TARGET STREQUAL "Android")
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.apk")
+elseif(APPLE)
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.zip")
+elseif(WIN32)
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.zip")
+elseif(UNIX)
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.tar.gz")
+else()
+    set(FILE "${CPACK_PACKAGE_FILE_NAME}.zip")
+endif()
+
+message(STATUS "${CMLOC}FILE: ${FILE}")
