@@ -1,4 +1,11 @@
 #pragma once
+
+
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
+
 #include <wx/string.h>
 #include "ClimatologyDefs.h"   // for OverlayType enum
 

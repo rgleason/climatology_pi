@@ -1,5 +1,11 @@
 #ifdef CLIMATOLOGY_BUNDLED_CURL
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+    #include <wx/wx.h>
+#endif
+
+
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
 #include "icons.h"

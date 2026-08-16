@@ -1,5 +1,12 @@
 #pragma once
 
+#pragma message("Header: " __FILE__)
+
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
+
 //=== System & STL ============================================================
 #include <vector>
 #include <map>
@@ -635,3 +642,5 @@ private:
         double global_vmin,
         double global_vmax);
 };
+
+#pragma message("END HEADER: " __FILE__)

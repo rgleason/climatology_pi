@@ -1,5 +1,11 @@
 #pragma once
 
+// wxWidgets must be first guard
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#   include <wx/wx.h>
+#endif
+
 #include "piDC.h"
 #include "ocpn_plugin.h"    // ensures PlugIn_ViewPort is fully known
 #include <wx/colour.h>

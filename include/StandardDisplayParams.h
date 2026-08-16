@@ -1,6 +1,11 @@
 #ifndef STANDARD_DISPLAY_PARAMS_H
 #define STANDARD_DISPLAY_PARAMS_H
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
+
 #include <wx/colour.h>
 #include <vector>
 

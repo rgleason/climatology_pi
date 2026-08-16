@@ -25,6 +25,11 @@
  */
  
 #pragma once
+
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
  
 #include "ocpn_plugin.h"
 #include "IsoBarMap.h"

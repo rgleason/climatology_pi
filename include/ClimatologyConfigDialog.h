@@ -10,6 +10,9 @@
 #ifndef CLIMATOLOGY_CONFIG_DIALOG_H
 #define CLIMATOLOGY_CONFIG_DIALOG_H
 
+#pragma message("Header: " __FILE__)
+
+
 #include <wx/timer.h>
 #include <wx/notebook.h>
 #include <wx/event.h>

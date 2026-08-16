@@ -5,6 +5,9 @@
 #ifndef __CLIMATOLOGY_DIALOG_H__
 #define __CLIMATOLOGY_DIALOG_H__
 
+#pragma message("Header: " __FILE__)
+
+
 // wxWidgets must be first
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP

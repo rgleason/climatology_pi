@@ -1,6 +1,11 @@
 #ifndef _UNIFIED_GRID_LEGACY_H_
 #define _UNIFIED_GRID_LEGACY_H_
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
+
 #include <vector>
 #include "GridInfo.h"
 

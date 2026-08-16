@@ -1,4 +1,7 @@
 #pragma once
+
+#pragma message("Header: " __FILE__)
+
 #include <string>
 #include <vector>
 #include "ManifestEntry.hpp" 

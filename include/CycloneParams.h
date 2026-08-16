@@ -1,6 +1,12 @@
 #ifndef CYCLONE_PARAMS_H
 #define CYCLONE_PARAMS_H
 
+#include <wx/wxprec.h>
+#ifndef WX_PRECOMP
+#include <wx/wx.h>
+#endif
+
+
 #include <wx/colour.h>
 
 // ============================================================================

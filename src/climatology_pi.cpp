@@ -2,6 +2,7 @@
  * Climatology Plugin — Main Plugin Class (Implementation)
  * Modern unified‑grid architecture
  ******************************************************************************/
+#pragma message("Header: " __FILE__)
 
 // wxWidgets must be first
 #include <wx/wxprec.h>
@@ -9,11 +10,16 @@
 #include <wx/wx.h>
 #endif
 
+// To avoid wxWidgets\include\wx\withimages.h(19,1): error C2236: unexpected token 'class'.
+#include "ocpn_plugin_guarded.h"
+
+
 // wx extras
 #include <wx/fileconf.h>
 
-// jsoncpp
-#include <json/json.h>
+// ADD nlohmann/json
+#include "json.hpp"
+using json = nlohmann::json;
 
 // plugin headers
 #include "climatology_pi.h"
@@ -24,6 +30,7 @@
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
 #include "icons.h"
+
 
 // MUST COME AFTER wx includes
 #include "version.h"

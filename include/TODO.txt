@@ -21,6 +21,13 @@ TODO — Climatology Modernization Roadmap
    - Do NOT connect them to rendering yet.
    - Prepare them to feed Modern UnifiedGrid.
 
+3a.- Get plugin compiling properly with no errors.
+   - Headers - Done
+   - wxWidgets -
+   - Declaration errors.
+   - Params Struct errors.
+   - Then add RenderGrid
+
 4. Create RenderGrid (empty but compiling)
    - Implement empty BuildFromUnifiedGrid().
    - Implement empty InterpolateMonth(), ApplyColorMap(), ApplyTransparency().

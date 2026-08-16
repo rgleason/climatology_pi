@@ -46,6 +46,9 @@
 #ifndef _CLIMATOLOGY_PI_PLUGIN_H_
 #define _CLIMATOLOGY_PI_PLUGIN_H_
 
+#pragma message("Header: " __FILE__)
+
+
 // wxWidgets must be first
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
@@ -57,8 +60,11 @@
 #include <wx/glcanvas.h>
 #include <wx/notifmsg.h>
 #include <memory>
-#include <wx/jsonreader.h>
-#include <wx/jsonwriter.h>
+//include <wx/jsonreader.h>
+//#include <wx/jsonwriter.h>
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 
 #include "ocpn_plugin.h"
 
