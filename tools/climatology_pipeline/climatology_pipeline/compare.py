@@ -10,7 +10,9 @@ import numpy as np
 
 from .legacy import (decode_current, decode_wind, decode_wind_extras,
                      decode_scalar)
+from .current import CurrentAccumulator
 from .scalar import SCALAR_DEFINITIONS, decode_field
+from .wind import WindAccumulator
 
 
 WIND_REGIONS = (
@@ -231,7 +233,121 @@ def _current_check(name: str, sample: dict[str, object]) -> dict[str, object]:
     }
 
 
-def comparison(old: Path, new: Path) -> dict[str, object]:
+def source_binding_validation(
+    directory: Path,
+    wind_checkpoint: Path,
+    current_checkpoint: Path,
+    *,
+    minimum_samples: int = 100,
+) -> dict[str, object]:
+    """Bind released bytes back to the unquantised source accumulators.
+
+    The checkpoints are sufficient statistics accumulated directly from the
+    authoritative source grids.  Comparing their independently decoded output
+    with the expected fields catches orientation, resampling, encoding and
+    packaging mistakes which a simple old-versus-new comparison cannot.
+    """
+    wind = WindAccumulator.load_checkpoint(wind_checkpoint)
+    current = CurrentAccumulator.load_checkpoint(current_checkpoint)
+    wind_results: list[dict[str, object]] = []
+    current_results: list[dict[str, object]] = []
+    checks: list[bool] = []
+
+    for month in (1, 7):
+        expected = wind.atlas(month, minimum_samples=minimum_samples)
+        actual = decode_wind(directory / f"wind{month:02d}.gz")
+        calm, gale, extras_valid = decode_wind_extras(
+            directory / f"wind-extras{month:02d}.gz"
+        )
+        shape_matches = expected.valid.shape == actual.valid.shape
+        valid_matches = bool(
+            shape_matches
+            and np.array_equal(expected.valid, actual.valid)
+            and np.array_equal(expected.valid, extras_valid)
+        )
+        if shape_matches:
+            frequency_error = int(np.max(np.abs(
+                expected.frequencies.astype(np.int16)
+                - actual.frequencies.astype(np.int16)
+            )))
+            speed_error = int(np.max(np.abs(
+                expected.speeds.astype(np.int16)
+                - actual.speeds.astype(np.int16)
+            )))
+            calm_error = int(np.max(np.abs(
+                expected.calm.astype(np.int16) - calm.astype(np.int16)
+            )))
+            gale_error = int(np.max(np.abs(
+                expected.gale.astype(np.int16) - gale.astype(np.int16)
+            )))
+        else:
+            frequency_error = speed_error = calm_error = gale_error = -1
+        passed = bool(
+            valid_matches and frequency_error == 0 and speed_error == 0
+            and calm_error == 0 and gale_error == 0
+        )
+        checks.append(passed)
+        wind_results.append({
+            "month": month,
+            "passed": passed,
+            "valid_mask_exact": valid_matches,
+            "maximum_frequency_byte_error": frequency_error,
+            "maximum_speed_byte_error": speed_error,
+            "maximum_calm_percentage_point_error": calm_error,
+            "maximum_gale_percentage_point_error": gale_error,
+            "note": "Exact byte equality is required after source-statistic quantisation",
+        })
+
+        expected_current = current.field(
+            month, minimum_samples=minimum_samples
+        )
+        actual_current = decode_current(directory / f"current{month:02d}.gz")
+        shape_matches = expected_current.u.shape == actual_current.u.shape
+        expected_valid = np.isfinite(expected_current.u) & np.isfinite(expected_current.v)
+        actual_valid = np.isfinite(actual_current.u) & np.isfinite(actual_current.v)
+        valid_matches = bool(shape_matches and np.array_equal(expected_valid, actual_valid))
+        if shape_matches and np.any(expected_valid):
+            u_error = float(np.max(np.abs(
+                expected_current.u[expected_valid] - actual_current.u[expected_valid]
+            )))
+            v_error = float(np.max(np.abs(
+                expected_current.v[expected_valid] - actual_current.v[expected_valid]
+            )))
+        else:
+            u_error = v_error = float("inf")
+        tolerance = 0.5 / actual_current.multiplier + 1e-12
+        passed = bool(valid_matches and u_error <= tolerance and v_error <= tolerance)
+        checks.append(passed)
+        current_results.append({
+            "month": month,
+            "passed": passed,
+            "valid_mask_exact": valid_matches,
+            "maximum_u_quantisation_error_kn": u_error,
+            "maximum_v_quantisation_error_kn": v_error,
+            "allowed_half_step_error_kn": 0.5 / actual_current.multiplier,
+            "note": "Expected U/V is independently decoded after source-grid averaging and resampling",
+        })
+
+    return {
+        "wind": wind_results,
+        "current": current_results,
+        "summary": {
+            "checks": len(checks),
+            "checks_passed": sum(checks),
+            "all_checks_passed": all(checks),
+            "wind_checkpoint": str(wind_checkpoint),
+            "current_checkpoint": str(current_checkpoint),
+        },
+    }
+
+
+def comparison(
+    old: Path,
+    new: Path,
+    *,
+    wind_checkpoint: Path | None = None,
+    current_checkpoint: Path | None = None,
+) -> dict[str, object]:
     result: dict[str, object] = {
         "wind": [], "wind_global": [], "current": [], "current_global": [],
         "scalar": [], "scalar_global": []
@@ -289,6 +405,12 @@ def comparison(old: Path, new: Path) -> dict[str, object]:
             "they are not statistical confidence intervals"
         ),
     }
+    if (wind_checkpoint is None) != (current_checkpoint is None):
+        raise ValueError("both wind and current checkpoints are required for source binding")
+    if wind_checkpoint is not None and current_checkpoint is not None:
+        result["source_binding"] = source_binding_validation(
+            new, wind_checkpoint, current_checkpoint
+        )
     return result
 
 
@@ -297,8 +419,15 @@ def main() -> None:
     parser.add_argument("old", type=Path)
     parser.add_argument("new", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wind-checkpoint", type=Path)
+    parser.add_argument("--current-checkpoint", type=Path)
     args = parser.parse_args()
-    report = json.dumps(comparison(args.old, args.new), indent=2) + "\n"
+    report = json.dumps(comparison(
+        args.old,
+        args.new,
+        wind_checkpoint=args.wind_checkpoint,
+        current_checkpoint=args.current_checkpoint,
+    ), indent=2) + "\n"
     if args.output:
         args.output.write_text(report, encoding="utf-8")
     else:

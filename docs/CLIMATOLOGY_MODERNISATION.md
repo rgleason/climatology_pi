@@ -329,6 +329,17 @@ Consequently the production builder retains complete monthly download batches:
 it is materially faster here, simpler to validate, and leaves an independently
 readable source object available until that month's statistics have passed.
 
+### D029 — Bind packaged vectors back to source-derived sufficient statistics
+
+An old-versus-new comparison cannot prove that packaging preserved the values
+calculated from the authoritative source.  The final validator therefore also
+loads the merged ERA5 and OSCAR checkpoints.  For January and July it rebuilds
+the target wind/current fields, independently decodes the packaged files, and
+requires exact wind masks/frequencies/speeds/calm/gale plus current U/V within
+half of the 0.05 kn wire step.  These are hard source-binding checks.  The
+named-region regime checks remain advisory because they are broad physical
+sanity bounds rather than confidence intervals.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

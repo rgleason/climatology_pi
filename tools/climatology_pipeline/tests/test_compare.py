@@ -8,11 +8,14 @@ from climatology_pipeline.compare import (_current_check, _wind_check,
                                           current_global_comparison,
                                           current_sample,
                                           scalar_global_comparison,
+                                          source_binding_validation,
                                           wind_global_comparison,
                                           wind_sample)
+from climatology_pipeline.current import CurrentAccumulator
 from climatology_pipeline.legacy import (CurrentField, WindAtlas, encode_current,
                                          encode_wind, encode_wind_extras,
                                          write_gzip)
+from climatology_pipeline.wind import WindAccumulator
 
 
 def test_geographical_wind_and_current_samples(tmp_path) -> None:
@@ -56,3 +59,45 @@ def test_scalar_global_comparison_uses_paired_physical_values() -> None:
     assert result["paired_mean_difference_new_minus_old"] == 0.0
     assert result["paired_mean_absolute_difference"] == 0.0
     assert result["paired_root_mean_square_difference"] == 0.0
+
+
+def test_source_binding_checks_unquantised_checkpoints(tmp_path) -> None:
+    wind = WindAccumulator(months=12, latitudes=2, longitudes=2)
+    for month in (1, 7):
+        index = month - 1
+        wind.total[index] = 100
+        wind.calm[index] = 10
+        wind.gale[index] = 2
+        wind.direction_count[index, :, :, 0] = 100
+        wind.direction_speed_sum[index, :, :, 0] = 1200
+        atlas = wind.atlas(month, minimum_samples=100)
+        write_gzip(tmp_path / f"wind{month:02d}.gz", encode_wind(atlas))
+        write_gzip(
+            tmp_path / f"wind-extras{month:02d}.gz",
+            encode_wind_extras(atlas),
+        )
+    wind_checkpoint = tmp_path / "wind.npz"
+    wind.save_checkpoint(wind_checkpoint)
+
+    current = CurrentAccumulator(
+        np.array([-90.0, 90.0]), np.array([0.0, 180.0])
+    )
+    for month in (1, 7):
+        index = month - 1
+        current.u_sum[index] = 50.0
+        current.v_sum[index] = 25.0
+        current.count[index] = 100
+        write_gzip(
+            tmp_path / f"current{month:02d}.gz",
+            encode_current(current.field(month, minimum_samples=100)),
+        )
+    current_checkpoint = tmp_path / "current.npz"
+    current.save_checkpoint(current_checkpoint)
+
+    result = source_binding_validation(
+        tmp_path, wind_checkpoint, current_checkpoint
+    )
+    assert result["summary"]["checks"] == 4
+    assert result["summary"]["all_checks_passed"]
+    assert result["wind"][0]["maximum_frequency_byte_error"] == 0
+    assert result["current"][0]["maximum_u_quantisation_error_kn"] <= 0.025

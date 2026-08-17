@@ -151,6 +151,11 @@ machine- and human-readable provenance after all outputs have passed numerical
 validation:
 
 ```sh
+climatology-compare OLD_DATA WORK/dataset \
+  --wind-checkpoint WORK/wind-1995-2024.npz \
+  --current-checkpoint WORK/oscar-final.npz \
+  --output WORK/dataset/dataset-validation.json
+
 climatology-write-provenance REPOSITORY WORK/dataset \
   WORK/dataset/*.gz WORK/dataset/elnino_years.txt \
   WORK/dataset/cyclone-conversion.json \
@@ -158,6 +163,12 @@ climatology-write-provenance REPOSITORY WORK/dataset \
   --sources tools/climatology_pipeline/metadata/sources-2026.1.json \
   --validation WORK/dataset/dataset-validation.json
 ```
+
+The optional checkpoints bind the packaged bytes back to the unquantised
+sufficient statistics accumulated from ERA5 and OSCAR. Wind output must match
+the source-derived quantised atlas exactly; current U/V must match within half
+of the legacy 0.05 kn encoding step. This is separate from—and stronger than—
+the advisory old-versus-new regional checks.
 
 See `docs/IMPLEMENTATION_AUDIT.md`, `docs/LEGACY_DATA_FORMAT.md`,
 `docs/SOURCE_DATA_AUDIT.md` and `docs/CLIMATOLOGY_MODERNISATION.md`.
