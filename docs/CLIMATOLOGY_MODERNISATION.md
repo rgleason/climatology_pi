@@ -303,6 +303,19 @@ before download. Four exact date partitions may therefore run concurrently at
 under 16 GB planned aggregate peak, still well below this project's 100 GB
 limit and the 32 GB temporary filesystem available during this build.
 
+### D027 — Decode OSCAR's declared calendar and coordinate dimensions
+
+The official Final V2 granules use a CF `julian` time calendar.  With current
+xarray this deliberately decodes to `cftime.DatetimeJulian`, not a NumPy
+datetime, and therefore cannot be compared directly with `datetime.date` or
+`numpy.datetime64`.  They also name coordinate variables `lat`/`lon` while
+the corresponding array dimensions are `latitude`/`longitude`.  The reader
+now normalises supported calendar objects to civil year/month/day values and
+derives each array dimension from its one-dimensional coordinate variable.
+The regression fixture reproduces both details from an official granule, and
+an authenticated real-granule ingestion was used to verify the fix before
+the historical acquisition resumed.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
