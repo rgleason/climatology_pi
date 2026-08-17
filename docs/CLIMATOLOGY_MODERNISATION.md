@@ -316,6 +316,19 @@ The regression fixture reproduces both details from an official granule, and
 an authenticated real-granule ingestion was used to verify the fix before
 the historical acquisition resumed.
 
+### D028 — Retain complete OSCAR granule downloads after measured alternatives
+
+Only total-current `u` and `v` are required; `ug` and `vg` are not.  Two
+official lower-transfer paths were measured before changing the acquisition
+design.  A NASA Harmony variable-only output was about 8.9 MB rather than the
+33.3 MB complete granule, but server staging dominated latency.  Reading only
+the HDF5 `u`/`v` chunks through authenticated S3 range requests produced values
+exactly equal to the downloaded source, but took 98.95 seconds for one granule
+on this build link, versus about 20 seconds for the complete download.
+Consequently the production builder retains complete monthly download batches:
+it is materially faster here, simpler to validate, and leaves an independently
+readable source object available until that month's statistics have passed.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
