@@ -2,10 +2,12 @@
 
 ## Dynamic climatology period
 
-Default: 1995-01-01 through 2024-12-31 inclusive. This is a rolling 30-year
-navigation climatology, not a WMO standard normal. The WMO 1991–2020 standard
-period remains an available configuration. Every output records the exact
-inclusive period per variable.
+Target: 1995-01-01 through 2024-12-31 inclusive. This is a rolling 30-year
+navigation climatology, not a WMO standard normal. It is not falsely presented
+as one common period where source coverage is shorter. Every output records
+the exact inclusive period per variable: currently wind 1995–2024, atmospheric
+fields 1995–2022, OSCAR Final 1995-01-01–2022-08-05, and OISST/IBTrACS
+1995–2024. The WMO 1991–2020 standard period remains configurable.
 
 ## Source assessment
 
@@ -31,7 +33,8 @@ cloud parameter meaning differs from old COADS observations.
 Use product DOI `10.5067/OSCAR-25F20`: daily, 0.25-degree surface-current U/V.
 Final quality is preferred over interim/NRT. It combines sea-surface-height
 gradients, vector wind, and SST in a diagnostic model. Monthly U/V means are
-formed over 1995–2024 and resampled vector components before speed/direction.
+formed over the available 1995-01-01–2022-08-05 period and resampled as vector
+components before speed/direction.
 
 Risks: OSCAR represents mixed-layer surface current and has coastal/missing
 cells. Never interpolate direction directly; interpolate U/V. The source's
@@ -73,10 +76,12 @@ are not accepted as a lightning proxy. A newer product can replace it only if
 it is observational, global enough for marine use, monthly, and its coverage
 limitations are explicit.
 
-### ENSO — NOAA CPC ONI
+### ENSO — NOAA CPC historical ONI (ERSSTv6)
 
-Use the versioned/access-dated Oceanic Niño Index table. ENSO is auxiliary to
-cyclone filtering and is not forced to the dynamic climatology period.
+Use the versioned/access-dated historical Oceanic Niño Index table based on
+ERSSTv6. ENSO is auxiliary to cyclone filtering and is not forced to the
+dynamic climatology period. Retain the plugin's ONI interpretation; do not
+silently substitute CPC's newer operational Relative ONI.
 
 ## Provenance manifest
 

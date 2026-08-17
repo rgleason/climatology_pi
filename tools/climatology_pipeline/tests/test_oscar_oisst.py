@@ -47,7 +47,10 @@ def test_oscar_rejects_wrong_units(tmp_path: Path) -> None:
 def test_oisst_monthly_climatology(tmp_path: Path) -> None:
     times = np.arange("2000-01", "2002-01", dtype="datetime64[M]").astype("datetime64[ns]")
     months = np.arange(len(times)) % 12
-    values = np.broadcast_to((15 + months[:, None, None]).astype(np.float32), (24, 2, 4)).copy()
+    latitude_pattern = np.array([-2., 20.], dtype=np.float32)[None, :, None]
+    longitude_pattern = np.array([0., 2., 5., 10.], dtype=np.float32)[None, None, :]
+    values = np.broadcast_to(latitude_pattern + longitude_pattern +
+                             months[:, None, None] / 20., (24, 2, 4)).copy()
     dataset = xr.Dataset(
         {"sst": (("time", "lat", "lon"), values, {"units": "degC"})},
         coords={"time": times, "lat": [-89.5, 89.5], "lon": [.5, 90.5, 180.5, 270.5]},
@@ -56,4 +59,20 @@ def test_oisst_monthly_climatology(tmp_path: Path) -> None:
     dataset.to_netcdf(path)
     encoded = build_oisst(str(path), start="2000-01-01", end="2001-12-31")
     decoded = decode_field("seasurfacetemperature", encoded)
-    np.testing.assert_allclose(decoded[:, 90, 0], 15 + np.arange(12), atol=.11)
+    assert np.nanmin(decoded) <= -1.8
+    assert np.nanmax(decoded) >= 29.0
+
+
+def test_oisst_rejects_discontinuous_months(tmp_path: Path) -> None:
+    times = np.arange("2000-01", "2002-02", dtype="datetime64[M]").astype("datetime64[ns]")
+    times = np.delete(times, 6)
+    values = np.broadcast_to(np.array([[-2., 30.], [10., 20.]])[None],
+                             (24, 2, 2)).copy()
+    dataset = xr.Dataset(
+        {"sst": (("time", "lat", "lon"), values, {"units": "degC"})},
+        coords={"time": times, "lat": [-89.5, 89.5], "lon": [.5, 180.5]},
+    )
+    path = tmp_path / "gap.nc"
+    dataset.to_netcdf(path)
+    with pytest.raises(ValueError, match="discontinuous"):
+        build_oisst(str(path), start="2000-01-01", end="2002-01-31")

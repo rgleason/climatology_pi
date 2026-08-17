@@ -119,6 +119,10 @@ values or non-numeric missing markers. Runtime thresholds are >=+0.5 El Niño,
 <=-0.5 La Niña, otherwise neutral. The file does not carry its index name,
 base period, source version, or access date.
 
+The released file's final 2014 row is malformed and contains only three monthly
+values. The historical runtime could index beyond that row. The hardened reader
+accepts only a year followed by exactly twelve valid monthly values.
+
 ## Interpolation semantics
 
 The plugin linearly interpolates between monthly fields, treating each value as

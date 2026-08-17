@@ -40,16 +40,19 @@ required.
 
 ### D002 — Use an explicit rolling period, not an anonymous “normal”
 
-The candidate period 1995-01-01 through 2024-12-31 is retained for the first
-modern dynamic dataset. It is a recent rolling 30-year climatology and is not
-labelled a WMO climatological standard normal. WMO standard normals use periods
-ending in a year ending in zero (currently 1991–2020). The rolling choice is
-appropriate to routing risk in a changing climate and fits the OSCAR record;
-the manifest makes the distinction explicit. The pipeline allows a WMO
-1991–2020 build by configuration.
+The candidate target period is 1995-01-01 through 2024-12-31. It is a recent
+rolling 30-year navigation climatology, not a WMO standard normal. WMO standard
+normals use periods ending in a year ending in zero (currently 1991–2020).
 
-Static or coverage-limited products (GEBCO and lightning) declare their own
-period rather than falsely inheriting 1995–2024.
+Source coverage does not support one honest common end date: OSCAR Final V2.0
+ends on 2022-08-05 and the public ERA5 WeatherBench archive used for bulk
+atmospheric processing ends in early 2023. Each product therefore records its
+actual inclusive period. Wind may use the current ERA5 ARCO store to extend
+through 2024; the first atmosphere build uses 1995–2022; OSCAR uses
+1995-01-01–2022-08-05; OISST and IBTrACS use 1995–2024. Static and
+coverage-limited products (GEBCO and lightning) likewise declare their own
+coverage. The manifest must never imply that a shorter source was silently
+extended.
 
 ### D003 — Distributional wind, never monthly mean vectors
 
@@ -112,7 +115,9 @@ function-pointer API.
 * lightning: retain the observed NASA LIS/OTD climatology until an
   authoritative truly global modern observational replacement exists. It is
   not replaced by precipitation or convective proxies;
-* ENSO: NOAA CPC Oceanic Niño Index, version/access date in provenance.
+* ENSO: NOAA CPC historical ONI table based on ERSSTv6, version/access date in
+  provenance. The plugin retains ONI semantics even though CPC now also uses
+  RONI operationally.
 
 ### D008 — Cyclone winds must not silently mix averaging conventions
 
@@ -130,6 +135,31 @@ accepts major/minor 0.10 through 1.6. Dataset versions use
 `ocpn-climatology-YYYY.release` (first candidate:
 `ocpn-climatology-2026.1`) in `dataset-manifest.json`. Binary schema versions
 are separate (`legacy-wind/fefe`, `legacy-current/1`, etc.).
+
+### D010 — Reject physically corrupt source reads
+
+An OPeNDAP full-grid OISST read returned syntactically valid arrays filled with
+zero, although point requests were correct. Structural checks alone would have
+encoded this as a tiny, plausible-looking but useless climatology. Source
+adapters now enforce variable-specific physical-range checks before encoding;
+the production OISST path uses NOAA's official HTTP file endpoint and records
+its checksum.
+
+### D011 — Additive wind extension, not an incompatible replacement
+
+Legacy `wind*.gz` remains the authoritative compatibility payload. Optional
+`wind-extras*.gz` sidecars retain both calm and gale probabilities, which the old
+one-byte marker cannot represent simultaneously. The modern runtime prefers a
+valid sidecar but falls back to the legacy file. Old plugins simply ignore the
+sidecars, while Weather Routing continues to receive the same function-pointer
+interface.
+
+### D012 — Fail closed on incomplete ENSO rows
+
+The released ENSO file ends with a truncated 2014 row containing only three
+monthly values. The historical reader indexed it as though twelve values were
+present. The runtime now rejects incomplete rows, and the generator emits only
+complete, source-attributed years.
 
 ## Rejected alternatives
 
