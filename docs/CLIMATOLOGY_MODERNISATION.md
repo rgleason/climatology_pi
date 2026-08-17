@@ -245,6 +245,17 @@ rejects a mask with no ocean cells, and requires every processed year to add
 samples before it can checkpoint.  The empty test partition was stopped and
 discarded; it was never merged or installed.
 
+### D021 — Provenance descriptions are executable release data
+
+An audit against the strict decoder found that draft product metadata still
+described proposed scalar encodings rather than the byte layouts actually
+consumed by the legacy runtime.  The generated values and readers were
+correct, but that discrepancy would have made the release record misleading.
+The pressure, SST, air-temperature, humidity and cloud encodings and all
+scalar target-grid dimensions are now locked by tests to the formal legacy
+specification.  A release is not valid merely because its payload decodes; its
+machine-readable provenance must describe that payload exactly.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
