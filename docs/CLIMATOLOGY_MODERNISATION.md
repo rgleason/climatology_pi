@@ -195,6 +195,16 @@ finite precipitation overflow at 254; all other scalar products still fail
 closed or use their documented missing-data policy.  The manifest records the
 clip count and maximum before encoding.
 
+### D016 — Retain the identified 2013 LIS/OTD lightning edition
+
+The old generator identifies its input as `LISOTD_HRMC_V2.3.2013.hdf`.  NASA's
+current guide describes the v2.3 product family and the later 2015 edition, but
+the original HDF and its checksum were never committed.  The modern bundle
+therefore retains the byte-identical observational layer, declares the
+conservative 1995-05-04 through 2013-12-31 coverage of that edition, and
+records the encoded checksum.  It does not relabel the data as 1995–2024 or
+replace lightning with an ERA5 proxy.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

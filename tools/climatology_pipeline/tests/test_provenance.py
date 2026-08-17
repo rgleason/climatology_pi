@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from climatology_pipeline.provenance import make_manifest, sha256, write_manifest
 
@@ -21,3 +22,24 @@ def test_manifest_has_checksums_and_two_renderings(tmp_path) -> None:
     loaded = json.loads((tmp_path / "dataset-manifest.json").read_text())
     assert loaded["dataset_version"] == "ocpn-climatology-2026.1"
     assert "ERA5" in (tmp_path / "DATASET_PROVENANCE.md").read_text()
+
+
+def test_release_metadata_names_every_packaged_product() -> None:
+    root = Path(__file__).resolve().parents[1]
+    products = json.loads(
+        (root / "metadata/products-2026.1.json").read_text(encoding="utf-8")
+    )
+    sources = json.loads(
+        (root / "metadata/sources-2026.1.json").read_text(encoding="utf-8")
+    )
+    names = {product["name"] for product in products}
+    assert names == {
+        "wind atlas", "ocean surface current", "mean sea-level pressure",
+        "air temperature", "relative humidity", "precipitation",
+        "total cloud cover", "sea-surface temperature",
+        "tropical cyclone tracks", "bathymetric context", "lightning",
+        "ENSO classification",
+    }
+    assert all(product.get("period", {}).get("start") for product in products)
+    assert all(product.get("period", {}).get("end") for product in products)
+    assert all(source.get("product_id") for source in sources)

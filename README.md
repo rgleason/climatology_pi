@@ -131,8 +131,11 @@ The modern cyclone files use IBTrACS v04r01 main-track positions and
 incompatible agency wind-averaging periods. ENSO uses the NOAA CPC ERSSTv6
 ONI table and omits incomplete current-year rows.
 
-Observed NASA LIS/OTD lightning is retained from the historical bundle until a
-documented, genuinely observational global monthly successor is selected.
+Observed NASA LIS/OTD HRMC v2.3.2013 lightning (1995–2013) is retained
+byte-for-byte from the historical bundle until a documented, genuinely
+observational global monthly successor is selected. The old generator records
+the source filename but the original HDF/checksum is unavailable, so that
+provenance limitation is explicit.
 
 ## Provenance and validation
 

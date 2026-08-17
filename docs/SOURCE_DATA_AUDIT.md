@@ -74,11 +74,21 @@ must be labelled not for navigation.
 
 ### Lightning — NASA LIS/OTD
 
-The existing observed LIS/OTD High Resolution Monthly Climatology is retained
-with its actual product version/coverage once verified. Modern ERA5 variables
-are not accepted as a lightning proxy. A newer product can replace it only if
-it is observational, global enough for marine use, monthly, and its coverage
-limitations are explicit.
+The existing observed `LISOTD_HRMC_V2.3.2013` High Resolution Monthly
+Climatology is retained.  The historical generator names that exact upstream
+HDF file and converts its twelve 0.5-degree flash-rate grids to the plugin's
+one-degree nonlinear byte encoding.  NASA's v2.3 product documentation gives
+the family coverage as beginning 1995-05-04; the retained 2013 edition predates
+the later v2.3.2015 extension through 2014, so its conservative declared period
+is 1995-05-04 through 2013-12-31.  The packaged encoded file has SHA-256
+`7dcb59a00d88cfbf40f2a95a08827c1920fc2eecd60df71e223e09944602e243`.
+
+The upstream HDF object was not distributed with the historical repository,
+so its original object checksum cannot be reconstructed from the encoded
+payload.  This limitation is recorded rather than inventing provenance.
+Modern ERA5 variables are not accepted as a lightning proxy. A newer product
+can replace it only if it is observational, global enough for marine use,
+monthly, and its coverage limitations are explicit.
 
 ### ENSO — NOAA CPC historical ONI (ERSSTv6)
 
