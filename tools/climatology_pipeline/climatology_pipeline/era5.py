@@ -133,7 +133,7 @@ def accumulate_wind(
 ) -> Iterator[datetime]:
     """Stream wind blocks and yield the final timestamp of each checkpoint block."""
     validate_wind_dataset(dataset)
-    era5_wind_plan().validate()
+    era5_wind_plan(block_samples=block_samples).validate()
     indices = _time_indices(dataset, start, end, cadence_hours)
     latitudes = np.asarray(dataset.latitude.values, dtype=np.float64)
     longitudes = np.asarray(dataset.longitude.values, dtype=np.float64)

@@ -46,14 +46,15 @@ class StoragePlan:
 
 def era5_wind_plan(
     *,
-    tile_latitudes: int = 80,
-    tile_longitudes: int = 160,
-    days_per_chunk: int = 31,
-    samples_per_day: int = 4,
+    source_latitudes: int = 721,
+    source_longitudes: int = 1440,
+    block_samples: int = 28,
     budget_gb: float = 100.0,
 ) -> StoragePlan:
-    """Conservative peak estimate for a two-variable float32 ERA5 chunk."""
-    raw = days_per_chunk * samples_per_day * tile_latitudes * tile_longitudes * 2 * 4
+    """Conservative peak estimate for the actual global ERA5 read block."""
+    if source_latitudes <= 0 or source_longitudes <= 0 or block_samples <= 0:
+        raise ValueError("ERA5 source dimensions and block size must be positive")
+    raw = block_samples * source_latitudes * source_longitudes * 2 * 4
     # Allow 4x raw for compressed transfer, decoded arrays, coordinates and
     # library overhead at the same time.
     source = raw * 4

@@ -51,7 +51,8 @@ def _save(checkpoint: Path, accumulator: WindAccumulator, start: int, end: int, 
 def build(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    plan = era5_wind_plan(budget_gb=args.budget_gb)
+    plan = era5_wind_plan(block_samples=args.block_samples,
+                          budget_gb=args.budget_gb)
     plan.validate(args.output)
     accumulator, first_year = _load(args.checkpoint, args.start_year, args.end_year)
     atmosphere = None

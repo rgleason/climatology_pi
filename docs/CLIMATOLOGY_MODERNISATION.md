@@ -73,8 +73,9 @@ in representative regions.
 ### D004 — Hard 100 GB storage ceiling
 
 The pipeline has a configurable peak-workspace budget whose default and project
-maximum are 100 GB. Acquisition is split by variable, month/year, and spatial
-tile. A raw chunk is checksummed and validated, folded into compact sufficient
+maximum are 100 GB. Acquisition is split by variable and bounded time chunks,
+and by spatial slabs where the source layout benefits from that. A raw chunk is
+checksummed and validated, folded into compact sufficient
 statistics, then deleted. Resume checkpoints contain aggregated counts/sums,
 not source archives. Planning aborts before download if estimated peak usage
 exceeds the budget.
@@ -282,6 +283,15 @@ files into a modern installation.  Detection uses the JSON manifest, its
 human-readable provenance companion, or the distinctive enhanced-wind
 sidecar. Thus deleting or damaging only the manifest cannot silently turn a
 partially damaged modern bundle into a mixed modern/legacy dataset.
+
+### D025 — Storage plans model actual reader blocks
+
+The ERA5 estimator uses the production request shape: 28 complete 721x1440
+U/V fields, decoded-array/library overhead, the complete sufficient-statistic
+accumulator, checkpoint replacement and a 2 GB safety reserve.  The resulting
+conservative planned peak is 4.45 GB under the 100 GB ceiling.  An earlier
+draft estimator described a spatially tiled design which the final reader did
+not use; tests now lock the real source-block allowance above 0.9 GB.
 
 ## Rejected alternatives
 

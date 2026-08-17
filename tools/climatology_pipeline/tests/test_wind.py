@@ -125,6 +125,9 @@ def test_default_storage_plan_is_well_inside_100gb() -> None:
     plan.validate()
     assert plan.budget_bytes == 100 * GB
     assert plan.peak_bytes < 10 * GB
+    # The reader requests 28 complete 721x1440 U/V fields, not a small
+    # spatial tile. Include decoded/library overhead as well.
+    assert plan.source_chunk_bytes > 900_000_000
 
 
 def test_storage_plan_rejects_tiny_budget() -> None:
