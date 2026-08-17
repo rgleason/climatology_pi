@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import os
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import numpy as np
 
@@ -122,6 +122,8 @@ def accumulate_wind(
     cadence_hours: int = 6,
     block_samples: int = 12,
     workers: int = 8,
+    extra_variables: tuple[str, ...] = (),
+    block_callback: Callable[[Any, np.ndarray], None] | None = None,
 ) -> Iterator[datetime]:
     """Stream wind blocks and yield the final timestamp of each checkpoint block."""
     validate_wind_dataset(dataset)
@@ -135,7 +137,8 @@ def accumulate_wind(
 
     for offset in range(0, len(indices), block_samples):
         block_indices = indices[offset : offset + block_samples]
-        block = dataset[[U10, V10]].isel(time=block_indices).compute(
+        selected_variables = [U10, V10, *extra_variables]
+        block = dataset[selected_variables].isel(time=block_indices).compute(
             scheduler="threads", num_workers=workers
         )
         times = np.asarray(block.time.values)
@@ -150,6 +153,8 @@ def accumulate_wind(
                 longitudes,
                 sea_mask=sea,
             )
+        if block_callback is not None:
+            block_callback(block, sea)
         yield times[-1].astype("datetime64[s]").astype(datetime)
 
 
@@ -163,4 +168,3 @@ def google_arco_source() -> Era5Source:
 
 def ecmwf_geo_source() -> Era5Source:
     return Era5Source("ECMWF ERA5 ARCO geo-chunked", ECMWF_ARCO_GEO, 1, True)
-
