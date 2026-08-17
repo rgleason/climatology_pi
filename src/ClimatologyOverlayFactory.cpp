@@ -161,22 +161,31 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     Load();
 
     if(m_FailedFiles.size()) {
+        const bool versioned_dataset = wxFileExists(
+            ClimatologyDataDirectory() + "dataset-manifest.json");
         wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
         if( m_sFailedMessage.Len() > FAILED_FILELIST_MSG_LEN )
             failed_msg.Append("...\n\n");
+        const wxString recovery = versioned_dataset
+            ? _("This is a versioned dataset. Reinstall the matching complete "
+                "dataset; individual legacy files will not be mixed into it.")
+            : _("Would you like to try to download the archived legacy files?");
         wxMessageDialog mdlg(&m_dlg,
                              _("Some Data Failed to load:\n")
-                             + failed_msg +
-                             _("Would you like to try to download?"),
-                             _("Climatology"), wxYES | wxNO | wxICON_WARNING);
-        if(mdlg.ShowModal() == wxID_YES) {
+                             + failed_msg + recovery,
+                             _("Climatology"),
+                             (versioned_dataset ? wxOK : wxYES | wxNO) |
+                                 wxICON_WARNING);
+        if(mdlg.ShowModal() == wxID_YES && !versioned_dataset) {
             int i = 0;
             bool failed = false;
             wxString path = ClimatologyDataDirectory();
         
-            wxString servers[] = {"https://github.com"};
+            wxString servers[] = {"https://raw.githubusercontent.com"};
             int servercount = ((sizeof servers) / (sizeof *servers));
-            wxString url = "/seandepagnier/climatology_pi_data/blob/master/";
+            // Immutable commit matching the historical packaged bundle.
+            wxString url = "/seandepagnier/climatology_pi_data/"
+                           "006120320bde2c1ad8da10a911cdf2b0f3bffe0d/";
 
             for(std::list<wxString>::iterator it = m_FailedFiles.begin();
                 it != m_FailedFiles.end(); it++ ) {
@@ -189,7 +198,7 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
                     wxString urlpath = servers[ind] + url;
                 
                     _OCPN_DLStatus status = OCPN_downloadFile(
-                        urlpath + fn + "?raw=true",
+                        urlpath + fn,
                         path+fn, _("downloading climatology data file"),
                         wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
                         *_img_climatology, GetOCPNCanvasWindow(),

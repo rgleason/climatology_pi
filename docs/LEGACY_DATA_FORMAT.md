@@ -1,7 +1,7 @@
 # Legacy Climatology dataset specification
 
 This specification describes the released bundle at data repository commit
-`0061203...` as consumed by the runtime. Unless stated otherwise, multi-byte
+`006120320bde2c1ad8da10a911cdf2b0f3bffe0d` as consumed by the runtime. Unless stated otherwise, multi-byte
 fields in the released files are little-endian only by accident of the machine
 which generated them; the old C++ code used native byte order. Every binary is
 gzip-compressed for packaging. There is no common container, checksum, schema

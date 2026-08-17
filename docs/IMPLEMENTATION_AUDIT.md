@@ -11,7 +11,7 @@ Downloaded source archive SHA-256 values:
 
 * Rick: `a27fe4db3387aace59a2696abae510d196f2a3c78c03eada79a66da35989fc53`
 * Sean: `7cc80982a4ed7a8e4167da18cad387196e7aa7a312c362ee19f91174ce8b11db`
-* exact legacy data commit `0061203...` archive:
+* exact legacy data commit `006120320bde2c1ad8da10a911cdf2b0f3bffe0d` archive:
   `02b441adb6fcd450007c2966b775b96ee093b0b4b3ca53761bb8f4f1f27f79d1`
 
 The local baseline is an archive import, not a claim to reproduce upstream Git
