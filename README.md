@@ -151,8 +151,10 @@ machine- and human-readable provenance after all outputs have passed numerical
 validation:
 
 ```sh
-climatology-write-provenance REPOSITORY WORK/dataset WORK/dataset/*.gz \
-  --products products.json --sources sources.json
+climatology-write-provenance REPOSITORY WORK/dataset \
+  WORK/dataset/*.gz WORK/dataset/elnino_years.txt \
+  --products tools/climatology_pipeline/metadata/products-2026.1.json \
+  --sources tools/climatology_pipeline/metadata/sources-2026.1.json
 ```
 
 See `docs/IMPLEMENTATION_AUDIT.md`, `docs/LEGACY_DATA_FORMAT.md`,
