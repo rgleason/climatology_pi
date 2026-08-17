@@ -36,6 +36,8 @@
 #include <wx/fileconf.h>
 
 #include "climatology_pi.h"
+
+#include <wx/ffile.h>
 #include "icons.h"
 #include "ClimatologyDialog.h"
 
@@ -65,6 +67,24 @@ wxString ClimatologyDataDirectory()
         dir.Mkdir(wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
 
     return dir.GetFullPath();
+}
+
+static bool ReadDatasetManifest(Json::Value &manifest)
+{
+    wxFFile file(ClimatologyDataDirectory() + "dataset-manifest.json", "rb");
+    wxString contents;
+    if(!file.IsOpened() || !file.ReadAll(&contents))
+        return false;
+    Json::Reader reader;
+    return reader.parse(std::string(contents.utf8_str()), manifest, false) && manifest.isObject();
+}
+
+wxString ClimatologyDatasetVersion()
+{
+    Json::Value manifest;
+    if(ReadDatasetManifest(manifest) && manifest["dataset_version"].isString())
+        return wxString::FromUTF8(manifest["dataset_version"].asCString());
+    return _("legacy/unversioned");
 }
 
 
@@ -355,6 +375,15 @@ void climatology_pi::SendClimatology(bool valid)
     Json::Value v;
     v["ClimatologyVersionMajor"] = GetPlugInVersionMajor();
     v["ClimatologyVersionMinor"] = GetPlugInVersionMinor();
+    Json::Value manifest;
+    if(ReadDatasetManifest(manifest)) {
+        v["ClimatologyDatasetVersion"] = manifest.get("dataset_version", "unknown");
+        const Json::Value period = manifest["climatology_period"];
+        v["ClimatologyDatasetPeriodStart"] = period.get("start", "");
+        v["ClimatologyDatasetPeriodEnd"] = period.get("end", "");
+    } else {
+        v["ClimatologyDatasetVersion"] = "legacy/unversioned";
+    }
 
     char ptr[64];
     snprintf(ptr, sizeof ptr, "%p", valid ? ClimatologyData : NULL);

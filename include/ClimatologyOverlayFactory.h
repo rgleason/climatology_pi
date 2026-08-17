@@ -263,6 +263,7 @@ private:
     void Free();
 
     void ReadWindData(int month, wxString filename);
+    bool ReadWindExtras(int month, wxString filename);
     void AverageWindData();
     void ReadCurrentData(int month, wxString filename);
     void AverageCurrentData();

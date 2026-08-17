@@ -536,6 +536,8 @@ void ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog *progressdi
         if(progressdialog && !progressdialog->Update(month, filename))
             return;
         ReadWindData(month, filename);
+        if(m_WindData[month])
+            ReadWindExtras(month, wxString::Format("wind-extras"+fmt, month+1));
     }
 
     if(progressdialog && !progressdialog->Update(12, _("averaging wind")))
@@ -862,6 +864,60 @@ havedata:
 
     delete [] directions;
     delete [] speeds;
+}
+
+bool ClimatologyOverlayFactory::ReadWindExtras(int month, wxString filename)
+{
+    if(month < 0 || month >= 12 || !m_WindData[month])
+        return false;
+    const wxString path = ClimatologyDataDirectory() + filename;
+    ZUFILE *f = zu_open(path.mb_str(), "rb", ZU_COMPRESS_AUTO);
+    if(!f)
+        f = zu_open((path + ".gz").mb_str(), "rb", ZU_COMPRESS_AUTO);
+    if(!f)
+        return false;  // Optional additive file; historical datasets omit it.
+
+    unsigned char magic[4];
+    wxUint16 latitudes, longitudes;
+    if(zu_read(f, magic, sizeof magic) != sizeof magic ||
+       memcmp(magic, "WEX1", sizeof magic) != 0 ||
+       !ReadLE16(f, latitudes) || !ReadLE16(f, longitudes) ||
+       latitudes != m_WindData[month]->latitudes ||
+       longitudes != m_WindData[month]->longitudes) {
+        zu_close(f);
+        wxLogMessage(climatology_pi + _("ignoring corrupt optional wind extras: ") + filename);
+        return false;
+    }
+
+    const size_t cells = static_cast<size_t>(latitudes) * longitudes;
+    std::vector<wxUint8> calm(cells), gale(cells);
+    if(zu_read(f, &calm[0], cells) != static_cast<int>(cells) ||
+       zu_read(f, &gale[0], cells) != static_cast<int>(cells)) {
+        zu_close(f);
+        wxLogMessage(climatology_pi + _("ignoring truncated optional wind extras: ") + filename);
+        return false;
+    }
+    zu_close(f);
+
+    for(size_t index = 0; index < cells; ++index) {
+        WindData::WindPolar &polar = m_WindData[month]->data[index];
+        if(calm[index] == 255 || gale[index] == 255) {
+            if(polar.gale != 255) {
+                wxLogMessage(climatology_pi + _("wind extras missing mask disagrees with atlas: ") + filename);
+                return false;
+            }
+        } else if(calm[index] > 100 || gale[index] > 100 || polar.gale == 255) {
+            wxLogMessage(climatology_pi + _("wind extras values disagree with atlas: ") + filename);
+            return false;
+        }
+    }
+    for(size_t index = 0; index < cells; ++index)
+        if(m_WindData[month]->data[index].gale != 255) {
+            m_WindData[month]->data[index].calm = calm[index];
+            m_WindData[month]->data[index].gale = gale[index];
+        }
+    wxLogMessage(climatology_pi + _("loaded calm/gale wind extras: ") + filename);
+    return true;
 }
 
 void ClimatologyOverlayFactory::ReadCurrentData(int month, wxString filename)
