@@ -226,6 +226,15 @@ grid changes and any source other than Final V2.  This is mathematically the
 same monthly component mean as a serial pass; encoded current vectors are
 never averaged together.
 
+### D019 — Wind checkpoint merging proves temporal ownership
+
+Exact sufficient-statistic addition is safe only for non-overlapping samples.
+The wind merger now reads every checkpoint's versioned progress sidecar,
+sorts its effective `start_year` through `completed_year` interval, and rejects
+overlaps, gaps, missing metadata and incomplete/reversed ranges.  This also
+supports the intentionally partial 1995–1999 base checkpoint without treating
+its originally requested 2022 end year as data which was actually processed.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

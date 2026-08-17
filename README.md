@@ -70,7 +70,9 @@ for a wind distribution. Calm is <=3 kn and gale is >=34 kn.
 Independent, non-overlapping year ranges may be built concurrently and then
 combined with `climatology-merge-wind`. The merge adds the unquantised
 sufficient statistics, so its result is numerically identical to a serial
-pass; it is not an average of already-encoded atlas files.
+pass; it is not an average of already-encoded atlas files. Versioned progress
+metadata is mandatory, and the merger rejects overlapping or gapped effective
+year ranges.
 
 Monthly scalar atmosphere fields use bounded annual chunks from public ERA5
 monthly archives rather than rereading all six-hour samples:
