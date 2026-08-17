@@ -53,6 +53,7 @@ def make_manifest(
     sources: list[dict[str, Any]],
     *,
     generated_utc: str | None = None,
+    validation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     commit, dirty = generator_revision(repository)
     outputs = []
@@ -62,7 +63,7 @@ def make_manifest(
             "bytes": item.stat().st_size,
             "sha256": sha256(item),
         })
-    return {
+    manifest = {
         "dataset_version": DATASET_VERSION,
         "manifest_schema": 1,
         "generated_utc": generated_utc or datetime.now(timezone.utc).isoformat(),
@@ -82,6 +83,9 @@ def make_manifest(
         "outputs": outputs,
         "software": dependency_versions(),
     }
+    if validation is not None:
+        manifest["validation"] = validation
+    return manifest
 
 
 def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> None:
@@ -111,6 +115,15 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> None:
     for source in manifest["sources"]:
         identifier = source.get("doi") or source.get("product_id") or source.get("url", "")
         lines.append(f"* **{source['name']}** — {identifier}")
+    if "validation" in manifest:
+        summary = manifest["validation"].get("summary", {})
+        lines.extend((
+            "",
+            "## Validation",
+            "",
+            "The machine-readable manifest embeds the complete deterministic before/after report.",
+            f"Advisory regional checks passed: {summary.get('advisory_checks_passed', 'unknown')}/{summary.get('advisory_checks', 'unknown')}.",
+        ))
     lines.extend(("", "## Output checksums", ""))
     for output in manifest["outputs"]:
         lines.append(f"* `{output['file']}` — {output['bytes']} bytes — SHA-256 `{output['sha256']}`")
@@ -127,10 +140,17 @@ def main(argv: list[str] | None = None) -> None:
                         help="JSON array describing generated products")
     parser.add_argument("--sources", type=Path, required=True,
                         help="JSON array describing source products")
+    parser.add_argument("--validation", type=Path,
+                        help="JSON object containing the numerical validation report")
     args = parser.parse_args(argv)
     products = json.loads(args.products.read_text(encoding="utf-8"))
     sources = json.loads(args.sources.read_text(encoding="utf-8"))
     if not isinstance(products, list) or not isinstance(sources, list):
         parser.error("products and sources must each contain a JSON array")
-    manifest = make_manifest(args.repository, args.files, products, sources)
+    validation = (json.loads(args.validation.read_text(encoding="utf-8"))
+                  if args.validation else None)
+    if validation is not None and not isinstance(validation, dict):
+        parser.error("validation must contain a JSON object")
+    manifest = make_manifest(args.repository, args.files, products, sources,
+                             validation=validation)
     write_manifest(args.directory, manifest)

@@ -177,6 +177,21 @@ def comparison(old: Path, new: Path) -> dict[str, object]:
                     "new": scalar_sample(new, field, month, latitude, longitude),
                     "units": SCALAR_DEFINITIONS[field].units,
                 })
+    checks = [
+        item["new_sanity"]
+        for group in (result["wind"], result["current"])
+        for item in group
+    ]
+    passed = sum(bool(check["passed"]) for check in checks)
+    result["summary"] = {
+        "advisory_checks": len(checks),
+        "advisory_checks_passed": passed,
+        "all_advisory_checks_passed": passed == len(checks),
+        "note": (
+            "Broad physical sanity checks supplement source/grid validation; "
+            "they are not statistical confidence intervals"
+        ),
+    }
     return result
 
 

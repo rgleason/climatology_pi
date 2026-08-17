@@ -265,6 +265,16 @@ track/point/availability counts and checksums.  The report names the source
 object rather than retaining an irrelevant build-machine path, and is included
 in the packaged dataset and top-level manifest checksums.
 
+### D023 — Bind validation to the released bytes
+
+The deterministic old/new comparison is installed as
+`dataset-validation.json`, included in the output checksums, and embedded in
+`dataset-manifest.json`.  Its regional wind/current checks are deliberately
+labelled advisory: they catch sign, orientation, units and gross physical
+failures, but do not pretend to be confidence intervals.  This binding makes
+it possible to establish which validation report belongs to an installed
+dataset rather than relying on an untracked console transcript.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
