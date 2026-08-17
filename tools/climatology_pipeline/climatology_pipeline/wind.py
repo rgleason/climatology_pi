@@ -187,6 +187,21 @@ class WindAccumulator:
             direction_speed_sum=self.direction_speed_sum,
         )
 
+    def merge(self, other: "WindAccumulator") -> None:
+        """Add an independently accumulated, non-overlapping time range."""
+        names = ("total", "calm", "gale", "direction_count",
+                 "direction_speed_sum")
+        if any(getattr(self, name).shape != getattr(other, name).shape
+               for name in names):
+            raise ValueError("wind checkpoint grids differ")
+        for name in ("total", "calm", "gale", "direction_count"):
+            left = getattr(self, name)
+            right = getattr(other, name)
+            if np.any(np.iinfo(left.dtype).max - left < right):
+                raise OverflowError(f"wind checkpoint {name} would overflow")
+            left += right
+        self.direction_speed_sum += other.direction_speed_sum
+
     @classmethod
     def load_checkpoint(cls, path: str | Path) -> "WindAccumulator":
         with np.load(path) as values:

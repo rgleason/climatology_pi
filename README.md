@@ -67,6 +67,11 @@ Every instantaneous U/V pair is classified into the legacy eight
 meteorological wind-from sectors. Monthly mean vectors are never substituted
 for a wind distribution. Calm is <=3 kn and gale is >=34 kn.
 
+Independent, non-overlapping year ranges may be built concurrently and then
+combined with `climatology-merge-wind`. The merge adds the unquantised
+sufficient statistics, so its result is numerically identical to a serial
+pass; it is not an average of already-encoded atlas files.
+
 Monthly scalar atmosphere fields use bounded annual chunks from public ERA5
 monthly archives rather than rereading all six-hour samples:
 

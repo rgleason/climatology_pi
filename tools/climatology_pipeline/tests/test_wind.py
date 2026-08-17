@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from climatology_pipeline.budget import GB, era5_wind_plan
 from climatology_pipeline.wind import KNOTS_PER_MPS, WindAccumulator
@@ -96,6 +97,27 @@ def test_checkpoint_round_trip(tmp_path) -> None:
     restored = WindAccumulator.load_checkpoint(path)
     np.testing.assert_array_equal(restored.total, accumulator.total)
     np.testing.assert_array_equal(restored.direction_count, accumulator.direction_count)
+
+
+def test_non_overlapping_checkpoints_merge_exactly() -> None:
+    first = WindAccumulator(months=1, latitudes=1, longitudes=1)
+    second = WindAccumulator(months=1, latitudes=1, longitudes=1)
+    first.total[...] = 4
+    first.direction_count[..., 0] = 4
+    first.direction_speed_sum[..., 0] = 20 * KNOTS_PER_MPS
+    second.total[...] = 6
+    second.direction_count[..., 4] = 6
+    second.direction_speed_sum[..., 4] = 30 * KNOTS_PER_MPS
+    first.merge(second)
+    assert first.total[0, 0, 0] == 10
+    assert first.direction_count.sum() == 10
+    assert first.direction_speed_sum.sum() == pytest.approx(50 * KNOTS_PER_MPS)
+
+
+def test_checkpoint_merge_rejects_different_grids() -> None:
+    first = WindAccumulator(months=1, latitudes=1, longitudes=1)
+    with pytest.raises(ValueError, match="grids differ"):
+        first.merge(WindAccumulator(months=1, latitudes=2, longitudes=1))
 
 
 def test_default_storage_plan_is_well_inside_100gb() -> None:
