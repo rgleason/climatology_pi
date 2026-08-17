@@ -158,6 +158,17 @@ class CurrentAccumulator:
                 raise ValueError("current checkpoint metadata is not an object")
             return parsed
 
+    def merge(self, other: "CurrentAccumulator") -> None:
+        """Add a non-overlapping time partition without quantisation loss."""
+        if (not np.array_equal(self.latitudes, other.latitudes) or
+                not np.array_equal(self.longitudes, other.longitudes)):
+            raise ValueError("current checkpoint grids differ")
+        if np.any(np.iinfo(self.count.dtype).max - self.count < other.count):
+            raise OverflowError("current checkpoint sample count would overflow")
+        self.u_sum += other.u_sum
+        self.v_sum += other.v_sum
+        self.count += other.count
+
     @classmethod
     def load_checkpoint(cls, path: str | Path) -> "CurrentAccumulator":
         with np.load(path) as values:

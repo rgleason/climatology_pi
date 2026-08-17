@@ -28,6 +28,7 @@ climatology-build-atmosphere = "climatology_pipeline.planette:main"
 climatology-build-cloud = "climatology_pipeline.cloud:main"
 climatology-compare = "climatology_pipeline.compare:main"
 climatology-merge-wind = "climatology_pipeline.merge_wind:main"
+climatology-merge-current = "climatology_pipeline.merge_current:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

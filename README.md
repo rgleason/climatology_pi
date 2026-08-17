@@ -104,6 +104,11 @@ climatology-build-current WORK/dataset --earthdata \
 Daily granules are downloaded and deleted in monthly batches. U/V components
 are averaged before any speed/direction conversion.
 
+Independent, contiguous OSCAR date ranges may be acquired concurrently into
+separate checkpoints and combined with `climatology-merge-current`. The merger
+rejects overlaps, gaps, incomplete ranges, other OSCAR quality streams and
+different grids before adding the unquantised U/V sums and sample counts.
+
 ### OISST, GEBCO, IBTrACS and ENSO
 
 ```sh

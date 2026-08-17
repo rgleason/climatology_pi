@@ -216,6 +216,16 @@ a month, or combining Final OSCAR with a different quality stream.  Download
 results are also filtered to NetCDF granules so checksum/metadata sidecars
 cannot be passed to xarray as science data.
 
+### D018 — Parallel OSCAR acquisition uses exact partition merging
+
+The protected OSCAR archive consists of daily granules, so its acquisition is
+latency-sensitive.  Contiguous date partitions may run concurrently and are
+merged by adding the original double-precision U/V sums and integer valid
+sample counts.  The merger rejects overlaps, gaps, incomplete checkpoints,
+grid changes and any source other than Final V2.  This is mathematically the
+same monthly component mean as a serial pass; encoded current vectors are
+never averaged together.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
