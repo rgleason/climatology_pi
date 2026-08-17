@@ -256,6 +256,15 @@ scalar target-grid dimensions are now locked by tests to the formal legacy
 specification.  A release is not valid merely because its payload decodes; its
 machine-readable provenance must describe that payload exactly.
 
+### D022 — Preserve product-specific conversion evidence
+
+The IBTrACS builder emits `cyclone-conversion.json` alongside the six theatre
+files.  It records the immutable input checksum, selection period and cadence,
+accepted/rejected row counts, homogeneous intensity-field policy, and per-file
+track/point/availability counts and checksums.  The report names the source
+object rather than retaining an irrelevant build-machine path, and is included
+in the packaged dataset and top-level manifest checksums.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

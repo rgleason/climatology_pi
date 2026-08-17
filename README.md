@@ -153,6 +153,7 @@ validation:
 ```sh
 climatology-write-provenance REPOSITORY WORK/dataset \
   WORK/dataset/*.gz WORK/dataset/elnino_years.txt \
+  WORK/dataset/cyclone-conversion.json \
   --products tools/climatology_pipeline/metadata/products-2026.1.json \
   --sources tools/climatology_pipeline/metadata/sources-2026.1.json
 ```

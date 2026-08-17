@@ -62,8 +62,8 @@ The UI must not imply cyclone tracks are deterministic risk contours.
 
 Use NOAA Optimum Interpolation SST v2.1 daily 0.25-degree data, 1995–2024,
 monthly climatological means. It is chosen over ERA5 skin temperature because
-SST is its primary analysed product. Resample with sea-mask-aware area
-weighting, retaining coastal missingness.
+SST is its primary analysed product. Resample with missing-aware bilinear
+interpolation of the physical field, retaining coastal missingness.
 
 ### Bathymetry — GEBCO_2026
 

@@ -21,7 +21,9 @@ def main(argv: list[str] | None = None) -> None:
     args.output.mkdir(parents=True, exist_ok=True)
     theatres, statistics = load_ibtracs(args.source)
     report = {
-        "source": str(args.source),
+        "report_schema": 1,
+        "source_product": "IBTrACS.ALL.v04r01",
+        "source_object": args.source.name,
         "source_sha256": sha256(args.source),
         "selection_period": ["1995-01-01", "2024-12-31"],
         "track_type": "main",
