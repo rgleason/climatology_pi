@@ -178,6 +178,7 @@ SET(SRCS
             src/IsoBarMap.cpp
             src/icons.cpp
             src/zuFile.cpp
+            src/ClimatologyMath.cpp
 )
 
 
@@ -192,6 +193,7 @@ SET(HDRS
 			include/IsoBarMap.h
 			include/linmath.h
 			include/zuFile.h
+			include/ClimatologyMath.h
 )
 
 add_definitions(-DPLUGIN_USE_SVG)
@@ -223,6 +225,16 @@ set(SRC ${SRCS} ${HDRS} )
 # ==============================================================
 
 target_sources(${PACKAGE_NAME} PUBLIC ${SRC} )
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(climatology_math_tests
+    tests/test_climatology_math.cpp
+    src/ClimatologyMath.cpp
+  )
+  target_include_directories(climatology_math_tests PRIVATE include)
+  add_test(NAME climatology_math COMMAND climatology_math_tests)
+endif()
 
 ##==============================================================
 

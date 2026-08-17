@@ -52,6 +52,7 @@
 #endif
 
 #include "climatology_pi.h"
+#include "ClimatologyMath.h"
 //#include "gldefs.h"
 #include "icons.h"
 
@@ -245,7 +246,9 @@ void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
     }
     
     month = cdate->GetMonth();
-    int day = cdate->GetDay();
+    const double day = cdate->GetDay() +
+        (cdate->GetHour() * 3600.0 + cdate->GetMinute() * 60.0 +
+         cdate->GetSecond()) / 86400.0;
     int daysinmonth = wxDateTime::GetNumberOfDays(cdate->GetMonth());
     dpos = (day-.5) / daysinmonth;
     
@@ -315,7 +318,7 @@ static double interpquad(double v1, double v2, double v3, double v4, double d1, 
     return      d2*w2 + (1-d2)*w1;
 }
 
-bool ClimatologyOverlayFactory::InterpolateWindAtlas(wxDateTime &date,
+bool ClimatologyOverlayFactory::InterpolateWindAtlas(const wxDateTime &date,
                                                      double lat, double lon,
                                                      double *directions, double *speeds,
                                                      double &gale, double &calm)
@@ -677,6 +680,30 @@ void ClimatologyOverlayFactory::Free()
     m_cyclone_cache.clear();
 }
 
+static wxUint16 DecodeLE16(const unsigned char *bytes)
+{
+    return static_cast<wxUint16>(bytes[0]) |
+           static_cast<wxUint16>(bytes[1]) << 8;
+}
+
+static bool ReadLE16(ZUFILE *file, wxUint16 &value)
+{
+    unsigned char bytes[2];
+    if(zu_read(file, bytes, sizeof bytes) != sizeof bytes)
+        return false;
+    value = DecodeLE16(bytes);
+    return true;
+}
+
+static bool ReadLEI16(ZUFILE *file, wxInt16 &value)
+{
+    wxUint16 raw;
+    if(!ReadLE16(file, raw))
+        return false;
+    value = static_cast<wxInt16>(raw);
+    return true;
+}
+
 void ClimatologyOverlayFactory::ReadWindData(int month, wxString filename)
 {
     ZUFILE *f;
@@ -696,14 +723,22 @@ void ClimatologyOverlayFactory::ReadWindData(int month, wxString filename)
     
     wxUint16 header[7];
     int dirs;
-    if(zu_read(f, header, sizeof header) != sizeof header)
-        goto corrupt;
+    for(size_t index = 0; index < sizeof header / sizeof *header; ++index)
+        if(!ReadLE16(f, header[index]))
+            goto corrupt;
 
     if(header[0] != 0xfefe ||
-       header[1] > 180*16 || header[2] > 360*16 || header[3] != 8 || header[6] == 0)
+       header[1] == 0 || header[1] > 180*16 ||
+       header[2] == 0 || header[2] > 360*16 ||
+       header[3] != 8 || header[4] == 0 || header[5] == 0 || header[6] == 0)
         goto corrupt;
 
-    m_WindData[month] = new WindData(header[1]/div, header[2]/div, header[3], header[4], (float)header[5] / header[6]);
+    try {
+        m_WindData[month] = new WindData(header[1]/div, header[2]/div,
+            header[3], header[4], (float)header[5] / header[6]);
+    } catch(const std::bad_alloc &) {
+        goto corrupt;
+    }
 
     dirs = m_WindData[month]->dir_cnt;
 
@@ -842,10 +877,18 @@ void ClimatologyOverlayFactory::ReadCurrentData(int month, wxString filename)
     m_dlg.m_cbCurrent->Enable();
 
     wxUint16 header[3];
-    if (zu_read(f, header, sizeof header) != sizeof header)
+    for(size_t index = 0; index < sizeof header / sizeof *header; ++index)
+        if(!ReadLE16(f, header[index]))
+            goto corrupt;
+    if(header[0] == 0 || header[0] > 4096 || header[1] == 0 ||
+       header[1] > 8192 || header[2] == 0)
         goto corrupt;
 
-    m_CurrentData[month] = new CurrentData(header[0], header[1], header[2]);
+    try {
+        m_CurrentData[month] = new CurrentData(header[0], header[1], header[2]);
+    } catch(const std::bad_alloc &) {
+        goto corrupt;
+    }
     for(int dim = 0; dim<2; dim++)
         for(int lati = 0; lati < m_CurrentData[month]->latitudes; lati++)
             for(int loni = 0; loni < m_CurrentData[month]->longitudes; loni++) {
@@ -894,8 +937,12 @@ havedata:
                    || m_CurrentData[month]->longitudes != longitudes)
                     continue;
                 
-                u += m_CurrentData[month]->Value(U, lati, loni);
-                v += m_CurrentData[month]->Value(V, lati, loni);
+                const double month_u = m_CurrentData[month]->Value(U, lati, loni);
+                const double month_v = m_CurrentData[month]->Value(V, lati, loni);
+                if(isnan(month_u) || isnan(month_v))
+                    continue;
+                u += month_u;
+                v += month_v;
                 mcount++;
             }
 
@@ -907,11 +954,13 @@ havedata:
 
                 nwarned = false;
             }
-            if (mcount == 0)
-                mcount = 1;
-
-            m_CurrentData[12]->data[0][lati*longitudes + loni] = u / mcount;
-            m_CurrentData[12]->data[1][lati*longitudes + loni] = v / mcount;
+            if (mcount == 0) {
+                m_CurrentData[12]->data[0][lati*longitudes + loni] = NAN;
+                m_CurrentData[12]->data[1][lati*longitudes + loni] = NAN;
+            } else {
+                m_CurrentData[12]->data[0][lati*longitudes + loni] = u / mcount;
+                m_CurrentData[12]->data[1][lati*longitudes + loni] = v / mcount;
+            }
         }
 }
 
@@ -933,8 +982,9 @@ void ClimatologyOverlayFactory::ReadSeaLevelPressureData(wxString filename)
     if(!f)
         return;
 
-    wxInt16 slp[12][90][180];
-    if(zu_read(f, slp, sizeof slp) != sizeof slp) {
+    const size_t count = 12u*90u*180u;
+    std::vector<unsigned char> raw(count * 2u);
+    if(zu_read(f, &raw[0], raw.size()) != static_cast<int>(raw.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("slp file truncated"));
@@ -943,9 +993,11 @@ void ClimatologyOverlayFactory::ReadSeaLevelPressureData(wxString filename)
             for(int k=0; k<180; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    m_slp[i][j][k] = slp[i][j][k];
-                    if(slp[i][j][k] != 32767) {
-                        total += slp[i][j][k];
+                    const size_t index = (i*90u + j)*180u + k;
+                    const wxInt16 value = static_cast<wxInt16>(DecodeLE16(&raw[index*2]));
+                    m_slp[i][j][k] = value;
+                    if(value != 32767) {
+                        total += value;
                         totalcount++;
                     }
                     if(totalcount)
@@ -965,8 +1017,8 @@ void ClimatologyOverlayFactory::ReadSeaSurfaceTemperatureData(wxString filename)
     if(!f)
         return;
 
-    wxInt8 sst[12][180][360];
-    if(zu_read(f, sst, sizeof sst) != sizeof sst) {
+    std::vector<wxInt8> sst(12u*180u*360u);
+    if(zu_read(f, &sst[0], sst.size()) != static_cast<int>(sst.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("sst file truncated"));
@@ -975,10 +1027,11 @@ void ClimatologyOverlayFactory::ReadSeaSurfaceTemperatureData(wxString filename)
             for(int k=0; k<360; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    if(sst[i][j][k] == -128)
+                    const wxInt8 value = sst[(i*180u + j)*360u + k];
+                    if(value == -128)
                         m_sst[i][j][k] = 32767;
                     else {
-                        m_sst[i][j][k] = sst[i][j][k]*200;
+                        m_sst[i][j][k] = value*200;
                         total += m_sst[i][j][k];
                         totalcount++;
                     }
@@ -999,8 +1052,8 @@ void ClimatologyOverlayFactory::ReadAirTemperatureData(wxString filename)
     if(!f)
         return;
 
-    wxInt8 at[12][90][180];
-    if(zu_read(f, at, sizeof at) != sizeof at) {
+    std::vector<wxInt8> at(12u*90u*180u);
+    if(zu_read(f, &at[0], at.size()) != static_cast<int>(at.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("at file truncated"));
@@ -1009,10 +1062,11 @@ void ClimatologyOverlayFactory::ReadAirTemperatureData(wxString filename)
             for(int k=0; k<180; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    if(at[i][j][k] == -128)
+                    const wxInt8 value = at[(i*90u + j)*180u + k];
+                    if(value == -128)
                         m_at[i][j][k] = 32767;
                     else {
-                        m_at[i][j][k] = at[i][j][k];
+                        m_at[i][j][k] = value;
                         total += m_at[i][j][k];
                         totalcount++;
                     }
@@ -1033,8 +1087,8 @@ void ClimatologyOverlayFactory::ReadCloudData(wxString filename)
     if(!f)
         return;
 
-    wxUint8 cld[12][90][180];
-    if(zu_read(f, cld, sizeof cld) != sizeof cld) {
+    std::vector<wxUint8> cld(12u*90u*180u);
+    if(zu_read(f, &cld[0], cld.size()) != static_cast<int>(cld.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("cld file truncated"));
@@ -1043,10 +1097,11 @@ void ClimatologyOverlayFactory::ReadCloudData(wxString filename)
             for(int k=0; k<180; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    if(cld[i][j][k] == 255)
+                    const wxUint8 value = cld[(i*90u + j)*180u + k];
+                    if(value == 255)
                         m_cld[i][j][k] = 32767;
                     else {
-                        m_cld[i][j][k] = cld[i][j][k]*40;
+                        m_cld[i][j][k] = value*40;
                         total += m_cld[i][j][k];
                         totalcount++;
                     }
@@ -1067,8 +1122,8 @@ void ClimatologyOverlayFactory::ReadPrecipitationData(wxString filename)
     if(!f)
         return;
 
-    wxUint8 precip[12][72][144];
-    if(zu_read(f, precip, sizeof precip) != sizeof precip) {
+    std::vector<wxUint8> precip(12u*72u*144u);
+    if(zu_read(f, &precip[0], precip.size()) != static_cast<int>(precip.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("precip file truncated"));
@@ -1077,10 +1132,11 @@ void ClimatologyOverlayFactory::ReadPrecipitationData(wxString filename)
             for(int k=0; k<144; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    if(precip[i][j][k] == 255)
+                    const wxUint8 value = precip[(i*72u + j)*144u + k];
+                    if(value == 255)
                         m_precip[i][j][k] = 32767;
                     else {
-                        m_precip[i][j][k] = precip[i][j][k]*100;
+                        m_precip[i][j][k] = value*100;
                         total += m_precip[i][j][k];
                         totalcount++;
                     }
@@ -1101,8 +1157,8 @@ void ClimatologyOverlayFactory::ReadRelativeHumidityData(wxString filename)
     if(!f)
         return;
 
-    wxUint8 rhum[12][180][360];
-    if(zu_read(f, rhum, sizeof rhum) != sizeof rhum) {
+    std::vector<wxUint8> rhum(12u*180u*360u);
+    if(zu_read(f, &rhum[0], rhum.size()) != static_cast<int>(rhum.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("relative humidity file truncated"));
@@ -1111,10 +1167,11 @@ void ClimatologyOverlayFactory::ReadRelativeHumidityData(wxString filename)
             for(int k=0; k<360; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    if(rhum[i][j][k] == 255)
+                    const wxUint8 value = rhum[(i*180u + j)*360u + k];
+                    if(value == 255)
                         m_rhum[i][j][k] = 32767;
                     else {
-                        m_rhum[i][j][k] = rhum[i][j][k];
+                        m_rhum[i][j][k] = value;
                         total += m_rhum[i][j][k];
                         totalcount++;
                     }
@@ -1135,8 +1192,8 @@ void ClimatologyOverlayFactory::ReadLightningData(wxString filename)
     if(!f)
         return;
 
-    wxUint8 lightn[12][180][360];
-    if(zu_read(f, lightn, sizeof lightn) != sizeof lightn) {
+    std::vector<wxUint8> lightn(12u*180u*360u);
+    if(zu_read(f, &lightn[0], lightn.size()) != static_cast<int>(lightn.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("lightning file truncated"));
@@ -1145,7 +1202,7 @@ void ClimatologyOverlayFactory::ReadLightningData(wxString filename)
             for(int k=0; k<360; k++) {
                 long total = 0, totalcount = 0;
                 for(int i=0; i<12; i++) {
-                    m_lightn[i][j][k] = lightn[i][j][k];
+                    m_lightn[i][j][k] = lightn[(i*180u + j)*360u + k];
                     total += m_lightn[i][j][k];
                     totalcount++;
                 }
@@ -1162,18 +1219,18 @@ void ClimatologyOverlayFactory::ReadSeaDepthData(wxString filename)
     if(!f)
         return;
 
-    wxInt8 seadepth[180][360];
-    if(zu_read(f, seadepth, sizeof seadepth) != sizeof seadepth) {
+    std::vector<wxInt8> seadepth(180u*360u);
+    if(zu_read(f, &seadepth[0], seadepth.size()) != static_cast<int>(seadepth.size())) {
         m_FailedFiles.push_back(filename);
         m_sFailedMessage += _("corrupt file: ") + filename + "\n";
         wxLogMessage(climatology_pi + _("seadepth file truncated"));
     } else {
         for(int j=0; j<180; j++)
             for(int k=0; k<360; k++)
-                if(seadepth[j][k] == -128)
+                if(seadepth[j*360u+k] == -128)
                     m_seadepth[j][k] = 32767;
                 else
-                    m_seadepth[j][k] = seadepth[j][k];
+                    m_seadepth[j][k] = seadepth[j*360u+k];
 
         m_dlg.m_cbSeaDepth->Enable();
     }
@@ -1192,7 +1249,7 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
 
     wxUint16 lyear, llastmonth;
     Cyclone *cyclone;
-    while(zu_read(f, &lyear, sizeof lyear)==sizeof lyear) {
+    while(ReadLE16(f, lyear)) {
 #ifdef __MSVC__
         if(lyear < 1972)
             lyear = 1972;
@@ -1241,8 +1298,7 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
                 goto corrupted;
 
             wxInt16 lat, lon;
-            if(zu_read(f, &lat, sizeof lat) != sizeof lat ||
-               zu_read(f, &lon, sizeof lon) != sizeof lon)
+            if(!ReadLEI16(f, lat) || !ReadLEI16(f, lon))
                 goto corrupted;
 
             // make sure it's in range
@@ -1261,8 +1317,7 @@ bool ClimatologyOverlayFactory::ReadCycloneData(wxString filename, std::list<Cyc
             lastdatetime = CycloneDateTime(day, month, lyear, hour);
             lastlat = lat, lastlon = lon;
                 
-            if(zu_read(f, &wk, sizeof wk) != sizeof wk ||
-               zu_read(f, &press, sizeof press) != sizeof press)
+            if(zu_read(f, &wk, sizeof wk) != sizeof wk || !ReadLE16(f, press))
                 goto corrupted;
         }
         cyclones.push_back(cyclone);
@@ -1838,19 +1893,13 @@ void ClimatologyOverlayFactory::DrawGLTexture( ClimatologyOverlay &O1, Climatolo
 /* give value for y at a given x location on a segment */
 static double interp_value(double v0, double v1, double d)
 {
-    return (1-d)*v0 + d*v1;
+    return climatology::InterpolateMissing(v0, v1, d);
 }
 
 // interpolate two angles in range +- PI, with resulting angle in the same range
 static double interp_angle(double a0, double a1, double d)
 {
-    if(isnan(a0)) return a1;
-    if(isnan(a1)) return a0;
-    if(a0 - a1 > M_PI) a0 -= 2*M_PI;
-    else if(a1 - a0 > M_PI) a1 -= 2*M_PI;
-    double a = (1-d)*a0 + d*a1;
-    if(a < -M_PI) a += 2*M_PI;
-    return a;
+    return climatology::InterpolateAngleRadians(a0, a1, d);
 }
 
 static double ArrayValue(wxInt16 *a, int index)
@@ -1861,20 +1910,12 @@ static double ArrayValue(wxInt16 *a, int index)
     return v;
 }
 
-static double InterpArray(double x, double y, wxInt16 *a, int h)
+static double InterpArray(double x, double y, wxInt16 *a, int rows, int columns)
 {
-    if(y<0) y+=h;
-    int x0 = floor(x), x1 = x0+1;
-    int y0 = floor(y), y1 = y0+1;
-    int y1v = y1;
-    if(y1v == h) y1v = 0;
-
-    double v00 = ArrayValue(a, x0*h + y0), v01 = ArrayValue(a, x0*h + y1v);
-    double v10 = ArrayValue(a, x1*h + y0), v11 = ArrayValue(a, x1*h + y1v);
-
-    double v0 = interp_value(v00, v01, y-y0);
-    double v1 = interp_value(v10, v11, y-y0);
-    return      interp_value(v0,   v1, x-x0);
+    return climatology::Bilinear(rows, columns, x, y,
+        [a, columns](size_t row, size_t column) {
+            return ArrayValue(a, static_cast<int>(row * columns + column));
+        });
 }
 
 double WindData::WindPolar::Value(enum Coord coord, int dir_cnt)
@@ -1899,13 +1940,12 @@ double WindData::WindPolar::Value(enum Coord coord, int dir_cnt)
 
         totals += mul*speeds[i]*directions[i];
     }
-    assert(totald != 0);
-    return (double)totals / totald;
+    return totald ? (double)totals / totald : NAN;
 }
 
 double CurrentData::Value(enum Coord coord, int xi, int yi)
 {
-    if(xi < 0 || xi >= latitudes)
+    if(xi < 0 || xi >= latitudes || yi < 0 || yi >= longitudes)
         return NAN;
 
     double u = data[0][xi*longitudes + yi], v = data[1][xi*longitudes + yi];
@@ -1921,6 +1961,8 @@ double CurrentData::Value(enum Coord coord, int xi, int yi)
 
 double WindData::InterpWind(enum Coord coord, double x, double y)
 {
+    if(!std::isfinite(x) || !std::isfinite(y) || x < -90.0 || x > 90.0)
+        return NAN;
     double latoff = 90.0/latitudes, lonoff = 180.0/longitudes;
 
     double xi = latitudes*(.5 + (x - latoff)/180.0);
@@ -1930,6 +1972,8 @@ double WindData::InterpWind(enum Coord coord, double x, double y)
 
     if(yi<0) yi+=h;
 
+    if(xi < 0) xi = 0;
+    if(xi > latitudes - 1) xi = latitudes - 1;
     int x0 = floor(xi), x1 = x0+1;
     int y0 = floor(yi), y1 = y0+1;
     int y1v = y1;
@@ -1953,26 +1997,30 @@ double WindData::InterpWind(enum Coord coord, double x, double y)
 
 double CurrentData::InterpCurrent(enum Coord coord, double x, double y)
 {
+    if(!std::isfinite(x) || !std::isfinite(y) || x < -80.0 || x > 80.0)
+        return NAN;
     y = positive_degrees(y);
+    if(coord == MAG || coord == DIRECTION) {
+        const double u = InterpCurrent(U, x, y);
+        const double v = InterpCurrent(V, x, y);
+        if(isnan(u) || isnan(v))
+            return NAN;
+        if(coord == MAG)
+            return hypot(u, v);
+        return (!u && !v) ? NAN : atan2(u, v) * 180/M_PI;
+    }
     double xi = (latitudes-1)*(.5 - x/160.0);
     double yi = longitudes*y/360.0;
     int h = longitudes;
 
-    if(xi<0) xi+=latitudes;
-
     int x0 = floor(xi), x1 = x0+1;
     int y0 = floor(yi), y1 = y0+1;
     int y1v = y1;
+    if(x1 == latitudes) x1 = x0;
     if(y1v == h) y1v = 0;
 
-    double v00 = Value(coord, x0, y0), v01 = Value(coord, x0, y1);
-    double v10 = Value(coord, x1, y0), v11 = Value(coord, x1, y1);
-
-    if(coord == DIRECTION) {
-        double a0 = interp_angle(v00, v01, yi-y0);
-        double a1 = interp_angle(v10, v11, yi-y0);
-        return      interp_angle(a0,  a1,  xi-x0 ) * 180/M_PI;
-    }
+    double v00 = Value(coord, x0, y0), v01 = Value(coord, x0, y1v);
+    double v10 = Value(coord, x1, y0), v11 = Value(coord, x1, y1v);
 
     double v0 = interp_value(v00, v01, yi-y0);
     double v1 = interp_value(v10, v11, yi-y0);
@@ -2024,29 +2072,29 @@ double ClimatologyOverlayFactory::getValueMonth(enum Coord coord, int setting,
         break;
     case ClimatologyOverlaySettings::SLP:
         return InterpArray((-lat+90)/2-.5, positive_degrees(lon-1.5)/2,
-                           m_slp[month][0], 180) * .01f + 1000.0;
+                           m_slp[month][0], 90, 180) * .01f + 1000.0;
     case ClimatologyOverlaySettings::SST:
         return InterpArray((-lat+90)-.5, positive_degrees(lon-.5),
-                           m_sst[month][0], 360) * .001f + 15.0;
+                           m_sst[month][0], 180, 360) * .001f + 15.0;
     case ClimatologyOverlaySettings::AT:
         return InterpArray((-lat+90)/2-.5, positive_degrees(lon-.5)/2,
-                           m_at[month][0], 180) / 3.0;
+                           m_at[month][0], 90, 180) / 3.0;
     case ClimatologyOverlaySettings::CLOUD:
         return InterpArray((-lat+90)/2-.5, positive_degrees(lon-.5)/2,
-                           m_cld[month][0], 180) * .001f * 12.5;
+                           m_cld[month][0], 90, 180) * .001f * 12.5;
     case ClimatologyOverlaySettings::PRECIPITATION:
         return InterpArray((-lat+90)/2.5, positive_degrees(lon-2)/2.5,
-                           m_precip[month][0], 144) * .002f;
+                           m_precip[month][0], 72, 144) * .002f;
     case ClimatologyOverlaySettings::RELATIVE_HUMIDITY:
         return InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_rhum[month][0], 360)/2.0;
+                           m_rhum[month][0], 180, 360)/2.0;
     case ClimatologyOverlaySettings::LIGHTNING:
         return InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_lightn[month][0], 360);
+                           m_lightn[month][0], 180, 360);
     case ClimatologyOverlaySettings::SEADEPTH:
     {
         double ind = InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_seadepth[0], 360);
+                           m_seadepth[0], 180, 360);
         const double table[] = {0, 10, 20, 30, 50, 75, 100, 125, 150,
                                 200, 250, 300, 400, 500, 600, 700, 800,
                                 900, 1000, 1100, 1200, 1300, 1400, 1500,
@@ -2060,7 +2108,7 @@ double ClimatologyOverlayFactory::getValueMonth(enum Coord coord, int setting,
 }
 
 double ClimatologyOverlayFactory::getValue(enum Coord coord, int setting,
-                                           double lat, double lon, wxDateTime *date)
+                                           double lat, double lon, const wxDateTime *date)
 {
     int month, nmonth;
     double dpos;
@@ -2070,12 +2118,14 @@ double ClimatologyOverlayFactory::getValue(enum Coord coord, int setting,
     double v2 = getValueMonth(coord, setting, lat, lon, nmonth);
 
     if(coord == DIRECTION) {
+        if(isnan(v1)) return v2;
+        if(isnan(v2)) return v1;
         if(v1 - v2 > 180) v1 -= 360;
         if(v2 - v1 > 180) v2 -= 360;
         return positive_degrees(dpos * v1 + (1-dpos) * v2);
     }
 
-    return dpos * v1 + (1-dpos) * v2;
+    return interp_value(v2, v1, dpos);
 }
 
 double ClimatologyOverlayFactory::getCurCalibratedValue(enum Coord coord, int setting, double lat, double lon)

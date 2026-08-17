@@ -254,7 +254,7 @@ int climatology_pi::GetToolbarToolCount(void)
       return 1;
 }
 
-static bool ClimatologyData(int setting, wxDateTime &date, double lat, double lon,
+static bool ClimatologyData(int setting, const wxDateTime &date, double lat, double lon,
                             double &dir, double &speed)
 {
     s_climatology_pi->CreateOverlayFactory();
@@ -273,7 +273,7 @@ static bool ClimatologyData(int setting, wxDateTime &date, double lat, double lo
     return true;
 }
 
-static bool ClimatologyWindAtlasData(wxDateTime &date, double lat, double lon,
+static bool ClimatologyWindAtlasData(const wxDateTime &date, double lat, double lon,
                                      int &count, double *directions, double *speeds,
                                      double &storm, double &calm)
 {

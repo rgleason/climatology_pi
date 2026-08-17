@@ -6,6 +6,7 @@ src/ClimatologyConfigDialog.cpp
 src/IsoBarMap.cpp
 src/icons.cpp
 src/zuFile.cpp
+src/ClimatologyMath.cpp
 include/climatology_pi.h
 include/ClimatologyConfigDialog.h
 include/ClimatologyDialog.h
@@ -16,3 +17,4 @@ include/icons.h
 include/IsoBarMap.h
 include/linmath.h
 include/zuFile.h
+include/ClimatologyMath.h

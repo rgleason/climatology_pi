@@ -49,17 +49,26 @@ struct WindData
     WindData(int lats, int lons, int dirs, float dir_res, float spd_mul)
     : latitudes(lats), longitudes(lons), dir_cnt(dirs),
         direction_resolution(dir_res), speed_multiplier(spd_mul),
-        data(new WindPolar[lats*lons]/*()*/) {}
+        data(NULL) {
+        if (latitudes <= 0 || longitudes <= 0 || dir_cnt != 8 ||
+            direction_resolution <= 0 || speed_multiplier <= 0)
+            throw std::bad_alloc();
+        const size_t cells = static_cast<size_t>(latitudes) * longitudes;
+        if (cells > SIZE_MAX / sizeof(WindPolar))
+            throw std::bad_alloc();
+        data = new WindPolar[cells]();
+    }
     ~WindData() { delete [] data; }
 
     double InterpWind(enum Coord coord, double lat, double lon);
     WindPolar *GetPolar(double lat, double lon) {
-        double latoff = 90.0/latitudes, lonoff = 180.0/longitudes;
-
-        int lati = round(latitudes*(.5 + (lat-latoff)/180.0));
-        int loni = round(longitudes*(lon-lonoff)/360.0);
-        if(lati < 0 || lati >= latitudes || loni < 0 || loni >= longitudes)
+        if (!std::isfinite(lat) || !std::isfinite(lon) || lat < -90 || lat > 90)
             return NULL;
+        int lati = static_cast<int>(floor(latitudes * (lat + 90.0) / 180.0));
+        if (lati == latitudes)
+            lati = latitudes - 1;
+        lon = positive_degrees(lon);
+        int loni = static_cast<int>(floor(longitudes * lon / 360.0));
 
         WindPolar *polar = &data[lati*longitudes + loni];
         if(polar->gale == 255)
@@ -210,7 +219,7 @@ public:
                                   double *directions, double *speeds,
                                   double &gale, double &calm);
 
-    bool InterpolateWindAtlas(wxDateTime &date,
+    bool InterpolateWindAtlas(const wxDateTime &date,
                               double lat, double lon,
                               double *directions, double *speeds,
                               double &gale, double &calm);
@@ -219,7 +228,7 @@ public:
     double GetMax(int setting);
 
     double getValueMonth(enum Coord coord, int setting, double lat, double lon, int month);
-    double getValue(enum Coord coord, int setting, double lat, double lon, wxDateTime *date);
+    double getValue(enum Coord coord, int setting, double lat, double lon, const wxDateTime *date);
     double getCurValue(enum Coord coord, int setting, double lat, double lon)
     { return getValue(coord, setting, lat, lon, 0); }
     double getCurCalibratedValue(enum Coord coord, int setting, double lat, double lon);
