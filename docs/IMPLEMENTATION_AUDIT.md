@@ -61,7 +61,13 @@ the signatures exactly match without changing the message contract.
 The pointer design is process-local and cannot be made thread-safe merely by
 changing the dataset. xWeatherRouting already guards preparation/use on the
 OpenCPN main thread. A future typed broker API may be desirable, but is outside
-this compatibility-first release.
+this compatibility-first release.  Provider-side `%p` calls historically
+passed function pointers where `void*` was required, which is undefined at the
+variadic boundary and generated compiler warnings.  The compatibility build
+now copies the function-pointer representation into `uintptr_t` and formats
+that value explicitly.  This retains the exact hexadecimal message consumed
+on supported OpenCPN platforms without claiming that the pointer broker is a
+portable cross-process API.
 
 ## Confirmed or strongly indicated defects
 

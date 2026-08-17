@@ -27,6 +27,12 @@
 
 #include "wx/wxprec.h"
 
+#include <cinttypes>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <string>
+
 #ifndef  WX_PRECOMP
   #include "wx/wx.h"
   #include <wx/glcanvas.h>
@@ -58,6 +64,20 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p)
 }
 
 static climatology_pi *s_climatology_pi;
+
+template<typename Function>
+static std::string FunctionPointerText(Function function)
+{
+    static_assert(sizeof(Function) <= sizeof(std::uintptr_t),
+                  "function pointer does not fit the legacy message representation");
+    if(function == nullptr)
+        return "0x0";
+    std::uintptr_t address = 0;
+    std::memcpy(&address, &function, sizeof function);
+    char text[2 + sizeof(address) * 2 + 1];
+    std::snprintf(text, sizeof text, "0x%" PRIxPTR, address);
+    return text;
+}
 
 wxString ClimatologyDataDirectory()
 {
@@ -392,15 +412,12 @@ void climatology_pi::SendClimatology(bool valid)
         v["ClimatologyDatasetVersion"] = "legacy/unversioned";
     }
 
-    char ptr[64];
-    snprintf(ptr, sizeof ptr, "%p", valid ? ClimatologyData : NULL);
-    v["ClimatologyDataPtr"] = ptr;
-
-    snprintf(ptr, sizeof ptr, "%p", valid ? ClimatologyWindAtlasData : NULL);
-    v["ClimatologyWindAtlasDataPtr"] = ptr;
-
-    snprintf(ptr, sizeof ptr, "%p", valid ? ClimatologyCycloneTrackCrossings : NULL);
-    v["ClimatologyCycloneTrackCrossingsPtr"] = ptr;
+    v["ClimatologyDataPtr"] = FunctionPointerText(
+        valid ? ClimatologyData : nullptr);
+    v["ClimatologyWindAtlasDataPtr"] = FunctionPointerText(
+        valid ? ClimatologyWindAtlasData : nullptr);
+    v["ClimatologyCycloneTrackCrossingsPtr"] = FunctionPointerText(
+        valid ? ClimatologyCycloneTrackCrossings : nullptr);
 
     Json::FastWriter writer;
     SendPluginMessage(wxT("CLIMATOLOGY"), writer.write( v ));
