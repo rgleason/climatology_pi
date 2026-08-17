@@ -32,7 +32,7 @@ separate from the small runtime package:
 ```sh
 python -m venv .venv-source
 . .venv-source/bin/activate
-python -m pip install -e './tools/climatology_pipeline[source,test,earthdata]'
+python -m pip install -e './tools/climatology_pipeline[source,planette,test,earthdata]'
 cd tools/climatology_pipeline
 pytest -q
 ```
@@ -45,14 +45,13 @@ not retained.
 
 ### ERA5 wind and atmosphere
 
-The six-hour public WeatherBench2 ERA5 copy ends in 2022. One combined pass
-produces the wind distribution and atmospheric fields without downloading the
-same chunks twice:
+The six-hour public WeatherBench2 ERA5 copy ends in 2022. The wind probability
+distribution requires the instantaneous samples:
 
 ```sh
 climatology-build-wind \
   --output WORK/dataset --checkpoint WORK/wind-1995-2022.npz \
-  --start-year 1995 --end-year 2022 --with-atmosphere --budget-gb 100
+  --start-year 1995 --end-year 2022 --budget-gb 100
 ```
 
 The checkpoint may then be extended for wind-only 2023–2024 from the current
@@ -67,6 +66,22 @@ climatology-build-wind \
 Every instantaneous U/V pair is classified into the legacy eight
 meteorological wind-from sectors. Monthly mean vectors are never substituted
 for a wind distribution. Calm is <=3 kn and gale is >=34 kn.
+
+Monthly scalar atmosphere fields use bounded annual chunks from public ERA5
+monthly archives rather than rereading all six-hour samples:
+
+```sh
+climatology-build-atmosphere WORK/dataset \
+  --start 1995-01-01 --end 2024-12-31
+
+climatology-build-cloud WORK/dataset/cloud.gz \
+  --start 1995-01-01 --end 2022-12-31
+```
+
+MSLP, temperature, dew point/RH and mean precipitation rate use the public
+Planette archive derived from NSF-NCAR ERA5. Total cloud uses NCAR GDEX's
+monthly ERA5 aggregation. The manifest records both the scientific source and
+transport, including their differing end dates.
 
 ### OSCAR Final V2 currents
 

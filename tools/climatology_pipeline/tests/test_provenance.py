@@ -16,6 +16,7 @@ def test_manifest_has_checksums_and_two_renderings(tmp_path) -> None:
         generated_utc="2026-08-17T00:00:00+00:00",
     )
     assert manifest["outputs"][0]["sha256"] == sha256(data)
+    assert manifest["climatology_period"]["kind"] == "multi-product-target"
     write_manifest(tmp_path, manifest)
     loaded = json.loads((tmp_path / "dataset-manifest.json").read_text())
     assert loaded["dataset_version"] == "ocpn-climatology-2026.1"

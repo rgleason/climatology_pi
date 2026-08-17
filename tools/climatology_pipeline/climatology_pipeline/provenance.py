@@ -67,7 +67,15 @@ def make_manifest(
         "manifest_schema": 1,
         "generated_utc": generated_utc or datetime.now(timezone.utc).isoformat(),
         "generator": {"git_commit": commit, "dirty": dirty},
-        "climatology_period": {"start": "1995-01-01", "end": "2024-12-31", "kind": "rolling-30-year"},
+        "climatology_period": {
+            "start": "1995-01-01",
+            "end": "2024-12-31",
+            "kind": "multi-product-target",
+            "note": (
+                "Target rolling period; authoritative per-product periods below "
+                "take precedence where source coverage is shorter"
+            ),
+        },
         "storage_budget_bytes": 100_000_000_000,
         "products": products,
         "sources": sources,
@@ -86,14 +94,19 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> None:
         f"# OpenCPN Climatology dataset {manifest['dataset_version']}",
         "",
         f"Generated: {manifest['generated_utc']}",
-        f"Period: {manifest['climatology_period']['start']} through {manifest['climatology_period']['end']} ({manifest['climatology_period']['kind']})",
+        f"Target period: {manifest['climatology_period']['start']} through {manifest['climatology_period']['end']} ({manifest['climatology_period']['kind']})",
+        manifest["climatology_period"].get("note", ""),
         f"Generator commit: `{manifest['generator']['git_commit']}`" + (" (dirty)" if manifest["generator"]["dirty"] else ""),
         "",
         "## Products",
         "",
     ]
     for product in manifest["products"]:
-        lines.append(f"* **{product['name']}** — {product.get('summary', '')}")
+        period = product.get("period", {})
+        coverage = ""
+        if period.get("start") and period.get("end"):
+            coverage = f" ({period['start']} through {period['end']})"
+        lines.append(f"* **{product['name']}**{coverage} — {product.get('summary', '')}")
     lines.extend(("", "## Sources", ""))
     for source in manifest["sources"]:
         identifier = source.get("doi") or source.get("product_id") or source.get("url", "")

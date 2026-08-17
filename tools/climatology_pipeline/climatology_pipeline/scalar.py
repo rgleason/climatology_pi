@@ -59,7 +59,8 @@ SCALAR_DEFINITIONS = {
 }
 
 
-def encode_field(name: str, values: np.ndarray) -> np.ndarray:
+def encode_field(name: str, values: np.ndarray, *,
+                 out_of_range: str = "error") -> np.ndarray:
     """Encode physical monthly values using the legacy quantisation."""
     definition = SCALAR_DEFINITIONS[name]
     physical = np.asarray(values, dtype=np.float64)
@@ -70,7 +71,10 @@ def encode_field(name: str, values: np.ndarray) -> np.ndarray:
     info = np.iinfo(definition.dtype)
     representable = finite & (encoded_float >= info.min) & (encoded_float <= info.max)
     representable &= encoded_float != definition.missing
-    if np.any(finite & ~representable):
+    outside = finite & ~representable
+    if out_of_range not in {"error", "missing"}:
+        raise ValueError("out_of_range must be 'error' or 'missing'")
+    if np.any(outside) and out_of_range == "error":
         minimum = np.nanmin(physical[finite]) if np.any(finite) else np.nan
         maximum = np.nanmax(physical[finite]) if np.any(finite) else np.nan
         raise ValueError(f"{name} range {minimum} .. {maximum} exceeds legacy representation")
@@ -204,8 +208,9 @@ def resample_regular(values: np.ndarray, source_latitude: np.ndarray,
 
 def field_for_definition(name: str, monthly_source: np.ndarray,
                          source_latitude: np.ndarray,
-                         source_longitude: np.ndarray) -> np.ndarray:
+                         source_longitude: np.ndarray, *,
+                         out_of_range: str = "error") -> np.ndarray:
     definition = SCALAR_DEFINITIONS[name]
     resampled = resample_regular(monthly_source, source_latitude, source_longitude,
                                  definition.latitude, definition.longitude)
-    return encode_field(name, resampled)
+    return encode_field(name, resampled, out_of_range=out_of_range)

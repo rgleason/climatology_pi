@@ -48,7 +48,8 @@ Source coverage does not support one honest common end date: OSCAR Final V2.0
 ends on 2022-08-05 and the public ERA5 WeatherBench archive used for bulk
 atmospheric processing ends in early 2023. Each product therefore records its
 actual inclusive period. Wind may use the current ERA5 ARCO store to extend
-through 2024; the first atmosphere build uses 1995–2022; OSCAR uses
+through 2024; MSLP, temperature, humidity and precipitation use 1995–2024;
+the available NCAR monthly total-cloud aggregation uses 1995–2022; OSCAR uses
 1995-01-01–2022-08-05; OISST and IBTrACS use 1995–2024. Static and
 coverage-limited products (GEBCO and lightning) likewise declare their own
 coverage. The manifest must never imply that a shorter source was silently
@@ -160,6 +161,18 @@ The released ENSO file ends with a truncated 2014 row containing only three
 monthly values. The historical reader indexed it as though twelve values were
 present. The runtime now rejects incomplete rows, and the generator emits only
 complete, source-attributed years.
+
+### D013 — Use monthly ERA5 transports for monthly scalar products
+
+Reading every six-hour ERA5 sample is necessary for the wind probability
+distribution, but wasteful for monthly scalar means. MSLP, 2 m temperature,
+dew point and mean precipitation rate use the public Planette monthly archive,
+which is derived from NSF-NCAR ERA5 and retains the upstream parameter and DOI
+metadata. Total cloud uses NCAR GDEX's public ERA5 monthly aggregation because
+it is not present in Planette. Source variables, units, grids and time
+continuity are validated, and selected values are compared with the official
+ERA5/NCAR transport. Provenance names ERA5 as the scientific source and the
+transport/archive separately.
 
 ## Rejected alternatives
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from .legacy import SCALAR_SCHEMAS, decode_current, decode_cyclones, decode_scalar, decode_wind
+from .scalar import SCALAR_DEFINITIONS, decode_field
 
 
 def _stats(values: np.ndarray, missing: int | None = None) -> dict[str, object]:
@@ -77,6 +78,17 @@ def inspect(path: Path, kind: str | None = None, *, southern: bool = False) -> d
         values = decode_scalar(path, kind)
         missing = 32767 if values.dtype == np.dtype("<i2") else (-128 if values.dtype == np.int8 else 255)
         result["raw"] = _stats(values, missing)
+        if kind in SCALAR_DEFINITIONS:
+            definition = SCALAR_DEFINITIONS[kind]
+            physical = decode_field(kind, values)
+            finite = physical[np.isfinite(physical)]
+            result["physical"] = {
+                **_stats(finite),
+                "units": definition.units,
+                "scale": definition.scale,
+                "offset": definition.offset,
+                "missing": definition.missing,
+            }
     else:
         raise ValueError(f"cannot infer a supported schema for {path}")
     return result

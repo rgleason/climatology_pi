@@ -11,6 +11,7 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 source = ["xarray>=2024.1", "zarr>=2.16", "netCDF4>=1.6", "dask[array]>=2024.1"]
+planette = ["icechunk>=1.1,<2", "s3fs>=2025.0"]
 earthdata = ["earthaccess>=0.16"]
 test = ["pytest>=8"]
 
@@ -23,6 +24,9 @@ climatology-build-current = "climatology_pipeline.oscar:main"
 climatology-build-sst = "climatology_pipeline.oisst:main"
 climatology-build-depth = "climatology_pipeline.bathymetry:main"
 climatology-build-enso = "climatology_pipeline.enso:main"
+climatology-build-atmosphere = "climatology_pipeline.planette:main"
+climatology-build-cloud = "climatology_pipeline.cloud:main"
+climatology-compare = "climatology_pipeline.compare:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -5,9 +5,10 @@
 Target: 1995-01-01 through 2024-12-31 inclusive. This is a rolling 30-year
 navigation climatology, not a WMO standard normal. It is not falsely presented
 as one common period where source coverage is shorter. Every output records
-the exact inclusive period per variable: currently wind 1995–2024, atmospheric
-fields 1995–2022, OSCAR Final 1995-01-01–2022-08-05, and OISST/IBTrACS
-1995–2024. The WMO 1991–2020 standard period remains configurable.
+the exact inclusive period per variable: currently wind, MSLP, temperature,
+humidity and precipitation 1995–2024; cloud 1995–2022; OSCAR Final
+1995-01-01–2022-08-05; and OISST/IBTrACS 1995–2024. The WMO 1991–2020
+standard period remains configurable.
 
 ## Source assessment
 
@@ -16,13 +17,16 @@ fields 1995–2022, OSCAR Final 1995-01-01–2022-08-05, and OISST/IBTrACS
 ERA5 provides hourly global fields on a native ~31 km model grid and regular
 0.25-degree distribution grid. Use 10 m U/V, mean sea-level pressure, 2 m
 temperature, 2 m dewpoint, total cloud cover, and total precipitation. The
-official geo-chunked ARCO Zarr store supports time- and spatially-bounded reads,
-which is preferred over CDS bulk downloads for the 100 GB constraint.
+official geo-chunked ARCO Zarr store supports time- and spatially-bounded reads.
+For monthly scalar fields the public Planette/NSF-NCAR monthly ERA5 archive is
+used as an efficient transport; NCAR GDEX supplies monthly total cloud. Their
+metadata and selected samples are cross-checked rather than treated as a new
+scientific product.
 
 Wind aggregation is sample-based into the eight historical sectors. Six-hourly
 is the default production cadence; hourly is the reference mode. Air, pressure,
-humidity and cloud use hourly monthly means. Precipitation handles ERA5
-accumulation conventions explicitly and reports mm/day.
+humidity and cloud use ERA5 monthly means. Precipitation uses ERA5 mean total
+precipitation rate and reports mm/day, avoiding accumulation-boundary ambiguity.
 
 Risks: ERA5 is a reanalysis, not direct observation; 10 m wind over land/coasts
 requires a sea mask; six-hour subsampling may alias the diurnal cycle; total

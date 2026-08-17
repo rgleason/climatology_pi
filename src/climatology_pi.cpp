@@ -387,6 +387,7 @@ void climatology_pi::SendClimatology(bool valid)
         const Json::Value period = manifest["climatology_period"];
         v["ClimatologyDatasetPeriodStart"] = period.get("start", "");
         v["ClimatologyDatasetPeriodEnd"] = period.get("end", "");
+        v["ClimatologyDatasetPeriodKind"] = period.get("kind", "");
     } else {
         v["ClimatologyDatasetVersion"] = "legacy/unversioned";
     }
