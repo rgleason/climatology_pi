@@ -31,8 +31,9 @@ ROOT = Path(__file__).resolve().parents[3]
 DATA = ROOT / "data"
 
 
-def test_released_wind_file_decodes() -> None:
-    atlas = decode_wind(DATA / "wind01.gz")
+@pytest.mark.parametrize("month", range(1, 13))
+def test_every_released_wind_file_decodes(month: int) -> None:
+    atlas = decode_wind(DATA / f"wind{month:02d}.gz")
     assert atlas.frequencies.shape == (360, 720, 8)
     assert atlas.direction_resolution == 50
     assert atlas.speed_multiplier == 1
@@ -41,8 +42,9 @@ def test_released_wind_file_decodes() -> None:
     assert np.all(atlas.frequencies[~atlas.valid] == 0)
 
 
-def test_released_current_file_decodes() -> None:
-    current = decode_current(DATA / "current01.gz")
+@pytest.mark.parametrize("month", range(1, 13))
+def test_every_released_current_file_decodes(month: int) -> None:
+    current = decode_current(DATA / f"current{month:02d}.gz")
     assert current.u.shape == (481, 1080)
     assert current.multiplier == 20
     assert np.nanmax(np.hypot(current.u, current.v)) < 8
@@ -55,18 +57,24 @@ def test_released_scalar_file_has_exact_schema(schema: str) -> None:
     assert values.shape == SCALAR_SCHEMAS[schema][0]
 
 
-@pytest.mark.parametrize(
-    ("filename", "southern"),
-    [("cyclone-atl.gz", False), ("cyclone-she.gz", True)],
-)
-def test_released_cyclone_file_decodes(filename: str, southern: bool) -> None:
+@pytest.mark.parametrize(("filename", "southern"), [
+    ("cyclone-atl.gz", False), ("cyclone-epa.gz", False),
+    ("cyclone-nio.gz", False), ("cyclone-wpa.gz", False),
+    ("cyclone-she.gz", True), ("cyclone-spa.gz", True),
+])
+def test_every_released_cyclone_file_decodes(filename: str, southern: bool) -> None:
     tracks = decode_cyclones(DATA / filename, southern=southern)
     assert len(tracks) > 100
     populated = [track for track in tracks if track.points]
     assert len(populated) > 100
+    assert min(point.year for track in populated for point in track.points) >= 1850
+
+
+def test_released_atlantic_history_exposes_generator_cutoff_mismatch() -> None:
+    tracks = decode_cyclones(DATA / "cyclone-atl.gz")
     # Despite gencyclonedata.cpp claiming a 1968 cutoff, the released Atlantic
     # file begins in 1851.  This mismatch is intentionally regression-tested.
-    assert min(point.year for track in populated for point in track.points) >= 1850
+    assert min(point.year for track in tracks for point in track.points) == 1851
 
 
 def test_wind_round_trip_and_independent_wire_layout() -> None:
