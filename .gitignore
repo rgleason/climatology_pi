@@ -2,6 +2,11 @@ cmake-build*
 .BATCH
 .build
 build/*
+build-*/
+.pytest_cache/
+__pycache__/
+*.pyc
+.venv-source/
 .directory
 po/POTFILES.in.test
 temp
