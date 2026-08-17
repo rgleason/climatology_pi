@@ -75,6 +75,7 @@ def build(args: argparse.Namespace) -> None:
             sources[source.identifier] = open_source(source)
         dataset = sources[source.identifier]
         print(f"processing {year} from {source.identifier}", flush=True)
+        samples_before = int(accumulator.total.sum())
         block_count = 0
         for stamp in accumulate_wind(
             dataset,
@@ -90,6 +91,9 @@ def build(args: argparse.Namespace) -> None:
             block_count += 1
             if block_count % args.report_blocks == 0:
                 print(f"  through {stamp.isoformat()} elapsed={time.monotonic()-started:.1f}s", flush=True)
+        samples_after = int(accumulator.total.sum())
+        if samples_after <= samples_before:
+            raise RuntimeError(f"ERA5 {year} added no valid ocean wind samples")
         _save(args.checkpoint, accumulator, args.start_year, args.end_year, year)
         if atmosphere:
             atmosphere.save_checkpoint(_atmosphere_path(args.checkpoint))

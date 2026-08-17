@@ -235,6 +235,16 @@ overlaps, gaps, missing metadata and incomplete/reversed ranges.  This also
 supports the intentionally partial 1995–1999 base checkpoint without treating
 its originally requested 2022 end year as data which was actually processed.
 
+### D020 — Time-varying source masks must use the requested period
+
+Google's long ARCO store exposes a time coordinate beginning in 1900, but its
+land/sea-mask slice at array index zero is entirely missing; the 2023 slice is
+populated.  Selecting index zero produced a syntactically successful but empty
+2023 wind checkpoint.  The adapter now selects the first requested timestep,
+rejects a mask with no ocean cells, and requires every processed year to add
+samples before it can checkpoint.  The empty test partition was stopped and
+discarded; it was never merged or installed.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

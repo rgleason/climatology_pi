@@ -87,17 +87,23 @@ def validate_wind_dataset(dataset: Any) -> None:
         raise ValueError("ERA5 latitude coordinate is not monotonic")
 
 
-def _sea_mask(dataset: Any) -> np.ndarray:
+def _sea_mask(dataset: Any, time_index: int) -> np.ndarray:
     if LSM in dataset:
         mask = dataset[LSM]
         if "time" in mask.dims:
-            mask = mask.isel(time=0)
+            mask = mask.isel(time=time_index)
         values = np.asarray(mask.compute().values, dtype=np.float64)
-        return np.isfinite(values) & (values < 0.5)
-    if "sea_surface_temperature" in dataset:
-        values = np.asarray(dataset["sea_surface_temperature"].isel(time=0).compute().values)
-        return np.isfinite(values)
-    raise ValueError("ERA5 source provides neither land_sea_mask nor sea_surface_temperature")
+        sea = np.isfinite(values) & (values < 0.5)
+    elif "sea_surface_temperature" in dataset:
+        values = np.asarray(
+            dataset["sea_surface_temperature"].isel(time=time_index).compute().values
+        )
+        sea = np.isfinite(values)
+    else:
+        raise ValueError("ERA5 source provides neither land_sea_mask nor sea_surface_temperature")
+    if not np.any(sea):
+        raise ValueError("ERA5 sea mask contains no valid ocean cells at the selected date")
+    return sea
 
 
 def _time_indices(dataset: Any, start: str, end: str, cadence_hours: int) -> np.ndarray:
@@ -131,7 +137,10 @@ def accumulate_wind(
     indices = _time_indices(dataset, start, end, cadence_hours)
     latitudes = np.asarray(dataset.latitude.values, dtype=np.float64)
     longitudes = np.asarray(dataset.longitude.values, dtype=np.float64)
-    sea = _sea_mask(dataset)
+    # Some long ARCO stores have coordinate coverage before a variable's first
+    # populated timestep.  Select the first requested sample, not array index
+    # zero, or an all-NaN historical mask can silently reject the whole period.
+    sea = _sea_mask(dataset, int(indices[0]))
     if sea.shape != (len(latitudes), len(longitudes)):
         raise ValueError("ERA5 land/sea mask does not match wind grid")
 
