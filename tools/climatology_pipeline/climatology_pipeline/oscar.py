@@ -3,17 +3,108 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 
 import numpy as np
 
 from .budget import oscar_plan
 from .current import CurrentAccumulator
 from .legacy import decode_current, encode_current, write_gzip
+
+
+def _install_session_timeouts(earthaccess) -> None:
+    """Bound CMR/auth requests which otherwise inherit requests' no-timeout default."""
+    from requests.adapters import HTTPAdapter
+
+    class BoundedTimeoutAdapter(HTTPAdapter):
+        def send(self, request, **kwargs):
+            if kwargs.get("timeout") is None:
+                kwargs["timeout"] = (30, 120)
+            return super().send(request, **kwargs)
+
+    earthaccess.get_requests_https_session().mount(
+        "https://", BoundedTimeoutAdapter()
+    )
+
+
+def _clone_session(session):
+    """Create a thread-local requests session with the Earthdata credentials."""
+    import requests
+
+    clone = requests.Session()
+    clone.headers.update(session.headers)
+    clone.cookies.update(session.cookies)
+    clone.auth = session.auth
+    clone.verify = session.verify
+    clone.cert = session.cert
+    clone.proxies.update(session.proxies)
+    clone.trust_env = session.trust_env
+    return clone
+
+
+def _download_file(session, url: str, directory: Path, *, attempts: int = 3) -> Path:
+    """Download one granule atomically with bounded network waits and retries."""
+    filename = url.rstrip("/").rsplit("/", 1)[-1]
+    if not filename:
+        raise ValueError(f"OSCAR data URL has no filename: {url}")
+    destination = directory / filename
+    if destination.exists():
+        return destination
+    error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        handle, temporary_name = tempfile.mkstemp(
+            prefix=filename + ".", suffix=".part", dir=directory
+        )
+        try:
+            with os.fdopen(handle, "wb") as stream:
+                with session.get(
+                    url,
+                    stream=True,
+                    allow_redirects=True,
+                    timeout=(30, 120),
+                ) as response:
+                    response.raise_for_status()
+                    for block in response.iter_content(chunk_size=1024 * 1024):
+                        if block:
+                            stream.write(block)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_name, destination)
+            return destination
+        except Exception as exc:
+            error = exc
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+            if attempt < attempts:
+                time.sleep(2 ** (attempt - 1))
+    raise RuntimeError(f"OSCAR download failed after {attempts} attempts: {url}") from error
+
+
+def _download_results(earthaccess, results, directory: Path, *, workers: int = 8) -> list[Path]:
+    """Download the GET DATA links without earthaccess's unbounded read wait."""
+    links = []
+    for granule in results:
+        links.extend(granule.data_links(access="external", in_region=False))
+    links = list(dict.fromkeys(links))
+    if not links:
+        raise RuntimeError("OSCAR search results contain no external data links")
+    base_session = earthaccess.get_requests_https_session()
+
+    def fetch(url: str) -> Path:
+        with _clone_session(base_session) as session:
+            return _download_file(session, url, directory)
+
+    with ThreadPoolExecutor(max_workers=min(workers, len(links))) as executor:
+        return list(executor.map(fetch, links))
 
 
 def _coordinate(dataset, *names: str) -> str:
@@ -151,6 +242,7 @@ def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
     authentication = earthaccess.login(strategy="netrc", persist=False)
     if not authentication.authenticated:
         raise RuntimeError("Earthdata authentication failed; configure ~/.netrc")
+    _install_session_timeouts(earthaccess)
     workspace.mkdir(parents=True, exist_ok=True)
     oscar_plan(budget_gb=budget_gb).validate(workspace)
     accumulator = CurrentAccumulator.load_checkpoint(checkpoint) if checkpoint.exists() else None
@@ -173,7 +265,7 @@ def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
         if not results:
             raise RuntimeError(f"OSCAR has no granules for {month_start} .. {month_end}")
         with tempfile.TemporaryDirectory(prefix="oscar-", dir=workspace) as temporary:
-            downloaded = [Path(path) for path in earthaccess.download(results, temporary)]
+            downloaded = _download_results(earthaccess, results, Path(temporary))
             files = [path for path in downloaded if path.suffix.lower() in {".nc", ".nc4"}]
             if not files:
                 raise RuntimeError(

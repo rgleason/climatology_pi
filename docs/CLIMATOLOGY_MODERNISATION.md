@@ -340,6 +340,18 @@ half of the 0.05 kn wire step.  These are hard source-binding checks.  The
 named-region regime checks remain advisory because they are broad physical
 sanity bounds rather than confidence intervals.
 
+### D030 — Bound and retry every Earthdata catalogue and granule request
+
+The initial authenticated historical run exposed that earthaccess 0.16 leaves
+both CMR catalogue reads and on-premises granule reads at Requests' default
+infinite timeout.  One stalled daily object consequently held a whole monthly
+batch after every other object had downloaded.  The builder now mounts a
+30-second-connect/120-second-read adapter for catalogue/auth traffic and uses
+its own atomic granule downloader with the same bounds and three exponential
+backoff attempts.  A failed month never advances the source-bound checkpoint;
+partial files remain temporary and are removed.  A regression test simulates
+the stalled first attempt and verifies retry, timeout and atomic publication.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

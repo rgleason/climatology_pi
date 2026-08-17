@@ -5,10 +5,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import requests
 
 xr = pytest.importorskip("xarray")
 
-from climatology_pipeline.oscar import _load_progress, _write_progress, ingest_oscar_files
+from climatology_pipeline.oscar import (_download_file,
+                                        _install_session_timeouts,
+                                        _load_progress, _write_progress,
+                                        ingest_oscar_files)
 from climatology_pipeline.oisst import build_oisst
 from climatology_pipeline.scalar import decode_field
 
@@ -76,6 +80,67 @@ def test_oscar_progress_is_bound_to_source_and_period(tmp_path: Path) -> None:
     ) == "1995-01-31"
     with pytest.raises(RuntimeError, match="period or source"):
         _load_progress(state, start="2000-01-01", end="2022-08-05")
+
+
+def test_oscar_download_has_bounded_retry_and_atomic_output(tmp_path: Path) -> None:
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def iter_content(self, *, chunk_size: int):
+            assert chunk_size == 1024 * 1024
+            yield b"official-oscar"
+
+    class Session:
+        calls = 0
+        timeout = None
+
+        def get(self, _url, **kwargs):
+            self.calls += 1
+            self.timeout = kwargs["timeout"]
+            if self.calls == 1:
+                raise requests.Timeout("simulated stalled granule")
+            return Response()
+
+    session = Session()
+    path = _download_file(
+        session,
+        "https://example.test/oscar_currents_final_20000110.nc",
+        tmp_path,
+        attempts=2,
+    )
+    assert path.read_bytes() == b"official-oscar"
+    assert session.calls == 2
+    assert session.timeout == (30, 120)
+    assert not list(tmp_path.glob("*.part"))
+
+
+def test_oscar_catalogue_session_gets_default_timeout(monkeypatch) -> None:
+    session = requests.Session()
+
+    class Earthaccess:
+        @staticmethod
+        def get_requests_https_session():
+            return session
+
+    captured = {}
+
+    def base_send(_self, _request, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", base_send)
+    _install_session_timeouts(Earthaccess)
+    adapter = session.get_adapter("https://example.test/")
+    request = requests.Request("GET", "https://example.test/").prepare()
+    adapter.send(request, timeout=None)
+    assert captured["timeout"] == (30, 120)
 
 
 def test_oisst_monthly_climatology(tmp_path: Path) -> None:

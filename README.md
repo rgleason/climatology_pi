@@ -104,7 +104,9 @@ climatology-build-current WORK/dataset --earthdata \
 ```
 
 Daily granules are downloaded and deleted in monthly batches. U/V components
-are averaged before any speed/direction conversion.
+are averaged before any speed/direction conversion. Catalogue and file reads
+have bounded connect/read waits; each granule is retried three times and is
+published to the monthly workspace only after an atomic complete download.
 
 Independent, contiguous OSCAR date ranges may be acquired concurrently into
 separate checkpoints and combined with `climatology-merge-current`. The merger
