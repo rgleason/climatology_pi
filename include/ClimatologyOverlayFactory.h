@@ -145,6 +145,11 @@ public:
 
 struct Cyclone
 {
+    ~Cyclone()
+    {
+        for(std::list<CycloneState*>::iterator it = states.begin(); it != states.end(); ++it)
+            delete *it;
+    }
     std::list<CycloneState*> states;
 };
 

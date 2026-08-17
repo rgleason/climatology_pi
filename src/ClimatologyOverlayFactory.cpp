@@ -56,6 +56,8 @@
 //#include "gldefs.h"
 #include "icons.h"
 
+#include <sstream>
+
 #define FAILED_FILELIST_MSG_LEN 150
 
 static int s_multitexturing = 0;
@@ -671,8 +673,6 @@ void ClimatologyOverlayFactory::Free()
     for(int i=0; i < 6; i++) {
         for(std::list<Cyclone*>::iterator it = cyclones[i]->begin(); it != cyclones[i]->end(); it++) {
             Cyclone *s = *it;
-            for(std::list<CycloneState*>::iterator it2 = s->states.begin(); it2 != s->states.end(); it2++)
-                delete *it2;
             delete s;
         }
         cyclones[i]->clear();
@@ -1446,33 +1446,53 @@ bool ClimatologyOverlayFactory::ReadElNinoYears(wxString filename)
 {
     char line[128];
     int header = 1;
-    FILE *f;
     wxString path = ClimatologyDataDirectory();
-    if(!(f = fopen((path + filename).mb_str(), "r"))) {
-        path = ClimatologyDataDirectory();
-        if(!(f = fopen((path + filename).mb_str(), "r")))
-            goto missing;
+    FILE *f = fopen((path + filename).mb_str(), "r");
+    if(!f) {
+        wxLogMessage(climatology_pi + _("failed to open file: ") + filename);
+        m_FailedFiles.push_back(filename);
+        return false;
     }
 
+    std::map<int, ElNinoYear> parsed;
+    bool valid = true;
     while(fgets(line, sizeof line, f)) {
         if(header)
             header--;
         else {
-            //char *saveptr;
-            int year = strtol(strtok(line, " "), 0, 10);
+            std::istringstream row(line);
+            int year;
             ElNinoYear elninoyear;
-            for(int i=0; i<12; i++)
-                elninoyear.months[i] = strtod_nan(strtok(0, " \n"));
-
-            m_ElNinoYears[year] = elninoyear;
+            if(!(row >> year)) {
+                valid = false;
+                break;
+            }
+            for(int i=0; i<12; i++) {
+                std::string value;
+                if(!(row >> value)) {
+                    valid = false;
+                    break;
+                }
+                elninoyear.months[i] = strtod_nan(value.c_str());
+                if(isnan(elninoyear.months[i])) {
+                    valid = false;
+                    break;
+                }
+            }
+            if(!valid)
+                break;
+            parsed[year] = elninoyear;
         }
     }
     fclose(f);
+    if(!valid) {
+        m_sFailedMessage += _("corrupt file: ") + filename + "\n";
+        wxLogMessage(climatology_pi + _("El Nino data corrupt: ") + filename);
+        m_FailedFiles.push_back(filename);
+        return false;
+    }
+    m_ElNinoYears.swap(parsed);
     return true;
-missing:
-    wxLogMessage(climatology_pi + _("failed to open file: ") + filename);
-    m_FailedFiles.push_back(filename);
-    return false;
 }
 
 bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
