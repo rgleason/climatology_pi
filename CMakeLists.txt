@@ -66,14 +66,14 @@ set(COMMON_NAME "Climatology")    # Search "getcommonname"in climatology_pi.
 set(TITLE_NAME "climatology")
 set(PACKAGE_CONTACT "Sean D'Epagnier")
 set(PACKAGE "climatology")
-set(SHORT_DESCRIPTION "Climatology PlugIn: 32 years of monthly NOAA Data")
-set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic weather data. Supported Climatology types include: - Average wind directions and speed- Percentage of gale and calm conditions - Sea Surface Currents - Average swell and sea state (not yet implemented) - Precipitation, Humidity, Cloud Cover, and Lightning Strikes - Monthly average Sea Level pressure and Sea Temperature, Air Temperature - Tropical Cyclone tracks")
+set(SHORT_DESCRIPTION "Climatology PlugIn: global monthly climate and cyclone data")
+set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historical weather and ocean data. Supported types include average wind direction and speed, gale and calm probabilities, sea-surface currents, precipitation, humidity, cloud cover, lightning strikes, sea-level pressure, sea and air temperature, and tropical-cyclone tracks. Versioned datasets report their exact source products and climatological periods.")
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "6")
-set(VERSION_PATCH "37")
+set(VERSION_PATCH "38")
 set(VERSION_TWEAK "0")
-set(VERSION_DATE  "05/10/2026")#DD/MM/YYYY format
+set(VERSION_DATE  "17/08/2026")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
@@ -82,7 +82,7 @@ set(OCPN_API_VERSION_MINOR "18")
 set(WX_VER "32")
 set(WX_VER_PATCH "8")
 
-set(TP_COMMENT "  * Release using CI")
+set(TP_COMMENT "  * Legacy-compatible modern dataset pipeline and runtime correctness fixes")
 
 set(PARENT "opencpn")
 

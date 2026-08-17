@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import warnings
 
 import numpy as np
 
@@ -44,7 +45,10 @@ def aggregate_elevation(elevation: np.ndarray, factor_lat: int,
     grouped = values.reshape(values.shape[0] // factor_lat, factor_lat,
                              values.shape[1] // factor_lon, factor_lon)
     wet_depth = np.where(grouped < 0, -grouped, np.nan)
-    with np.errstate(all="ignore"):
+    with np.errstate(all="ignore"), warnings.catch_warnings():
+        # Land-only groups are deliberately returned as NaN/missing.
+        warnings.filterwarnings("ignore", message="All-NaN slice encountered",
+                                category=RuntimeWarning)
         return np.nanmedian(wet_depth, axis=(1, 3))
 
 

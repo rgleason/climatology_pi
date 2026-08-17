@@ -35,7 +35,7 @@ double Bilinear(std::size_t rows, std::size_t columns, double row, double column
     if (wrap_columns) {
         column = std::fmod(column, static_cast<double>(columns));
         if (column < 0.0)
-            column += columns;
+            column += static_cast<double>(columns);
     } else {
         if (column < 0.0)
             column = 0.0;
@@ -48,8 +48,8 @@ double Bilinear(std::size_t rows, std::size_t columns, double row, double column
     const std::size_t column0 = static_cast<std::size_t>(std::floor(column));
     const std::size_t column1 = column0 + 1 < columns ? column0 + 1
                                                       : (wrap_columns ? 0 : column0);
-    const double dr = row - row0;
-    const double dc = column - column0;
+    const double dr = row - static_cast<double>(row0);
+    const double dc = column - static_cast<double>(column0);
     const double values[4] = {getter(row0, column0), getter(row0, column1),
                               getter(row1, column0), getter(row1, column1)};
     const double weights[4] = {(1.0 - dr) * (1.0 - dc), (1.0 - dr) * dc,

@@ -1,27 +1,47 @@
-<html><head>
-<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
-    <title>Climatology Plugin for OpenCPN</title>
-  </head>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Climatology Plugin for OpenCPN</title>
+</head>
+<body>
+  <h2>Climatology Plugin for OpenCPN</h2>
+  <p>This plugin visualises historical monthly weather and ocean patterns for
+  voyage planning and supplies the established Climatology interface used by
+  Weather Routing. It is not a forecast and its depth layer is not
+  navigational bathymetry.</p>
 
-<body alink="#ff0000" bgcolor="#ffffff" link="#0000e2" text="#000000" vlink="#bb0000">
-    <center><h3>Climatology Plugin For OpenCPN</h3></center>
-<br>
-<p>Intended to aid in planning sailing voyages, to help visualize weather patterns, and to integrate with the weather routing plugin to compute optimal sailing routes.
-<p>Satellite weather data from the last 30 years is averaged, then represented using only useful bits, then compressed to produce a much smaller database used by the plugin.
-<p>Raw Data is compiled from the following sources:
-<pre>
-Wind: ftp://eclipse.ncdc.noaa.gov/pub/seawinds/SI/uv/ (1987 to 2013)
-Current: http://podaac.jpl.nasa.gov/dataset/OSCAR_L4_OC_third-deg (1992 to 2012)
-Surface Air Temperature: ftp://ftp.cdc.noaa.gov/Datasets/ncep.marine/air.mean.nc
-Precipitation: ftp://ftp.cdc.noaa.gov/Datasets/cmap/std/precip.mon.mean.nc
-Relative Humidity: ftp://ftp.cdc.noaa.gov/Datasets/icoads/1degree/global/enh/rhum.mean.nc
-Cloud: http://www.jisao.washington.edu/data/coads_climatologies/cldccoadsclim5079.nc
-Sea Level Pressure: http://www.jisao.washington.edu/data/coads_climatologies/slpcoadsclim5079.nc
-Sea Surface Temperature: http://www.jisao.washington.edu/data/coads_climatologies/sstcoadsclim6079.1deg.nc
-Lightning: ftp://ghrc.nsstc.nasa.gov/pub/lis/climatology/HRMC/data/LISOTD_HRMC_V2.3.2013.hdf
-Sea Depth: http://www.esrl.noaa.gov/psd/data/data.nodc.woa98.html
-Cyclone Tracks: http://unisys.com
-El Nino Years: http://www.cpc.ncep.noaa.gov/products/analysis_monitoring/ensostuff/ensoyears.shtml
-</pre>
-<pre>The Climatology Plugin is written and maintained by Sean D'Epagnier</pre>
-</body></html>
+  <h3>Dataset identity</h3>
+  <p>Modern versioned bundles include <code>dataset-manifest.json</code> and
+  <code>DATASET_PROVENANCE.md</code> in this data directory. They give the
+  exact period, source product identifiers, processing choices, generator
+  revision and SHA-256 checksums. The plugin version and dataset version are
+  deliberately independent and are shown together on the About page.</p>
+
+  <h3>Modern dataset sources</h3>
+  <ul>
+    <li>Wind atlas and atmospheric fields: ECMWF ERA5.</li>
+    <li>Sea-surface currents: NASA/JPL PO.DAAC OSCAR Final V2.</li>
+    <li>Tropical cyclones: NOAA/NCEI IBTrACS v04r01.</li>
+    <li>Sea-surface temperature: NOAA OISST v2.1.</li>
+    <li>Bathymetry context: GEBCO 2026.</li>
+    <li>ENSO classification: NOAA CPC ONI based on ERSSTv6.</li>
+    <li>Lightning: the existing NASA LIS/OTD observed climatology is retained;
+    precipitation is not used as a proxy for lightning.</li>
+  </ul>
+  <p>The intended common target period is 1995-01-01 through 2024-12-31.
+  Where an authoritative product has shorter coverage, the exact per-product
+  period in the manifest takes precedence.</p>
+
+  <h3>Interpretation</h3>
+  <p>The wind atlas contains eight directional-sector frequencies and mean
+  speeds plus calm and gale probabilities. The current layer contains vector
+  components; directions are interpolated through the components rather than
+  as wrapped angles. Missing coastal cells are not treated as zero.</p>
+
+  <p>The plugin was created by Sean D'Epagnier and subsequently maintained by
+  the OpenCPN plugin community. See the repository documentation for the
+  implementation audit, legacy-format specification, source audit and full
+  rebuilding procedure.</p>
+</body>
+</html>
