@@ -36,7 +36,10 @@ def generator_revision(repository: str | Path) -> tuple[str, bool]:
     return commit, dirty
 
 
-def dependency_versions(names: Iterable[str] = ("numpy", "xarray", "dask", "zarr", "netCDF4")) -> dict[str, str]:
+def dependency_versions(names: Iterable[str] = (
+    "numpy", "xarray", "dask", "zarr", "netCDF4",
+    "icechunk", "s3fs", "earthaccess",
+)) -> dict[str, str]:
     result = {}
     for name in names:
         try:

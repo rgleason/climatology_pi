@@ -23,6 +23,8 @@ def test_manifest_has_checksums_and_two_renderings(tmp_path) -> None:
     write_manifest(tmp_path, manifest)
     loaded = json.loads((tmp_path / "dataset-manifest.json").read_text())
     assert loaded["dataset_version"] == "ocpn-climatology-2026.1"
+    assert "earthaccess" in loaded["software"]
+    assert "icechunk" in loaded["software"]
     assert loaded["validation"]["summary"]["advisory_checks_passed"] == 4
     rendered = (tmp_path / "DATASET_PROVENANCE.md").read_text()
     assert "ERA5" in rendered
