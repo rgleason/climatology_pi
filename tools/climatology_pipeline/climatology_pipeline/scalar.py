@@ -72,14 +72,22 @@ def encode_field(name: str, values: np.ndarray, *,
     representable = finite & (encoded_float >= info.min) & (encoded_float <= info.max)
     representable &= encoded_float != definition.missing
     outside = finite & ~representable
-    if out_of_range not in {"error", "missing"}:
-        raise ValueError("out_of_range must be 'error' or 'missing'")
+    if out_of_range not in {"error", "missing", "clip"}:
+        raise ValueError("out_of_range must be 'error', 'missing' or 'clip'")
     if np.any(outside) and out_of_range == "error":
         minimum = np.nanmin(physical[finite]) if np.any(finite) else np.nan
         maximum = np.nanmax(physical[finite]) if np.any(finite) else np.nan
         raise ValueError(f"{name} range {minimum} .. {maximum} exceeds legacy representation")
     result = np.full(definition.shape, definition.missing, dtype=definition.dtype)
     result[representable] = encoded_float[representable].astype(definition.dtype)
+    if out_of_range == "clip":
+        # Reserve the legacy missing sentinel while saturating real finite
+        # values at the nearest representable value.  This is preferable to
+        # inventing holes in genuinely extreme climatological regions.
+        lower = info.min + (definition.missing == info.min)
+        upper = info.max - (definition.missing == info.max)
+        clipped = np.clip(encoded_float[outside], lower, upper)
+        result[outside] = clipped.astype(definition.dtype)
     return result
 
 

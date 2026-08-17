@@ -174,6 +174,27 @@ continuity are validated, and selected values are compared with the official
 ERA5/NCAR transport. Provenance names ERA5 as the scientific source and the
 transport/archive separately.
 
+### D014 — Calendar interpolation and cyclone windows are circular
+
+The historical month interpolation asked wxWidgets for February's length
+without supplying the observation year, and the cyclone crossing filter used
+linear day and month ranges.  The latter lost December/January candidates and
+could produce a negative signed separation.  Runtime helpers now use the
+actual year (including leap years), fractional UTC days, and explicit circular
+day/month arithmetic.  Unit tests cover leap-day and year-boundary cases.
+
+### D015 — Saturate only legacy precipitation overflow
+
+The precipitation byte reserves 255 for missing, so its largest physical
+value is 50.8 mm/day.  ERA5's 1995–2024 monthly climatology contains a small
+number of genuinely wetter 2.5-degree cells (the observed maximum is recorded
+in the product validation report).  Rejecting the whole product or turning
+those cells into missing data is less useful than representing them as
+"at least 50.8 mm/day".  The encoder therefore explicitly saturates only
+finite precipitation overflow at 254; all other scalar products still fail
+closed or use their documented missing-data policy.  The manifest records the
+clip count and maximum before encoding.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

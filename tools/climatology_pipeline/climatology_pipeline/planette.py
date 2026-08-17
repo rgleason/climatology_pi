@@ -140,7 +140,8 @@ def build(output: Path, *, start: str = "1995-01-01",
             physical = accumulator.monthly(minimum_samples=minimum_samples)
             encoded = field_for_definition(
                 name, physical, accumulator.latitude, accumulator.longitude,
-                out_of_range="missing" if name == "airtemperature" else "error",
+                out_of_range=("missing" if name == "airtemperature" else
+                              "clip" if name == "precipitation" else "error"),
             )
             write_gzip(output / f"{name}.gz", encode_scalar(encoded, name))
     finally:

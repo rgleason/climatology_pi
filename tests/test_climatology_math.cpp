@@ -37,5 +37,17 @@ int main() {
     assert(close(climatology::Bilinear(2, 2, 0.5, 0.5, missing_getter), 20.0));
     assert(std::isnan(climatology::InterpolateMissing(NAN, NAN, 0.5)));
     assert(close(climatology::InterpolateMissing(NAN, 7.0, 0.5), 7.0));
+
+    assert(climatology::CircularDayDistance(2, 363) == 4);
+    assert(climatology::CircularDayDistance(363, 2) == 4);
+    assert(climatology::CircularDayDistance(100, 110) == 10);
+
+    const auto february_mid = climatology::MonthInterpolation(1, 15, 0.0, 29);
+    assert(february_mid.month == 1);
+    assert(february_mid.neighbour == 0);
+    assert(close(february_mid.current_weight, 1.0));
+    const auto year_wrap = climatology::MonthInterpolation(11, 31, 0.5, 31);
+    assert(year_wrap.neighbour == 0);
+    assert(close(year_wrap.current_weight, 0.5));
     return 0;
 }

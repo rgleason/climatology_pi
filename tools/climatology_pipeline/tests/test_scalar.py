@@ -35,6 +35,16 @@ def test_negative_air_temperature_is_preserved() -> None:
     np.testing.assert_allclose(decoded, -12.333333333333, atol=1e-10)
 
 
+def test_precipitation_extremes_saturate_without_becoming_missing() -> None:
+    definition = SCALAR_DEFINITIONS["precipitation"]
+    values = np.full(definition.shape, 61.5)
+    values[0, 0, 0] = np.nan
+    encoded = encode_field("precipitation", values, out_of_range="clip")
+    assert encoded[0, 0, 0] == definition.missing
+    assert encoded[0, 0, 1] == 254
+    assert decode_field("precipitation", encoded)[0, 0, 1] == pytest.approx(50.8)
+
+
 def test_relative_humidity_reference_cases() -> None:
     result = relative_humidity(np.array([293.15, 273.15]), np.array([293.15, 263.15]))
     assert result[0] == pytest.approx(100.0)

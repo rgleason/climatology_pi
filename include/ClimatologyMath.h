@@ -9,6 +9,17 @@ namespace climatology {
 double Wrap360(double degrees);
 double InterpolateMissing(double first, double second, double fraction);
 double InterpolateAngleRadians(double first, double second, double fraction);
+int CircularDayDistance(int first, int second, int days = 365);
+
+struct MonthInterpolationResult {
+    int month;
+    int neighbour;
+    double current_weight;
+};
+
+MonthInterpolationResult MonthInterpolation(int month, int day,
+                                            double day_fraction,
+                                            int days_in_month);
 
 template <typename Getter>
 double Bilinear(std::size_t rows, std::size_t columns, double row, double column,

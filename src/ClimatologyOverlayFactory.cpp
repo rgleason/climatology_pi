@@ -248,23 +248,16 @@ void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
     }
     
     month = cdate->GetMonth();
-    const double day = cdate->GetDay() +
+    const double day_fraction =
         (cdate->GetHour() * 3600.0 + cdate->GetMinute() * 60.0 +
          cdate->GetSecond()) / 86400.0;
-    int daysinmonth = wxDateTime::GetNumberOfDays(cdate->GetMonth());
-    dpos = (day-.5) / daysinmonth;
-    
-    if(dpos > .5) {
-        nmonth = month + 1;
-        if(nmonth == 12)
-            nmonth = 0;
-        dpos = 1.5 - dpos;
-    } else {
-        nmonth = month - 1;
-        if(nmonth == -1)
-            nmonth = 11;
-        dpos = .5 + dpos;
-    }
+    const int daysinmonth = wxDateTime::GetNumberOfDays(
+        cdate->GetMonth(), cdate->GetYear());
+    const climatology::MonthInterpolationResult interpolation =
+        climatology::MonthInterpolation(month, cdate->GetDay(), day_fraction,
+                                        daysinmonth);
+    nmonth = interpolation.neighbour;
+    dpos = interpolation.current_weight;
 }
 
 bool ClimatologyOverlayFactory::InterpolateWindAtlasTime(int month, int nmonth, double dpos,
@@ -2309,18 +2302,16 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
     int lat_min = wxMin(lat1, lat2), lat_max = wxMax(lat1, lat2);
 
     int day = date.GetMonth()*365/12 + date.GetDay()-1;
-    int day1 = day - dayrange/2, day2 = day + dayrange/2;
-    if(day1 < 0) day1 += 365;
-    if(day2 >= 365) day2 -= 365;
-    int day_min = wxMin(day1, day2), day_max = wxMax(day1, day2);
-
-    int month_min = day_min * 12 / 365, month_max = day_max * 12 / 365;
+    const int half_range = wxMin(dayrange / 2, 182);
+    const int day1 = (day - half_range + 365) % 365;
+    const int day2 = (day + half_range) % 365;
+    const int month_start = dayrange >= 365 ? 0 : day1 * 12 / 365;
+    const int month_end = dayrange >= 365 ? 11 : day2 * 12 / 365;
 
     for(int loni = lon_min; loni <= lon_max; loni++)
         for(int lati = lat_min; lati <= lat_max; lati++) {
-            int monthi = month_min;
-            do {
-                if(monthi==12) monthi = 0;
+            int monthi = month_start;
+            for(;;) {
 
                 int hash = (floor((double)loni) * 180
                             + floor((double)lati))*12 + monthi;
@@ -2332,11 +2323,9 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
                     CycloneState *ss = *it;
                         
                     int cday = ss->datetime.month*365/12 + ss->datetime.day - 1;
-                    int daydiff = cday - day;
-                    if(daydiff > 183)
-                        daydiff = 365 - daydiff;
+                    const int daydiff = climatology::CircularDayDistance(cday, day);
 
-                    if(daydiff < dayrange/2) {
+                    if(daydiff <= half_range) {
                         /* we should split all cyclones at 15 degrees longitude... until then... */
                         while(lon1 - ss->lon[0] > 180) lon1 -= 360, lon2 -= 360;
                         while(lon1 - ss->lon[0] < -180) lon1 += 360, lon2 += 360;
@@ -2349,7 +2338,10 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
                         }
                     }
                 }
-            } while(++monthi <= month_max);
+                if(monthi == month_end)
+                    break;
+                monthi = (monthi + 1) % 12;
+            }
         }
 
     m_cyclone_cache_semaphore.Post();
