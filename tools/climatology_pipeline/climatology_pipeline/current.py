@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
+import tempfile
 
 import numpy as np
 
@@ -116,15 +119,44 @@ class CurrentAccumulator:
         target_v[~both] = np.nan
         return CurrentField(target_u * KNOTS_PER_MPS, target_v * KNOTS_PER_MPS, multiplier)
 
-    def save_checkpoint(self, path: str | Path) -> None:
-        np.savez_compressed(
-            path,
-            latitudes=self.latitudes,
-            longitudes=self.longitudes,
-            u_sum=self.u_sum,
-            v_sum=self.v_sum,
-            count=self.count,
+    def save_checkpoint(self, path: str | Path,
+                        metadata: dict[str, object] | None = None) -> None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, object] = {
+            "latitudes": self.latitudes,
+            "longitudes": self.longitudes,
+            "u_sum": self.u_sum,
+            "v_sum": self.v_sum,
+            "count": self.count,
+        }
+        if metadata is not None:
+            payload["metadata_json"] = np.asarray(json.dumps(metadata, sort_keys=True))
+        handle, temporary_name = tempfile.mkstemp(
+            prefix=path.name + ".", suffix=".tmp", dir=path.parent
         )
+        try:
+            with os.fdopen(handle, "wb") as temporary:
+                np.savez_compressed(temporary, **payload)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            os.replace(temporary_name, path)
+        except Exception:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+            raise
+
+    @staticmethod
+    def checkpoint_metadata(path: str | Path) -> dict[str, object] | None:
+        with np.load(path) as values:
+            if "metadata_json" not in values:
+                return None
+            parsed = json.loads(str(values["metadata_json"]))
+            if not isinstance(parsed, dict):
+                raise ValueError("current checkpoint metadata is not an object")
+            return parsed
 
     @classmethod
     def load_checkpoint(cls, path: str | Path) -> "CurrentAccumulator":
@@ -134,4 +166,3 @@ class CurrentAccumulator:
             result.v_sum = values["v_sum"]
             result.count = values["count"]
         return result
-

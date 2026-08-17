@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, timedelta
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -71,6 +72,41 @@ def _month_ranges(start: date, end: date):
         current = next_month
 
 
+def _load_progress(state: dict[str, object] | None, *, start: str, end: str) -> str:
+    if state is None:
+        return ""
+    expected = {
+        "schema": 1,
+        "source": "OSCAR_L4_OC_FINAL_V2.0",
+        "start": start,
+        "end": end,
+    }
+    if any(state.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("OSCAR checkpoint period or source does not match this build")
+    completed = state.get("completed_through", "")
+    if not isinstance(completed, str):
+        raise RuntimeError("OSCAR checkpoint has a non-text completion date")
+    try:
+        if completed:
+            date.fromisoformat(completed)
+    except ValueError as exc:
+        raise RuntimeError("OSCAR checkpoint has an invalid completion date") from exc
+    return completed
+
+
+def _write_progress(path: Path, *, start: str, end: str, completed: str) -> None:
+    state = {
+        "schema": 1,
+        "source": "OSCAR_L4_OC_FINAL_V2.0",
+        "start": start,
+        "end": end,
+        "completed_through": completed,
+    }
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
 def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
                    end: str) -> CurrentAccumulator:
     """Authenticated monthly acquisition; raw granules are deleted per batch."""
@@ -83,8 +119,13 @@ def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
         raise RuntimeError("Earthdata authentication failed; configure ~/.netrc")
     workspace.mkdir(parents=True, exist_ok=True)
     accumulator = CurrentAccumulator.load_checkpoint(checkpoint) if checkpoint.exists() else None
+    state = CurrentAccumulator.checkpoint_metadata(checkpoint) if checkpoint.exists() else None
+    if checkpoint.exists() and state is None:
+        raise RuntimeError(
+            "OSCAR checkpoint predates the versioned schema; remove it and restart"
+        )
+    completed = _load_progress(state, start=start, end=end)
     progress = checkpoint.with_suffix(".json")
-    completed = progress.read_text().strip() if progress.exists() else ""
     start_date, end_date = date.fromisoformat(start), date.fromisoformat(end)
     for month_start, month_end in _month_ranges(start_date, end_date):
         key = month_end.isoformat()
@@ -97,12 +138,24 @@ def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
         if not results:
             raise RuntimeError(f"OSCAR has no granules for {month_start} .. {month_end}")
         with tempfile.TemporaryDirectory(prefix="oscar-", dir=workspace) as temporary:
-            files = [Path(path) for path in earthaccess.download(results, temporary)]
+            downloaded = [Path(path) for path in earthaccess.download(results, temporary)]
+            files = [path for path in downloaded if path.suffix.lower() in {".nc", ".nc4"}]
+            if not files:
+                raise RuntimeError(
+                    f"OSCAR download for {month_start} .. {month_end} contained no NetCDF granules"
+                )
             accumulator = ingest_oscar_files(files, start=month_start.isoformat(),
                                              end=month_end.isoformat(),
                                              accumulator=accumulator)
-        accumulator.save_checkpoint(checkpoint)
-        progress.write_text(key + "\n", encoding="ascii")
+        state = {
+            "schema": 1,
+            "source": "OSCAR_L4_OC_FINAL_V2.0",
+            "start": start,
+            "end": end,
+            "completed_through": key,
+        }
+        accumulator.save_checkpoint(checkpoint, metadata=state)
+        _write_progress(progress, start=start, end=end, completed=key)
         completed = key
     if accumulator is None:
         raise RuntimeError("no OSCAR data were accumulated")

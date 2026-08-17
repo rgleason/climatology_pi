@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -7,7 +8,7 @@ import pytest
 
 xr = pytest.importorskip("xarray")
 
-from climatology_pipeline.oscar import ingest_oscar_files
+from climatology_pipeline.oscar import _load_progress, _write_progress, ingest_oscar_files
 from climatology_pipeline.oisst import build_oisst
 from climatology_pipeline.scalar import decode_field
 
@@ -42,6 +43,20 @@ def test_oscar_rejects_wrong_units(tmp_path: Path) -> None:
     dataset.to_netcdf(path)
     with pytest.raises(ValueError, match="unexpected u units"):
         ingest_oscar_files([path])
+
+
+def test_oscar_progress_is_bound_to_source_and_period(tmp_path: Path) -> None:
+    progress = tmp_path / "oscar.json"
+    _write_progress(
+        progress, start="1995-01-01", end="2022-08-05",
+        completed="1995-01-31",
+    )
+    state = json.loads(progress.read_text(encoding="utf-8"))
+    assert _load_progress(
+        state, start="1995-01-01", end="2022-08-05"
+    ) == "1995-01-31"
+    with pytest.raises(RuntimeError, match="period or source"):
+        _load_progress(state, start="2000-01-01", end="2022-08-05")
 
 
 def test_oisst_monthly_climatology(tmp_path: Path) -> None:

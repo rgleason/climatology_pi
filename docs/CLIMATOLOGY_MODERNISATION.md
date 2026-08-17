@@ -205,6 +205,17 @@ conservative 1995-05-04 through 2013-12-31 coverage of that edition, and
 records the encoded checksum.  It does not relabel the data as 1995–2024 or
 replace lightning with an ERA5 proxy.
 
+### D017 — Bind OSCAR resume checkpoints to their source and period
+
+The current accumulator now embeds a versioned source identifier, requested
+start/end dates, and completed-through date in the same atomically replaced
+NPZ file as its sums and counts.  A JSON sidecar remains as a human-readable
+progress aid but is not the recovery authority.  This prevents an interrupted
+or accidentally reused checkpoint from silently duplicating a month, skipping
+a month, or combining Final OSCAR with a different quality stream.  Download
+results are also filtered to NetCDF granules so checksum/metadata sidecars
+cannot be passed to xarray as science data.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

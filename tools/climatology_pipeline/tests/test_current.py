@@ -34,3 +34,17 @@ def test_current_checkpoint(tmp_path) -> None:
     restored = CurrentAccumulator.load_checkpoint(path)
     np.testing.assert_array_equal(restored.count, accumulator.count)
     np.testing.assert_allclose(restored.u_sum, accumulator.u_sum)
+
+
+def test_current_checkpoint_metadata(tmp_path) -> None:
+    accumulator = CurrentAccumulator(np.array([-1.0, 1.0]), np.array([0.0, 180.0]))
+    path = tmp_path / "current.npz"
+    metadata = {
+        "schema": 1,
+        "source": "OSCAR_L4_OC_FINAL_V2.0",
+        "start": "1995-01-01",
+        "end": "2022-08-05",
+        "completed_through": "1995-01-31",
+    }
+    accumulator.save_checkpoint(path, metadata=metadata)
+    assert CurrentAccumulator.checkpoint_metadata(path) == metadata
