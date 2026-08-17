@@ -34,9 +34,9 @@
     "target_units": "hPa",
     "sampling": "monthly means",
     "source_grid": "regular 0.25 degree global",
-    "target_grid": "regular 2.5 degree global",
+    "target_grid": "historical 90 x 180 grid at 2 degree spacing",
     "aggregation": "calendar-month arithmetic mean then bilinear resampling",
-    "encoding": "uint8, 0.5 hPa, offset 940 hPa, 255 missing"
+    "encoding": "little-endian int16, 0.01 hPa, offset 1000 hPa, 32767 missing"
   },
   {
     "name": "air temperature",
@@ -47,9 +47,9 @@
     "target_units": "degree C",
     "sampling": "monthly means",
     "source_grid": "regular 0.25 degree global",
-    "target_grid": "regular 2.5 degree global",
+    "target_grid": "historical 90 x 180 grid at 2 degree spacing",
     "aggregation": "calendar-month arithmetic mean then bilinear resampling",
-    "encoding": "uint8, 0.333333 degree C, offset -45 degree C, 255 missing",
+    "encoding": "int8, 0.333333 degree C, offset 0 degree C, -128 missing",
     "missing_policy": "finite values outside the legacy representable range are missing"
   },
   {
@@ -61,9 +61,9 @@
     "target_units": "percent",
     "sampling": "monthly means",
     "source_grid": "regular 0.25 degree global",
-    "target_grid": "regular 1.25 degree global",
+    "target_grid": "historical 180 x 360 grid at 1 degree spacing",
     "aggregation": "WMO-style saturation-vapour-pressure ratio, calendar-month mean, bilinear resampling",
-    "encoding": "uint8, 1 percent, 255 missing"
+    "encoding": "uint8, 0.5 percent, 255 missing"
   },
   {
     "name": "precipitation",
@@ -74,7 +74,7 @@
     "target_units": "mm/day",
     "sampling": "monthly means",
     "source_grid": "regular 0.25 degree global",
-    "target_grid": "regular 2.5 degree global",
+    "target_grid": "historical 72 x 144 grid at 2.5 degree spacing",
     "aggregation": "rate conversion, calendar-month arithmetic mean, bilinear resampling",
     "encoding": "uint8, 0.2 mm/day, 255 missing",
     "overflow_policy": "finite values above 50.8 mm/day saturate at 50.8; five target cells in this build"
@@ -88,9 +88,9 @@
     "target_units": "percent",
     "sampling": "monthly means",
     "source_grid": "regular 0.25 degree global",
-    "target_grid": "regular 2.5 degree global",
+    "target_grid": "historical 90 x 180 grid at 2 degree spacing",
     "aggregation": "calendar-month arithmetic mean then bilinear resampling",
-    "encoding": "uint8, 1 percent, 255 missing"
+    "encoding": "uint8, 0.5 percent, 255 missing"
   },
   {
     "name": "sea-surface temperature",
@@ -102,7 +102,7 @@
     "source_grid": "regular 0.25 degree global",
     "target_grid": "regular 1 degree global",
     "aggregation": "calendar-month missing-aware arithmetic mean then bilinear resampling",
-    "encoding": "uint8, 0.2 degree C, offset -2 degree C, 255 missing"
+    "encoding": "int8, 0.2 degree C, offset 15 degree C, -128 missing"
   },
   {
     "name": "tropical cyclone tracks",

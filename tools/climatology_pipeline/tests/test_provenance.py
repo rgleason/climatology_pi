@@ -43,3 +43,29 @@ def test_release_metadata_names_every_packaged_product() -> None:
     assert all(product.get("period", {}).get("start") for product in products)
     assert all(product.get("period", {}).get("end") for product in products)
     assert all(source.get("product_id") for source in sources)
+
+    # These descriptions are part of the machine-readable release record.
+    # Keep them locked to the actual legacy wire definitions rather than an
+    # earlier proposed representation which the runtime cannot read.
+    encodings = {product["name"]: product.get("encoding") for product in products}
+    assert encodings["mean sea-level pressure"] == (
+        "little-endian int16, 0.01 hPa, offset 1000 hPa, 32767 missing"
+    )
+    assert encodings["sea-surface temperature"] == (
+        "int8, 0.2 degree C, offset 15 degree C, -128 missing"
+    )
+    assert encodings["air temperature"] == (
+        "int8, 0.333333 degree C, offset 0 degree C, -128 missing"
+    )
+    assert encodings["relative humidity"] == "uint8, 0.5 percent, 255 missing"
+    assert encodings["total cloud cover"] == "uint8, 0.5 percent, 255 missing"
+    grids = {product["name"]: product.get("target_grid") for product in products}
+    assert grids["mean sea-level pressure"] == (
+        "historical 90 x 180 grid at 2 degree spacing"
+    )
+    assert grids["air temperature"] == "historical 90 x 180 grid at 2 degree spacing"
+    assert grids["relative humidity"] == (
+        "historical 180 x 360 grid at 1 degree spacing"
+    )
+    assert grids["total cloud cover"] == "historical 90 x 180 grid at 2 degree spacing"
+    assert grids["precipitation"] == "historical 72 x 144 grid at 2.5 degree spacing"
