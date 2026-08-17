@@ -335,8 +335,8 @@ def source_binding_validation(
             "checks": len(checks),
             "checks_passed": sum(checks),
             "all_checks_passed": all(checks),
-            "wind_checkpoint": str(wind_checkpoint),
-            "current_checkpoint": str(current_checkpoint),
+            "wind_checkpoint": wind_checkpoint.name,
+            "current_checkpoint": current_checkpoint.name,
         },
     }
 
