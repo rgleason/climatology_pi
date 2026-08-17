@@ -293,6 +293,16 @@ conservative planned peak is 4.45 GB under the 100 GB ceiling.  An earlier
 draft estimator described a spatially tiled design which the final reader did
 not use; tests now lock the real source-block allowance above 0.9 GB.
 
+### D026 — OSCAR acquisition has an independently enforced budget
+
+OSCAR Final V2 publishes at most 32 MB per daily granule.  One process keeps a
+maximum 31-day batch, the 720x1440 monthly sufficient statistics, an atomic
+checkpoint replacement and a 2 GB reserve, for a conservative 3.76 GB plan.
+The plan is checked against both the configured ceiling and free workspace
+before download. Four exact date partitions may therefore run concurrently at
+under 16 GB planned aggregate peak, still well below this project's 100 GB
+limit and the 32 GB temporary filesystem available during this build.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

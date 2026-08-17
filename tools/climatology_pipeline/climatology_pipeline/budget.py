@@ -63,3 +63,26 @@ def era5_wind_plan(
     output = 100_000_000
     safety = 2 * GB
     return StoragePlan(int(budget_gb * GB), source, aggregation, checkpoint, output, safety)
+
+
+def oscar_plan(
+    *,
+    days_per_batch: int = 31,
+    maximum_granule_bytes: int = 32_000_000,
+    source_latitudes: int = 720,
+    source_longitudes: int = 1440,
+    budget_gb: float = 100.0,
+) -> StoragePlan:
+    """Conservative peak for one monthly OSCAR Final V2 acquisition process."""
+    if (days_per_batch <= 0 or maximum_granule_bytes <= 0 or
+            source_latitudes <= 0 or source_longitudes <= 0):
+        raise ValueError("OSCAR batch, granule and grid dimensions must be positive")
+    source = days_per_batch * maximum_granule_bytes
+    aggregation = 12 * source_latitudes * source_longitudes * (8 + 8 + 4)
+    # Allow the live accumulator, compressed checkpoint replacement and
+    # serialization/library overhead to coexist.
+    checkpoint = aggregation * 2
+    output = 20_000_000
+    safety = 2 * GB
+    return StoragePlan(int(budget_gb * GB), source, aggregation,
+                       checkpoint, output, safety)

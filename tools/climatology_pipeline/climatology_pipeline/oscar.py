@@ -11,6 +11,7 @@ import tempfile
 
 import numpy as np
 
+from .budget import oscar_plan
 from .current import CurrentAccumulator
 from .legacy import decode_current, encode_current, write_gzip
 
@@ -108,7 +109,7 @@ def _write_progress(path: Path, *, start: str, end: str, completed: str) -> None
 
 
 def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
-                   end: str) -> CurrentAccumulator:
+                   end: str, budget_gb: float = 100.0) -> CurrentAccumulator:
     """Authenticated monthly acquisition; raw granules are deleted per batch."""
     try:
         import earthaccess
@@ -118,6 +119,7 @@ def acquire_oscar(workspace: Path, checkpoint: Path, *, start: str,
     if not authentication.authenticated:
         raise RuntimeError("Earthdata authentication failed; configure ~/.netrc")
     workspace.mkdir(parents=True, exist_ok=True)
+    oscar_plan(budget_gb=budget_gb).validate(workspace)
     accumulator = CurrentAccumulator.load_checkpoint(checkpoint) if checkpoint.exists() else None
     state = CurrentAccumulator.checkpoint_metadata(checkpoint) if checkpoint.exists() else None
     if checkpoint.exists() and state is None:
@@ -169,6 +171,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--start", default="1995-01-01")
     parser.add_argument("--end", default="2022-08-05")
     parser.add_argument("--minimum-samples", type=int, default=100)
+    parser.add_argument("--budget-gb", type=float, default=100.0)
     parser.add_argument("--earthdata", action="store_true",
                         help="acquire monthly batches using Earthdata Login")
     parser.add_argument("--workspace", type=Path)
@@ -181,7 +184,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.workspace is None or args.checkpoint is None:
             parser.error("--earthdata requires --workspace and --checkpoint")
         accumulator = acquire_oscar(args.workspace, args.checkpoint,
-                                    start=args.start, end=args.end)
+                                    start=args.start, end=args.end,
+                                    budget_gb=args.budget_gb)
     else:
         if not args.inputs:
             parser.error("supply NetCDF inputs or use --earthdata")

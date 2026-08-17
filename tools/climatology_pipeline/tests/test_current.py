@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
+from climatology_pipeline.budget import GB, oscar_plan
 from climatology_pipeline.current import CurrentAccumulator
 from climatology_pipeline.wind import KNOTS_PER_MPS
+
+
+def test_oscar_storage_plan_models_monthly_final_v2_batch() -> None:
+    plan = oscar_plan()
+    plan.validate()
+    assert plan.budget_bytes == 100 * GB
+    assert 3 * GB < plan.peak_bytes < 10 * GB
+    assert plan.source_chunk_bytes == 31 * 32_000_000
+    with pytest.raises(RuntimeError, match="exceeds budget"):
+        oscar_plan(budget_gb=1).validate()
 
 
 def test_current_monthly_mean_and_units() -> None:

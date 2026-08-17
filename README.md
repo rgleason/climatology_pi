@@ -100,7 +100,7 @@ from a different quality stream.
 ```sh
 climatology-build-current WORK/dataset --earthdata \
   --workspace WORK/oscar-temporary --checkpoint WORK/oscar-final.npz \
-  --start 1995-01-01 --end 2022-08-05
+  --start 1995-01-01 --end 2022-08-05 --budget-gb 100
 ```
 
 Daily granules are downloaded and deleted in monthly batches. U/V components
