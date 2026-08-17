@@ -194,6 +194,7 @@ SET(HDRS
 			include/linmath.h
 			include/zuFile.h
 			include/ClimatologyMath.h
+            include/ClimatologyAPI.h
 )
 
 add_definitions(-DPLUGIN_USE_SVG)
@@ -234,6 +235,9 @@ if(BUILD_TESTING)
   )
   target_include_directories(climatology_math_tests PRIVATE include)
   add_test(NAME climatology_math COMMAND climatology_math_tests)
+  add_executable(climatology_api_tests tests/test_climatology_api.cpp)
+  target_include_directories(climatology_api_tests PRIVATE include)
+  add_test(NAME climatology_api COMMAND climatology_api_tests)
 endif()
 
 ##==============================================================

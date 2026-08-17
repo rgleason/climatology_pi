@@ -36,6 +36,7 @@
 #include <wx/fileconf.h>
 
 #include "climatology_pi.h"
+#include "ClimatologyAPI.h"
 
 #include <wx/ffile.h>
 #include "icons.h"
@@ -316,6 +317,11 @@ static int ClimatologyCycloneTrackCrossings(double lat1, double lon1, double lat
     return g_pOverlayFactory->CycloneTrackCrossings(lat1, lon1, lat2, lon2,
                                                     date, dayrange);
 }
+
+// Compile-time guards for the pointer ABI advertised in SendClimatology().
+static ClimatologyDataFunction const checked_climatology_data = &ClimatologyData;
+static ClimatologyWindAtlasFunction const checked_wind_atlas_data = &ClimatologyWindAtlasData;
+static ClimatologyCycloneCrossingsFunction const checked_cyclone_crossings = &ClimatologyCycloneTrackCrossings;
 
 void climatology_pi::OnToolbarToolCallback(int id)
 {

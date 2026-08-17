@@ -18,3 +18,4 @@ include/IsoBarMap.h
 include/linmath.h
 include/zuFile.h
 include/ClimatologyMath.h
+include/ClimatologyAPI.h
