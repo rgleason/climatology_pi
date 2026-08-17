@@ -5,8 +5,10 @@ from pathlib import Path
 import numpy as np
 
 from climatology_pipeline.compare import (_current_check, _wind_check,
+                                          current_global_comparison,
                                           current_sample,
                                           scalar_global_comparison,
+                                          wind_global_comparison,
                                           wind_sample)
 from climatology_pipeline.legacy import (CurrentField, WindAtlas, encode_current,
                                          encode_wind, encode_wind_extras,
@@ -38,6 +40,13 @@ def test_geographical_wind_and_current_samples(tmp_path) -> None:
     assert sampled_current["speed_kn"] == np.hypot(.5, .5)
     assert sampled_current["bearing_to_deg_true"] == 45.
     assert _current_check("Gulf Stream", sampled_current)["passed"]
+
+    wind_global = wind_global_comparison(tmp_path, tmp_path, 1)
+    assert wind_global["new_cells_with_nonunit_frequency_sum"] == 0
+    assert wind_global["paired_prevailing_sector_changed_fraction"] == 0.0
+    assert wind_global["paired_mean_absolute_sector_probability_difference"] == 0.0
+    current_global = current_global_comparison(tmp_path, tmp_path, 1)
+    assert current_global["paired_vector_root_mean_square_difference_kn"] == 0.0
 
 
 def test_scalar_global_comparison_uses_paired_physical_values() -> None:

@@ -98,6 +98,74 @@ def current_sample(directory: Path, month: int, latitude: float,
     }
 
 
+def wind_global_comparison(old: Path, new: Path, month: int) -> dict[str, object]:
+    old_atlas = decode_wind(old / f"wind{month:02d}.gz")
+    new_atlas = decode_wind(new / f"wind{month:02d}.gz")
+
+    def calm_gale(directory: Path, atlas):
+        extras = directory / f"wind-extras{month:02d}.gz"
+        if extras.exists():
+            calm, gale, valid = decode_wind_extras(extras)
+            return calm, gale, valid
+        return atlas.calm, atlas.gale, atlas.valid
+
+    old_calm, old_gale, old_valid = calm_gale(old, old_atlas)
+    new_calm, new_gale, new_valid = calm_gale(new, new_atlas)
+    paired = old_atlas.valid & new_atlas.valid
+    old_probability = old_atlas.frequencies.astype(np.float64) / old_atlas.direction_resolution
+    new_probability = new_atlas.frequencies.astype(np.float64) / new_atlas.direction_resolution
+    frequency_sum = np.sum(new_atlas.frequencies, axis=2)
+    return {
+        "month": month,
+        "old_valid_cells": int(np.count_nonzero(old_atlas.valid)),
+        "new_valid_cells": int(np.count_nonzero(new_atlas.valid)),
+        "paired_valid_cells": int(np.count_nonzero(paired)),
+        "new_cells_with_nonunit_frequency_sum": int(np.count_nonzero(
+            new_atlas.valid & (frequency_sum != new_atlas.direction_resolution)
+        )),
+        "old_mean_calm_percent": float(np.mean(old_calm[old_valid])),
+        "new_mean_calm_percent": float(np.mean(new_calm[new_valid])),
+        "old_mean_gale_percent": float(np.mean(old_gale[old_valid])),
+        "new_mean_gale_percent": float(np.mean(new_gale[new_valid])),
+        "paired_prevailing_sector_changed_fraction": float(np.mean(
+            np.argmax(old_probability[paired], axis=1) !=
+            np.argmax(new_probability[paired], axis=1)
+        )),
+        "paired_mean_absolute_sector_probability_difference": float(np.mean(
+            np.abs(new_probability[paired] - old_probability[paired])
+        )),
+        "old_calm_gale_note": (
+            "The historical marker retains calm or gale, not both; its missing "
+            "counterpart decodes as zero"
+        ),
+    }
+
+
+def current_global_comparison(old: Path, new: Path, month: int) -> dict[str, object]:
+    old_field = decode_current(old / f"current{month:02d}.gz")
+    new_field = decode_current(new / f"current{month:02d}.gz")
+    old_valid = np.isfinite(old_field.u) & np.isfinite(old_field.v)
+    new_valid = np.isfinite(new_field.u) & np.isfinite(new_field.v)
+    paired = old_valid & new_valid
+    difference_squared = ((new_field.u[paired] - old_field.u[paired]) ** 2 +
+                          (new_field.v[paired] - old_field.v[paired]) ** 2)
+    return {
+        "month": month,
+        "old_valid_cells": int(np.count_nonzero(old_valid)),
+        "new_valid_cells": int(np.count_nonzero(new_valid)),
+        "paired_valid_cells": int(np.count_nonzero(paired)),
+        "old_mean_speed_kn": float(np.mean(np.hypot(
+            old_field.u[old_valid], old_field.v[old_valid]
+        ))),
+        "new_mean_speed_kn": float(np.mean(np.hypot(
+            new_field.u[new_valid], new_field.v[new_valid]
+        ))),
+        "paired_vector_root_mean_square_difference_kn": float(
+            np.sqrt(np.mean(difference_squared))
+        ),
+    }
+
+
 def scalar_sample(directory: Path, name: str, month: int,
                   latitude: float, longitude: float) -> float | None:
     definition = SCALAR_DEFINITIONS[name]
@@ -165,9 +233,12 @@ def _current_check(name: str, sample: dict[str, object]) -> dict[str, object]:
 
 def comparison(old: Path, new: Path) -> dict[str, object]:
     result: dict[str, object] = {
-        "wind": [], "current": [], "scalar": [], "scalar_global": []
+        "wind": [], "wind_global": [], "current": [], "current_global": [],
+        "scalar": [], "scalar_global": []
     }
     for month in (1, 7):
+        result["wind_global"].append(wind_global_comparison(old, new, month))
+        result["current_global"].append(current_global_comparison(old, new, month))
         for name, latitude, longitude in WIND_REGIONS:
             old_sample = wind_sample(old, month, latitude, longitude)
             new_sample = wind_sample(new, month, latitude, longitude)
