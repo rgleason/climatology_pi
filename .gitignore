@@ -7,6 +7,7 @@ build-*/
 __pycache__/
 *.pyc
 .venv-source/
+*.egg-info/
 .directory
 po/POTFILES.in.test
 temp

@@ -1,2 +1,0 @@
-[console_scripts]
-climatology-inspect = climatology_pipeline.inspect:main
