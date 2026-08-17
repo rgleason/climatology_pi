@@ -69,7 +69,7 @@ These files have no header.
 | `sealevelpressure.gz` | 12x90x180 int16 | 32767 | `raw*0.01 + 1000` hPa | COADS 1950–1979 |
 | `seasurfacetemperature.gz` | 12x180x360 int8 | -128 | writer expands `raw*200`; query `*0.001 + 15`, hence `15 + raw*0.2` °C | COADS 1960–1979 |
 | `airtemperature.gz` | 12x90x180 int8 | -128 | `raw/3` °C | NCEP marine record, exact years not recorded |
-| `cloud.gz` | 12x90x180 uint8 | 255 | `raw*0.5/4` oktas equivalent (runtime reports percent-like scale) | COADS 1950–1979 |
+| `cloud.gz` | 12x90x180 uint8 | 255 | `raw*0.5` percent | COADS 1950–1979 |
 | `precipitation.gz` | 12x72x144 uint8 | 255 | `raw*0.2` mm/day | CMAP record, exact years not recorded |
 | `relativehumidity.gz` | 12x180x360 uint8 | 255 | `raw/2` percent | ICOADS record, exact years not recorded |
 | `lightning.gz` | 12x180x360 uint8 | none | nonlinear encoded index | NASA LIS/OTD HRMC v2.3 (2013 product) |
