@@ -15,8 +15,10 @@ def test_manifest_has_checksums_and_two_renderings(tmp_path) -> None:
         products=[{"name": "wind", "summary": "test"}],
         sources=[{"name": "ERA5", "product_id": "reanalysis-era5-single-levels"}],
         generated_utc="2026-08-17T00:00:00+00:00",
-        validation={"summary": {"advisory_checks": 4,
-                                "advisory_checks_passed": 4}},
+        validation={
+            "summary": {"advisory_checks": 4, "advisory_checks_passed": 4},
+            "source_binding": {"summary": {"checks": 4, "checks_passed": 4}},
+        },
     )
     assert manifest["outputs"][0]["sha256"] == sha256(data)
     assert manifest["climatology_period"]["kind"] == "multi-product-target"
@@ -29,6 +31,7 @@ def test_manifest_has_checksums_and_two_renderings(tmp_path) -> None:
     rendered = (tmp_path / "DATASET_PROVENANCE.md").read_text()
     assert "ERA5" in rendered
     assert "Advisory regional checks passed: 4/4" in rendered
+    assert "Hard source-to-package checks passed: 4/4" in rendered
 
 
 def test_release_metadata_names_every_packaged_product() -> None:

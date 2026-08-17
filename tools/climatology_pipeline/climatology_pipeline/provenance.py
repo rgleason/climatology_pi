@@ -127,6 +127,13 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> None:
             "The machine-readable manifest embeds the complete deterministic before/after report.",
             f"Advisory regional checks passed: {summary.get('advisory_checks_passed', 'unknown')}/{summary.get('advisory_checks', 'unknown')}.",
         ))
+        binding = manifest["validation"].get("source_binding", {}).get("summary", {})
+        if binding:
+            lines.append(
+                "Hard source-to-package checks passed: "
+                f"{binding.get('checks_passed', 'unknown')}/"
+                f"{binding.get('checks', 'unknown')}."
+            )
     lines.extend(("", "## Output checksums", ""))
     for output in manifest["outputs"]:
         lines.append(f"* `{output['file']}` — {output['bytes']} bytes — SHA-256 `{output['sha256']}`")
