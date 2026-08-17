@@ -1,5 +1,7 @@
 #pragma once
+
 #include <string>
+#include <cstdint>
 
 struct ManifestEntry {
     std::string filename;

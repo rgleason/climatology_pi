@@ -4,21 +4,25 @@
  ******************************************************************************/
 #pragma message("Header: " __FILE__)
 
+// OpenCPN plugin API (must be first)
+//  -To avoid wxWidgets\include\wx\withimages.h(19,1): error C2236: unexpected token 'class'.
+#include "ocpn_plugin_guarded.h"
+
 // wxWidgets must be first
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
-#include <wx/wx.h>
+	#include <wx/wx.h>
 #endif
-
-// To avoid wxWidgets\include\wx\withimages.h(19,1): error C2236: unexpected token 'class'.
-#include "ocpn_plugin_guarded.h"
-
 
 // wx extras
 #include <wx/fileconf.h>
+#include <wx/progdlg.h>
+#include <wx/generic/progdlgg.h>
+#include <wx/aui/aui.h>
+#include <wx/notifmsg.h>
 
 // ADD nlohmann/json
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
 // plugin headers
@@ -31,15 +35,10 @@ using json = nlohmann::json;
 #include "DownloadFileEntry.hpp"
 #include "icons.h"
 
-
 // MUST COME AFTER wx includes
 #include "version.h"
 
-#include <wx/progdlg.h>
-#include <wx/generic/progdlgg.h>
-#include <wx/aui/aui.h>
-#include <wx/notifmsg.h>
-
+// curl
 #include <curl/curl.h>
 #ifdef CLIMATOLOGY_BUNDLED_CURL
 #include <windows.h>
@@ -337,19 +336,20 @@ void climatology_pi::SetPluginMessage(wxString& message_id,
         if (!m_pClimatologyDialog)
             return;
 
-       // Modern jsoncpp reader
-        Json::CharReaderBuilder builder;
-        std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
-        Json::Value root;
-        std::string errs;
-		
-        std::string msg = message_body.ToStdString();
-        if (!reader->parse(msg.c_str(), msg.c_str() + msg.size(), &root, &errs))
-            return;
+			std::string msg = message_body.ToStdString();
+			json root;
 
-        int day   = root.get("Day",   -1).asInt();
-        int month = root.get("Month", -1).asInt();
-        int year  = root.get("Year",  -1).asInt();
+			try {
+				root = json::parse(msg);
+			}
+			catch (const std::exception& e) {
+				wxLogWarning("GRIB_TIMELINE JSON parse error: %s", e.what());
+				return;
+			}
+
+			int day   = root.value("Day",   -1);
+			int month = root.value("Month", -1);
+			int year  = root.value("Year",  -1);
 
         wxDateTime t;
         if (day >= 1 && month >= 0 && year >= 0)
@@ -373,12 +373,13 @@ void climatology_pi::SetPluginMessage(wxString& message_id,
 // ---------------------------------------------------------------------------
 void climatology_pi::SendClimatology(bool valid)
 {
-    Json::Value v;
-    v["ClimatologyVersionMajor"] = GetPlugInVersionMajor();
-    v["ClimatologyVersionMinor"] = GetPlugInVersionMinor();
+	json v;
+	v["ClimatologyVersionMajor"] = GetPlugInVersionMajor();
+	v["ClimatologyVersionMinor"] = GetPlugInVersionMinor();
 
-    Json::FastWriter writer;
-    SendPluginMessage("CLIMATOLOGY", writer.write(v));
+	std::string msg = v.dump();   // replaces FastWriter::write()
+	SendPluginMessage("CLIMATOLOGY", msg);
+
 }
 
 // ---------------------------------------------------------------------------

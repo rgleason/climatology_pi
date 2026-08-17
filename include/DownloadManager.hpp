@@ -1,21 +1,10 @@
 #pragma once
 #pragma message("Header: " __FILE__)
 
-
-#pragma message("Header: " __FILE__)
-
 #include <string>
 #include <vector>
 #include "ManifestEntry.hpp" 
 
-
-class ManifestLoader {
-public:
-    // Construct with the full path to manifest.json
-    ManifestLoader(const std::string& manifestPath);
-
-    // Load entries from manifest.json into the vector
-  
 // wxWidgets must be first
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
@@ -28,6 +17,7 @@ public:
 #include <wx/thread.h>
 #include <wx/event.h>
 #include <wx/progdlg.h>
+
 #include <vector>
 #include <mutex>
 

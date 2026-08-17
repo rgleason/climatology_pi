@@ -185,6 +185,6 @@ public:
     // Startup
     wxTimer m_startupTimer;
     bool    m_bCompletedLoading = false;
-}	
+};	
 
 #endif // _CLIMATOLOGY_PI_PLUGIN_H_
