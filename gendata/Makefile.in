@@ -1,0 +1,142 @@
+DATA = ../data
+
+ALL_WIND  = $(DATA)/wind01 $(DATA)/wind02 $(DATA)/wind03 $(DATA)/wind04
+ALL_WIND += $(DATA)/wind05 $(DATA)/wind06 $(DATA)/wind07 $(DATA)/wind08
+ALL_WIND += $(DATA)/wind09 $(DATA)/wind10 $(DATA)/wind11 $(DATA)/wind12
+
+ALL_CURRENT  = $(DATA)/current01 $(DATA)/current02 $(DATA)/current03
+ALL_CURRENT += $(DATA)/current04 $(DATA)/current05 $(DATA)/current06
+ALL_CURRENT += $(DATA)/current07 $(DATA)/current08 $(DATA)/current09
+ALL_CURRENT += $(DATA)/current10 $(DATA)/current11 $(DATA)/current12
+
+ALL_OTHER = $(DATA)/sealevelpressure.gz $(DATA)/seasurfacetemperature.gz $(DATA)/airtemperature.gz $(DATA)/cloud.gz $(DATA)/precipitation.gz $(DATA)/relativehumidity.gz $(DATA)/seadepth.gz
+ALL_CYCLONE = $(DATA)/cyclone-atl.gz $(DATA)/cyclone-nio.gz $(DATA)/cyclone-wpa.gz $(DATA)/cyclone-epa.gz $(DATA)/cyclone-she.gz $(DATA)/cyclone-spa.gz
+ALL = $(ALL_WIND) $(ALL_CURRENT) $(ALL_OTHER) $(ALL_CYCLONE)
+
+all: $(ALL)
+clean:
+	rm -rf $(ALL)
+	rm -rf genatdata genrelativehumiditydata genseadepthdata genclddata gencurrentdata gencyclonedata gencyclonedata1 genslpdata gensstdata genastdata genprecipdata genwinddata
+
+CURRENT_DATA_DIR = currentdata
+
+CURRENT =  $(CURRENT_DATA_DIR)/oscar_vel1993.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel1994.nc $(CURRENT_DATA_DIR)/oscar_vel1995.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel1996.nc $(CURRENT_DATA_DIR)/oscar_vel1997.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel1998.nc $(CURRENT_DATA_DIR)/oscar_vel1999.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2000.nc $(CURRENT_DATA_DIR)/oscar_vel2001.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2002.nc $(CURRENT_DATA_DIR)/oscar_vel2003.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2004.nc $(CURRENT_DATA_DIR)/oscar_vel2005.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2006.nc $(CURRENT_DATA_DIR)/oscar_vel2007.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2008.nc $(CURRENT_DATA_DIR)/oscar_vel2009.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2010.nc $(CURRENT_DATA_DIR)/oscar_vel2011.nc
+CURRENT += $(CURRENT_DATA_DIR)/oscar_vel2012.nc
+
+genwinddata: genwinddata.cpp zuFile.cpp
+	g++ -o genwinddata genwinddata.cpp zuFile.cpp -lbz2 -lz -g -O2
+
+gencurrentdata: gencurrentdata.cpp
+	g++ -o gencurrentdata gencurrentdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/sealevelpressure.gz: slpcoadsclim5079.nc genslpdata
+	./genslpdata | gzip > $@
+
+slpcoadsclim5079.nc:
+	wget -c http://www.jisao.washington.edu/data/coads_climatologies/slpcoadsclim5079.nc
+
+genslpdata: genslpdata.cpp
+	g++ -o genslpdata genslpdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/seasurfacetemperature.gz: sstcoadsclim6079.1deg.nc gensstdata
+	./gensstdata | gzip > $@
+
+sstcoadsclim6079.1deg.nc:
+	wget -c http://www.jisao.washington.edu/data/coads_climatologies/sstcoadsclim6079.1deg.nc
+
+gensstdata: gensstdata.cpp
+	g++ -o gensstdata gensstdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/airtemperature.gz: air.mean.nc genatdata
+	./genatdata | gzip > $@
+
+air.mean.nc:
+	wget -c    ftp://ftp.cdc.noaa.gov/Datasets/ncep.marine/air.mean.nc
+
+genatdata: genatdata.cpp
+	g++ -o genatdata genatdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/cloud.gz: cldccoadsclim5079.nc genclddata
+	./genclddata | gzip > $@
+
+cldccoadsclim5079.nc:
+	wget -c http://www.jisao.washington.edu/data/coads_climatologies/cldccoadsclim5079.nc
+
+genclddata: genclddata.cpp
+	g++ -o genclddata genclddata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/precipitation.gz: precip.mon.mean.nc genprecipdata
+	./genprecipdata | gzip > $@
+
+precip.mon.mean.nc:
+	wget -c ftp://ftp.cdc.noaa.gov/Datasets/cmap/std/precip.mon.mean.nc
+
+genprecipdata: genprecipdata.cpp
+	g++ -o genprecipdata genprecipdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+$(DATA)/relativehumidity.gz: rhum.mean.nc genrelativehumiditydata
+	./genrelativehumiditydata | gzip > $@
+
+$(DATA)/lightning.gz: LISOTD_HRMC_V2.3.2013.hdf genlightning
+	tar xf 14-03-1002-1-01.tar 
+	h5fromh4 LISOTD_HRMC_V2.3.2013.hdf 
+	h5totxt LISOTD_HRMC_V2.3.2013.h5 > lightning.txt
+	./genlightning | gzip > $@
+
+rhum.mean.nc:
+	wget -c ftp://ftp.cdc.noaa.gov/Datasets/icoads/1degree/global/enh/rhum.mean.nc
+
+genrelativehumiditydata: genrelativehumiditydata.cpp
+	g++ -o genrelativehumiditydata genrelativehumiditydata.cpp -lnetcdf -lnetcdf_c++ -g
+
+genlightning: genlightning.cpp
+	g++ -o genlightning genlightning.cpp -g
+
+$(DATA)/seadepth.gz: landseadepth.nc genseadepthdata
+	./genseadepthdata | gzip > $@
+
+landseadepth.nc:
+	wget -O "landseadepth.nc" "http://www.esrl.noaa.gov/psd/repository/entry/get/PSD Climate Data Repository/Public/PSD Datasets/PSD Gridded Datasets/nodc.woa98/masks/landseadepth.nc?entryid=synth%3Ae570c8f9-ec09-4e89-93b4-babd5651e7a9%3AL25vZGMud29hOTgvbWFza3MvbGFuZHNlYWRlcHRoLm5j"
+
+genseadepthdata: genseadepthdata.cpp
+	g++ -o genseadepthdata genseadepthdata.cpp -lnetcdf -lnetcdf_c++ -g
+
+tracks.atl:
+	wget -c http://weather.unisys.com/hurricane/atlantic/tracks.atl
+
+tracks.epa:
+	wget -c http://weather.unisys.com/hurricane/e_pacific/tracks.epa
+
+tracks.wpa:
+	wget -c http://weather.unisys.com/hurricane/w_pacific/tracks.wpa
+
+tracks.she:
+	wget -c http://weather.unisys.com/hurricane/s_indian/tracks.she
+
+tracks.nio:
+	wget -c http://weather.unisys.com/hurricane/n_indian/tracks.nio
+
+$(DATA)/cyclone-she.gz: tracks.she gencyclonedata
+	./gencyclonedata $< 2 | gzip > $@
+
+$(DATA)/cyclone-spa.gz: tracks.she gencyclonedata
+	./gencyclonedata $< 1 | gzip > $@
+
+$(DATA)/cyclone-%.gz: tracks.% gencyclonedata
+	./gencyclonedata $< | gzip > $@
+
+gencyclonedata: gencyclonedata.cpp
+	g++ -o gencyclonedata gencyclonedata.cpp -g
+
+$(ALL_CURRENT) : $(CURRENT) gencurrentdata
+	./gencurrentdata $(CURRENT)
+	mv current* $(DATA)
