@@ -43,6 +43,15 @@ the gale discriminator. The generator in the repository writes a different
 five-value header (`0xfeff`) and contains compile/logic errors; therefore the
 runtime reader and packaged files are authoritative for `0xfefe`.
 
+The modern bundle adds optional `wind-extras01.gz` … `wind-extras12.gz`
+sidecars without changing that compatibility payload.  Their uncompressed
+wire layout is four ASCII bytes `WEX1`, little-endian `uint16` latitude and
+longitude counts, one complete calm-percentage byte plane and one complete
+gale-percentage byte plane.  Values 0–100 are percentages and 255 is missing
+in both planes.  Dimensions and missing masks must agree with the matching
+legacy atlas. Historical plugins ignore these files; the modern runtime
+prefers them after strict validation.
+
 ## Ocean current — `current01.gz` … `current12.gz`
 
 Six-byte header, three `uint16` values:

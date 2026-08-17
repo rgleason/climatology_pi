@@ -9,7 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .legacy import SCALAR_SCHEMAS, decode_current, decode_cyclones, decode_scalar, decode_wind
+from .legacy import (SCALAR_SCHEMAS, decode_current, decode_cyclones,
+                     decode_scalar, decode_wind, decode_wind_extras)
 from .scalar import SCALAR_DEFINITIONS, decode_field
 
 
@@ -27,7 +28,9 @@ def _stats(values: np.ndarray, missing: int | None = None) -> dict[str, object]:
 def inspect(path: Path, kind: str | None = None, *, southern: bool = False) -> dict[str, object]:
     if kind is None:
         name = path.name.removesuffix(".gz")
-        if name.startswith("wind"):
+        if name.startswith("wind-extras"):
+            kind = "wind-extras"
+        elif name.startswith("wind"):
             kind = "wind"
         elif name.startswith("current"):
             kind = "current"
@@ -40,7 +43,17 @@ def inspect(path: Path, kind: str | None = None, *, southern: bool = False) -> d
         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "kind": kind,
     }
-    if kind == "wind":
+    if kind == "wind-extras":
+        calm, gale, valid = decode_wind_extras(path)
+        result.update(
+            grid=list(calm.shape),
+            schema="WEX1",
+            valid_cells=int(np.count_nonzero(valid)),
+            missing_cells=int(valid.size - np.count_nonzero(valid)),
+            calm_percent=_stats(calm[valid]),
+            gale_percent=_stats(gale[valid]),
+        )
+    elif kind == "wind":
         atlas = decode_wind(path)
         result.update(
             grid=[atlas.frequencies.shape[0], atlas.frequencies.shape[1]],
@@ -97,7 +110,9 @@ def inspect(path: Path, kind: str | None = None, *, southern: bool = False) -> d
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path)
-    parser.add_argument("--kind", choices=["wind", "current", "cyclone", *SCALAR_SCHEMAS])
+    parser.add_argument("--kind", choices=[
+        "wind", "wind-extras", "current", "cyclone", *SCALAR_SCHEMAS
+    ])
     parser.add_argument("--southern", action="store_true", help="invert legacy southern-basin latitude")
     args = parser.parse_args()
     print(json.dumps([inspect(path, args.kind, southern=args.southern) for path in args.paths], indent=2))
