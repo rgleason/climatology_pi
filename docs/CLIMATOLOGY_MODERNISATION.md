@@ -275,6 +275,14 @@ failures, but do not pretend to be confidence intervals.  This binding makes
 it possible to establish which validation report belongs to an installed
 dataset rather than relying on an untracked console transcript.
 
+### D024 — A damaged manifest must not permit dataset mixing
+
+Versioned bundles fail closed rather than downloading individual historical
+files into a modern installation.  Detection uses the JSON manifest, its
+human-readable provenance companion, or the distinctive enhanced-wind
+sidecar. Thus deleting or damaging only the manifest cannot silently turn a
+partially damaged modern bundle into a mixed modern/legacy dataset.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.

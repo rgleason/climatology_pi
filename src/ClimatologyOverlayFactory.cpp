@@ -161,8 +161,11 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     Load();
 
     if(m_FailedFiles.size()) {
-        const bool versioned_dataset = wxFileExists(
-            ClimatologyDataDirectory() + "dataset-manifest.json");
+        const wxString data_directory = ClimatologyDataDirectory();
+        const bool versioned_dataset =
+            wxFileExists(data_directory + "dataset-manifest.json") ||
+            wxFileExists(data_directory + "DATASET_PROVENANCE.md") ||
+            wxFileExists(data_directory + "wind-extras01.gz");
         wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
         if( m_sFailedMessage.Len() > FAILED_FILELIST_MSG_LEN )
             failed_msg.Append("...\n\n");
