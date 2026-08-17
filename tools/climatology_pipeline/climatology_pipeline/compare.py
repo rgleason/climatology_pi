@@ -109,6 +109,29 @@ def scalar_sample(directory: Path, name: str, month: int,
     return None if not np.isfinite(value) else float(value)
 
 
+def scalar_global_comparison(old: Path, new: Path, name: str) -> dict[str, object]:
+    """Summarise complete decoded fields without conflating missing cells."""
+    old_values = decode_field(name, decode_scalar(old / f"{name}.gz", name))
+    new_values = decode_field(name, decode_scalar(new / f"{name}.gz", name))
+    old_finite = np.isfinite(old_values)
+    new_finite = np.isfinite(new_values)
+    paired = old_finite & new_finite
+    difference = new_values[paired] - old_values[paired]
+    return {
+        "field": name,
+        "units": SCALAR_DEFINITIONS[name].units,
+        "cells": int(old_values.size),
+        "old_valid": int(np.count_nonzero(old_finite)),
+        "new_valid": int(np.count_nonzero(new_finite)),
+        "paired_valid": int(np.count_nonzero(paired)),
+        "old_mean": float(np.mean(old_values[old_finite])),
+        "new_mean": float(np.mean(new_values[new_finite])),
+        "paired_mean_difference_new_minus_old": float(np.mean(difference)),
+        "paired_mean_absolute_difference": float(np.mean(np.abs(difference))),
+        "paired_root_mean_square_difference": float(np.sqrt(np.mean(difference ** 2))),
+    }
+
+
 def _wind_check(name: str, sample: dict[str, object]) -> dict[str, object]:
     expected = sorted(WIND_EXPECTED[name])
     passed = bool(
@@ -141,7 +164,9 @@ def _current_check(name: str, sample: dict[str, object]) -> dict[str, object]:
 
 
 def comparison(old: Path, new: Path) -> dict[str, object]:
-    result: dict[str, object] = {"wind": [], "current": [], "scalar": []}
+    result: dict[str, object] = {
+        "wind": [], "current": [], "scalar": [], "scalar_global": []
+    }
     for month in (1, 7):
         for name, latitude, longitude in WIND_REGIONS:
             old_sample = wind_sample(old, month, latitude, longitude)
@@ -166,6 +191,7 @@ def comparison(old: Path, new: Path) -> dict[str, object]:
     for field in SCALAR_DEFINITIONS:
         if not (old / f"{field}.gz").exists() or not (new / f"{field}.gz").exists():
             continue
+        result["scalar_global"].append(scalar_global_comparison(old, new, field))
         for name, latitude, longitude in (
             ("North Atlantic", 50., -30.), ("tropics", 5., -25.),
             ("Mediterranean", 35., 18.),
