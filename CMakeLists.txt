@@ -123,48 +123,63 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "${CMLOC}Build type: ${CMAKE_BUILD_TYPE}")
 
+
+
+##---------------------------------------------------------------------------
+## 0. Add opencpn-libs FIRST (MSBuild requires before setup & before Linking
+##---------------------------------------------------------------------------
+add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
+add_subdirectory(opencpn-libs/tinyxml)
+
+if(WIN32 AND MSVC)
+    add_subdirectory(opencpn-libs/zlib)
+	# No dependency needed — zlib is IMPORTED and prebuilt
+endif()	
+
+##---------------------------------------------------------------------------
+## 1. PluginSetup — MUST RUN FIRST  (creates ${PACKAGE_NAME} )
+##---------------------------------------------------------------------------
+include(PluginSetup)
+
 ##---------------------------------------------------------------------------
 ## wxWidgets Paths (Windows/MSVC only, local dev)  Run before PluginSetup
 ##---------------------------------------------------------------------------
 if(WIN32 AND MSVC)
     set(wxWidgets_ROOT "C:/Users/fcgle/source/ocpn_wxWidgets-3.2.2.1")
 
-    set(wxWidgets_INCLUDE_DIRS
-        "${wxWidgets_ROOT}/include"
-        "${wxWidgets_ROOT}/build/lib/vc_dll/mswu"
+	set(wxWidgets_INCLUDE_DIRS
+		"${wxWidgets_ROOT}/include"
+		"${wxWidgets_ROOT}/lib/vc_dll/mswu"
+##		"${wxWidgets_ROOT}/lib/vc_dll/mswud"  #For debug builds
+	)
+	set(wxWidgets_LIB_DIR "${wxWidgets_ROOT}/lib/vc_dll")
+	#ensures MSVC can actually find the .lib files.
+	
+	set(wxWidgets_LIBRARIES
+		wxmsw32u_core.lib
+		wxmsw32u_gl.lib
+		wxbase32u.lib
+		wxbase32u_xml.lib    # ← correct XML lib
+		wxmsw32u_xrc.lib
+		wxmsw32u_aui.lib
+	)
+	target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
+		${wxWidgets_INCLUDE_DIRS}
+	)
+    target_link_directories(${PACKAGE_NAME} BEFORE PRIVATE
+        ${wxWidgets_LIB_DIR}
+    )	
+    target_link_libraries(${PACKAGE_NAME}
+        ${wxWidgets_LIBRARIES}
     )
 
-    set(wxWidgets_LIB_DIR "${wxWidgets_ROOT}/build/lib/vc_dll")
-
-    set(wxWidgets_LIBRARIES
-        wxmsw32u_core.lib
-        wxmsw32u_gl.lib
-        wxbase32u.lib
-        wxmsw32u_xml.lib
-        wxmsw32u_xrc.lib
-        wxmsw32u_aui.lib
-    )
 endif()
 
-##---------------------------------------------------------------------------
-## 1. PluginSetup — MUST RUN FIRST
-##    Creates PACKAGE_NAME and add_library(${PACKAGE_NAME} SHARED)
-##---------------------------------------------------------------------------
-include(PluginSetup)
+# Advises Visual Studio what the startup project is when you open the solution. Not essential
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT ${PACKAGE_NAME})
+# Enables Visual Studio  "Solution folders” grouping so projects appear under logical folders. Not essential
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-
-##---------------------------------------------------------------------------
-## wxWidgets Paths (Windows/MSVC only, local dev)
-##---------------------------------------------------------------------------
-set(PLUGIN_SRC_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(PLUGIN_HDR_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-##---------------------------------------------------------------------------
-## 2. PluginConfigure — detects wxWidgets, OpenGL, CURL, etc.
-##---------------------------------------------------------------------------
-include(PluginConfigure)
 
 ##---------------------------------------------------------------------------
 ## Plugin Sources
@@ -191,8 +206,15 @@ set(SRC_LIST
 
 target_sources(${PACKAGE_NAME} PRIVATE ${SRC_LIST})
 
+
 ##---------------------------------------------------------------------------
-## Plugin Include Paths
+## 2. PluginConfigure — detects wxWidgets, OpenGL, CURL, etc.
+##---------------------------------------------------------------------------
+include(PluginConfigure)
+
+
+##---------------------------------------------------------------------------
+## Plugin target include Paths
 ##---------------------------------------------------------------------------
 target_include_directories(${PACKAGE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -200,28 +222,20 @@ target_include_directories(${PACKAGE_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/opencpn-libs/api-${OCPN_API_VERSION_MINOR}
 )
 
+target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+
 ##---------------------------------------------------------------------------
-## Standard OpenCPN Libraries
+## 4. Link plugin against opencpn-libs — After add_subdirectory()
 ##---------------------------------------------------------------------------
-add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
-add_subdirectory(opencpn-libs/tinyxml)
-
-if(NOT UNIX)
-    add_subdirectory(opencpn-libs/bzip2)
-
-    # bzip2 library does not declare its language; force C linker
-    set_target_properties(LIB_BZIP_WR PROPERTIES LINKER_LANGUAGE C)
-endif()
-
-if(WIN32 AND MSVC)
-    add_subdirectory(opencpn-libs/zlib)
-endif()
 
 target_link_libraries(${PACKAGE_NAME}
-    ocpn::api
-    ocpn::tinyxml
-    ocpn::bzip2
-    ocpn::zlib
+		ocpn::api
+		ocpn::tinyxml
+		ocpn::zlib
+		${wxWidgets_LIBRARIES} 
 )
 
 ##---------------------------------------------------------------------------
@@ -234,17 +248,21 @@ target_include_directories(${PACKAGE_NAME} PRIVATE
 )
 
 target_link_libraries(${PACKAGE_NAME}
-    ${GLEW_ROOT}/lib/glew32.lib
+	${GLEW_ROOT}/lib/glew32.lib
 )
 
 ##---------------------------------------------------------------------------
 ## CURL
 ##---------------------------------------------------------------------------
 if(WIN32)
-    target_link_libraries(${PACKAGE_NAME} ${CURL_LIBRARY})
+    target_link_libraries(${PACKAGE_NAME}
+		${CURL_LIBRARY}
+	)
 else()
     find_package(CURL REQUIRED)
-    target_link_libraries(${PACKAGE_NAME} CURL::libcurl)
+    target_link_libraries(${PACKAGE_NAME}
+		CURL::libcurl
+	)
 endif()
 
 ##---------------------------------------------------------------------------

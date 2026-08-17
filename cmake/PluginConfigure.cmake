@@ -30,7 +30,7 @@ if(NOT WIN32 AND NOT QT_ANDROID)
 endif()
 
 # ---------------------------------------------------------------------------
-# 2. wxWidgets Detection (non‑Windows)
+# 2. wxWidgets Detection (non-Windows)
 # ---------------------------------------------------------------------------
 
 if(NOT WIN32 AND NOT QT_ANDROID)
@@ -40,6 +40,16 @@ if(NOT WIN32 AND NOT QT_ANDROID)
     message(STATUS "${CMLOC}wxWidgets Include: ${wxWidgets_INCLUDE_DIRS}")
     message(STATUS "${CMLOC}wxWidgets Libraries: ${wxWidgets_LIBRARIES}")
 endif()
+
+# ---------------------------------------------------------------------------
+# Generate version.h
+# ---------------------------------------------------------------------------
+
+configure_file(
+    ${PROJECT_SOURCE_DIR}/cmake/in-files/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/include/version.h
+)
+
 
 # ---------------------------------------------------------------------------
 # 3. Packaging Metadata (plugin.xml, pkg_version.sh, CPack options)

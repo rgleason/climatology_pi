@@ -57,7 +57,21 @@ if(WIN32 AND MSVC)
         ${wxWidgets_LIBRARIES}
     )
 endif()
+# ---------------------------------------------------------------------------
+# Plugin include directory (required for nlohmann/json.hpp and all plugin headers)
+# ---------------------------------------------------------------------------
 
+target_include_directories(${PACKAGE_NAME} PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+# ---------------------------------------------------------------------------
+# Build-time include directory (required for generated version.h)
+# ---------------------------------------------------------------------------
+
+target_include_directories(${PACKAGE_NAME} PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/include
+)
 
 
 message(STATUS "${CMLOC}PROJECT_VERSION: ${PROJECT_VERSION}")

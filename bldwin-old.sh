@@ -39,7 +39,7 @@ cmake -T v143 -A Win32 \
   ..
 
 # BUILD ONLY THE PLUGIN TARGET - whatever ${PACKAGE_NAME} is.
-cmake --build . --target climatology_pi --config relwithdebinfo > ../output.txt
+cmake --build . --config relwithdebinfo > ../output.txt
 
 # STEP 2: Build the installer (CPack)
 cmake --build . --target package --config relwithdebinfo
