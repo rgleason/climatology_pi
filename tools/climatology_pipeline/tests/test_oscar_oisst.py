@@ -32,6 +32,25 @@ def test_oscar_transposes_official_lon_lat_layout(tmp_path: Path) -> None:
     np.testing.assert_allclose(result.monthly_source(2)[1], -2.0)
 
 
+def test_oscar_accepts_official_julian_calendar(tmp_path: Path) -> None:
+    dataset = xr.Dataset(
+        {"u": (("time", "longitude", "latitude"), [[[1.0]]], {"units": "m s-1"}),
+         "v": (("time", "longitude", "latitude"), [[[-2.0]]], {"units": "m s-1"}),
+         "lat": (("latitude",), [0.0]),
+         "lon": (("longitude",), [0.0])},
+        coords={"time": np.array(["1995-01-01"], dtype="datetime64[ns]"),
+                "latitude": [0.0], "longitude": [0.0]},
+    )
+    path = tmp_path / "oscar-julian.nc"
+    dataset.to_netcdf(
+        path,
+        encoding={"time": {"calendar": "julian", "units": "days since 1990-01-01"}},
+    )
+    result = ingest_oscar_files([path], start="1995-01-01", end="1995-01-01")
+    np.testing.assert_allclose(result.monthly_source(1)[0], 1.0)
+    np.testing.assert_allclose(result.monthly_source(1)[1], -2.0)
+
+
 def test_oscar_rejects_wrong_units(tmp_path: Path) -> None:
     dataset = xr.Dataset(
         {"u": (("time", "lat", "lon"), [[[1.]]], {"units": "knots"}),

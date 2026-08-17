@@ -23,6 +23,18 @@ def _coordinate(dataset, *names: str) -> str:
     raise ValueError(f"none of the required coordinates exists: {', '.join(names)}")
 
 
+def _calendar_date(value: object) -> date:
+    """Return a civil date for NumPy, Python or cftime calendar values."""
+    if isinstance(value, np.datetime64):
+        if np.isnat(value):
+            raise ValueError("OSCAR contains a missing time coordinate")
+        return date.fromisoformat(np.datetime_as_string(value, unit="D"))
+    try:
+        return date(int(value.year), int(value.month), int(value.day))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError(f"unsupported OSCAR time coordinate {value!r}") from exc
+
+
 def ingest_oscar_files(paths: list[Path], *, start: str = "1995-01-01",
                        end: str = "2022-08-05",
                        accumulator: CurrentAccumulator | None = None) -> CurrentAccumulator:
@@ -31,12 +43,17 @@ def ingest_oscar_files(paths: list[Path], *, start: str = "1995-01-01",
         import xarray as xr
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("install the pipeline's source dependencies") from exc
-    start64, end64 = np.datetime64(start), np.datetime64(end)
     for path in sorted(paths):
         with xr.open_dataset(path) as dataset:
             lat_name = _coordinate(dataset, "lat", "latitude")
             lon_name = _coordinate(dataset, "lon", "longitude")
             time_name = _coordinate(dataset, "time")
+            coordinate_names = (lat_name, lon_name, time_name)
+            if any(len(dataset[name].dims) != 1 for name in coordinate_names):
+                raise ValueError(f"{path}: OSCAR coordinates must be one-dimensional")
+            lat_dim = dataset[lat_name].dims[0]
+            lon_dim = dataset[lon_name].dims[0]
+            time_dim = dataset[time_name].dims[0]
             for variable in ("u", "v"):
                 if variable not in dataset:
                     raise ValueError(f"{path}: missing {variable}")
@@ -51,13 +68,29 @@ def ingest_oscar_files(paths: list[Path], *, start: str = "1995-01-01",
                   not np.array_equal(accumulator.longitudes, np.mod(longitude, 360.0))):
                 raise ValueError(f"{path}: OSCAR grid changed within input sequence")
             times = np.asarray(dataset[time_name].values)
-            selected = np.flatnonzero((times >= start64) & (times <= end64))
+            if times.ndim != 1:
+                raise ValueError(f"{path}: OSCAR time coordinate must be one-dimensional")
+            calendar_dates = [_calendar_date(value) for value in times]
+            ordinals = np.fromiter(
+                (value.toordinal() for value in calendar_dates),
+                dtype=np.int64,
+                count=len(calendar_dates),
+            )
+            selected = np.flatnonzero(
+                (ordinals >= date.fromisoformat(start).toordinal())
+                & (ordinals <= date.fromisoformat(end).toordinal())
+            )
             if not len(selected):
                 continue
-            for month in np.unique(times[selected].astype("datetime64[M]").astype(np.int64) % 12 + 1):
-                indices = selected[(times[selected].astype("datetime64[M]").astype(np.int64) % 12 + 1) == month]
-                u = dataset["u"].isel({time_name: indices}).transpose(time_name, lat_name, lon_name).values
-                v = dataset["v"].isel({time_name: indices}).transpose(time_name, lat_name, lon_name).values
+            months = np.fromiter(
+                (value.month for value in calendar_dates),
+                dtype=np.int8,
+                count=len(calendar_dates),
+            )
+            for month in np.unique(months[selected]):
+                indices = selected[months[selected] == month]
+                u = dataset["u"].isel({time_dim: indices}).transpose(time_dim, lat_dim, lon_dim).values
+                v = dataset["v"].isel({time_dim: indices}).transpose(time_dim, lat_dim, lon_dim).values
                 accumulator.add(int(month), u, v)
     if accumulator is None:
         raise ValueError("no OSCAR input files supplied")
