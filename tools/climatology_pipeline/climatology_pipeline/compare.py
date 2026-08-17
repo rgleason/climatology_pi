@@ -32,6 +32,24 @@ CURRENT_SYSTEMS = (
     ("Antarctic Circumpolar Current", -50., 0.),
 )
 SECTOR_NAMES = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+WIND_EXPECTED = {
+    "North Atlantic westerlies": {"SW", "W", "NW"},
+    "NE trade-wind Atlantic": {"N", "NE", "E"},
+    "tropical convergence region": {"NE", "E", "SE", "S", "SW"},
+    "Southern Ocean": {"SW", "W", "NW"},
+    "Mediterranean": {"N", "NE", "W", "NW"},
+    "Indian Ocean monsoon": {"N", "NE", "E", "SW", "W"},
+}
+CURRENT_EXPECTED = {
+    "Gulf Stream": (0.0, 100.0),
+    "North Atlantic Drift": (20.0, 140.0),
+    "Canary Current": (120.0, 240.0),
+    "North Equatorial Current": (220.0, 320.0),
+    "Equatorial Countercurrent": (40.0, 140.0),
+    "Kuroshio": (0.0, 110.0),
+    "Agulhas": (120.0, 240.0),
+    "Antarctic Circumpolar Current": (40.0, 140.0),
+}
 
 
 def _wind_cell(latitude: float, longitude: float) -> tuple[int, int]:
@@ -91,22 +109,59 @@ def scalar_sample(directory: Path, name: str, month: int,
     return None if not np.isfinite(value) else float(value)
 
 
+def _wind_check(name: str, sample: dict[str, object]) -> dict[str, object]:
+    expected = sorted(WIND_EXPECTED[name])
+    passed = bool(
+        sample.get("valid") and
+        sample.get("prevailing_from") in WIND_EXPECTED[name] and
+        abs(float(sample.get("frequency_sum_percent", 0.0)) - 100.0) < 0.01 and
+        0.0 < float(sample.get("prevailing_mean_speed_kn", 0.0)) < 60.0
+    )
+    return {
+        "passed": passed,
+        "severity": "advisory",
+        "expected_prevailing_from": expected,
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden",
+    }
+
+
+def _current_check(name: str, sample: dict[str, object]) -> dict[str, object]:
+    lower, upper = CURRENT_EXPECTED[name]
+    bearing = float(sample.get("bearing_to_deg_true", -1.0))
+    passed = bool(
+        sample.get("valid") and lower <= bearing <= upper and
+        0.02 <= float(sample.get("speed_kn", 0.0)) <= 6.5
+    )
+    return {
+        "passed": passed,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [lower, upper],
+        "note": "Broad current-system check; coastal position and season can legitimately matter",
+    }
+
+
 def comparison(old: Path, new: Path) -> dict[str, object]:
     result: dict[str, object] = {"wind": [], "current": [], "scalar": []}
     for month in (1, 7):
         for name, latitude, longitude in WIND_REGIONS:
+            old_sample = wind_sample(old, month, latitude, longitude)
+            new_sample = wind_sample(new, month, latitude, longitude)
             result["wind"].append({
                 "region": name, "month": month, "latitude": latitude,
                 "longitude": longitude,
-                "old": wind_sample(old, month, latitude, longitude),
-                "new": wind_sample(new, month, latitude, longitude),
+                "old": old_sample,
+                "new": new_sample,
+                "new_sanity": _wind_check(name, new_sample),
             })
         for name, latitude, longitude in CURRENT_SYSTEMS:
+            old_sample = current_sample(old, month, latitude, longitude)
+            new_sample = current_sample(new, month, latitude, longitude)
             result["current"].append({
                 "system": name, "month": month, "latitude": latitude,
                 "longitude": longitude,
-                "old": current_sample(old, month, latitude, longitude),
-                "new": current_sample(new, month, latitude, longitude),
+                "old": old_sample,
+                "new": new_sample,
+                "new_sanity": _current_check(name, new_sample),
             })
     for field in SCALAR_DEFINITIONS:
         if not (old / f"{field}.gz").exists() or not (new / f"{field}.gz").exists():

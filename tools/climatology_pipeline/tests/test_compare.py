@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from climatology_pipeline.compare import current_sample, wind_sample
+from climatology_pipeline.compare import (_current_check, _wind_check,
+                                          current_sample, wind_sample)
 from climatology_pipeline.legacy import (CurrentField, WindAtlas, encode_current,
                                          encode_wind, encode_wind_extras,
                                          write_gzip)
@@ -24,6 +25,7 @@ def test_geographical_wind_and_current_samples(tmp_path) -> None:
     assert sampled_wind["frequency_sum_percent"] == 100.
     assert sampled_wind["calm_percent"] == 7.
     assert sampled_wind["gale_percent"] == 3.
+    assert _wind_check("North Atlantic westerlies", sampled_wind)["passed"]
 
     u = np.full((481, 1080), .5)
     v = np.full((481, 1080), .5)
@@ -31,3 +33,4 @@ def test_geographical_wind_and_current_samples(tmp_path) -> None:
     sampled_current = current_sample(tmp_path, 1, 38., -68.)
     assert sampled_current["speed_kn"] == np.hypot(.5, .5)
     assert sampled_current["bearing_to_deg_true"] == 45.
+    assert _current_check("Gulf Stream", sampled_current)["passed"]
