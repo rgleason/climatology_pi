@@ -65,6 +65,8 @@ Focused fixes include:
 * source-safe, atomic acquisition checkpoints;
 * bounded and retried Earthdata catalogue/granule reads, preventing one
   stalled object from holding an otherwise complete monthly batch forever;
+* process-lifetime checkpoint ownership, preventing concurrent source writers
+  from racing the same otherwise atomic progress file;
 * versioned-dataset fail-closed recovery, preventing a damaged modern bundle
   from being silently mixed with downloaded historical files;
 * defined function-pointer formatting at the variadic boundary while retaining
@@ -116,7 +118,7 @@ wrapping, exact date/time interpolation, calm/gale distributions, cyclone
 encoding, provenance consistency, storage-budget enforcement, exact parallel
 checkpoint merging and the Weather Routing ABI.
 
-The 109 Python source-pipeline/data tests pass under the recorded environment,
+The 110 Python source-pipeline/data tests pass under the recorded environment,
 as do both C++ tests in normal and Release builds.  Both tests also pass with
 AddressSanitizer and UndefinedBehaviorSanitizer.  LeakSanitizer alone is
 disabled for that run because it cannot operate in this ptrace-based execution
