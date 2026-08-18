@@ -17,6 +17,7 @@ import numpy as np
 from .budget import oscar_plan
 from .current import CurrentAccumulator
 from .legacy import decode_current, encode_current, write_gzip
+from .locking import checkpoint_lock
 
 
 def _install_session_timeouts(earthaccess) -> None:
@@ -308,9 +309,10 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("inputs cannot be combined with --earthdata")
         if args.workspace is None or args.checkpoint is None:
             parser.error("--earthdata requires --workspace and --checkpoint")
-        accumulator = acquire_oscar(args.workspace, args.checkpoint,
-                                    start=args.start, end=args.end,
-                                    budget_gb=args.budget_gb)
+        with checkpoint_lock(args.checkpoint):
+            accumulator = acquire_oscar(args.workspace, args.checkpoint,
+                                        start=args.start, end=args.end,
+                                        budget_gb=args.budget_gb)
     else:
         if not args.inputs:
             parser.error("supply NetCDF inputs or use --earthdata")

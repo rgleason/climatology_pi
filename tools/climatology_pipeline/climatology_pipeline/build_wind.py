@@ -13,6 +13,7 @@ from .budget import era5_wind_plan
 from .atmosphere import AtmosphereAccumulator, ERA5_ATMOSPHERE_VARIABLES
 from .era5 import accumulate_wind, google_arco_source, open_source, weatherbench_source
 from .legacy import encode_wind, encode_wind_extras, write_gzip
+from .locking import checkpoint_lock
 from .wind import WindAccumulator
 
 
@@ -125,7 +126,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.start_year > args.end_year:
         parser.error("start year must not exceed end year")
-    build(args)
+    with checkpoint_lock(args.checkpoint):
+        build(args)
 
 
 if __name__ == "__main__":

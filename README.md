@@ -39,7 +39,9 @@ pytest -q
 
 The default acquisition plan enforces a 100 GB decimal peak-workspace ceiling.
 ERA5 and OSCAR are folded into bounded checkpoints; complete raw archives are
-not retained.
+not retained. Each source checkpoint is also protected by a process-lifetime
+lock, so accidentally starting two writers fails immediately instead of
+racing an otherwise atomic publication.
 
 ## Rebuild individual products
 

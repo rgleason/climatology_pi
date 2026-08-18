@@ -352,6 +352,17 @@ backoff attempts.  A failed month never advances the source-bound checkpoint;
 partial files remain temporary and are removed.  A regression test simulates
 the stalled first attempt and verifies retry, timeout and atomic publication.
 
+### D031 — Give every long-running source checkpoint one writer
+
+Atomic replacement prevents a torn checkpoint but cannot by itself stop two
+builders from alternately publishing different progress to the same path. A
+host-process audit during the release build found two orphaned duplicate ERA5
+workers and they were stopped before the final merge. ERA5 and authenticated
+OSCAR entry points now hold a non-blocking operating-system lock for the full
+checkpoint lifecycle. A killed process releases the lock automatically; the
+small persistent lock file therefore cannot become stale. Different temporal
+partitions remain safe to run concurrently because they use distinct paths.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
