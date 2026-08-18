@@ -70,11 +70,15 @@ def test_every_released_cyclone_file_decodes(filename: str, southern: bool) -> N
     assert min(point.year for track in populated for point in track.points) >= 1850
 
 
-def test_released_atlantic_history_exposes_generator_cutoff_mismatch() -> None:
+def test_released_atlantic_history_matches_declared_modern_period() -> None:
     tracks = decode_cyclones(DATA / "cyclone-atl.gz")
-    # Despite gencyclonedata.cpp claiming a 1968 cutoff, the released Atlantic
-    # file begins in 1851.  This mismatch is intentionally regression-tested.
-    assert min(point.year for track in tracks for point in track.points) == 1851
+    years = [point.year for track in tracks for point in track.points]
+    # The historical package began in 1851 despite its generator claiming a
+    # 1968 cutoff; that audited mismatch is documented in LEGACY_DATA_FORMAT.md.
+    # modern package instead has an explicit, machine-readable 1995--2024
+    # climatological period and the encoded tracks must honour it.
+    assert min(years) == 1995
+    assert max(years) == 2024
 
 
 def test_wind_round_trip_and_independent_wire_layout() -> None:

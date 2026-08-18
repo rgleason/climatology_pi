@@ -1,0 +1,81 @@
+{
+  "cadence": "six-hourly",
+  "position": "IBTrACS main-track LAT/LON",
+  "pressure": "USA_PRES; zero denotes unavailable in legacy format",
+  "report_schema": 1,
+  "selection_period": [
+    "1995-01-01",
+    "2024-12-31"
+  ],
+  "source_object": "ibtracs.ALL.list.v04r01.csv",
+  "source_product": "IBTrACS.ALL.v04r01",
+  "source_sha256": "7047a3f831fc2511484d5c7c4dca07ce114e1a9951ddd6e6f685a7f54faf3e2b",
+  "statistics": {
+    "accepted_rows": 96838,
+    "input_rows": 725856,
+    "points_with_pressure": 69411,
+    "points_with_wind": 84417,
+    "skipped_non_main": 16209,
+    "skipped_position": 0,
+    "skipped_time": 612809,
+    "tracks": 3096
+  },
+  "theatres": {
+    "atl": {
+      "file_sha256": "203c897fff1a99de32401bf41e71b16876a9623c035c3a50b6cf6b69296a398d",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 15558,
+      "pressure_available": 15558,
+      "tracks": 527,
+      "wind_available": 15558
+    },
+    "epa": {
+      "file_sha256": "7ddffe6bf03ab8100cc70721392d8e11da0d233d62ec561fcf41912eab913bd5",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 15593,
+      "pressure_available": 14823,
+      "tracks": 719,
+      "wind_available": 15435
+    },
+    "nio": {
+      "file_sha256": "748636e5b150a333419c3cb88bac2dee4f49a7903e2cd294a07d5043862d7397",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 5382,
+      "pressure_available": 3151,
+      "tracks": 302,
+      "wind_available": 4120
+    },
+    "she": {
+      "file_sha256": "6329d2d821c79b00b7fffd2040e7943c34eeef9375014e4280246f1a27db4a9c",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 20455,
+      "pressure_available": 11880,
+      "tracks": 558,
+      "wind_available": 16342
+    },
+    "spa": {
+      "file_sha256": "a448dfb91146f7a19ddbc4ff1e9e47d3a1bc757e51cec20deeb8f5c13ac433ef",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 9585,
+      "pressure_available": 5113,
+      "tracks": 339,
+      "wind_available": 7385
+    },
+    "wpa": {
+      "file_sha256": "3f215411d1e7b91df98535947c85824b20ec5ed246c021c8a6ab79748747d81c",
+      "first_year": 1995,
+      "last_year": 2024,
+      "points": 30265,
+      "pressure_available": 18886,
+      "tracks": 929,
+      "wind_available": 25577
+    }
+  },
+  "track_type": "main",
+  "wind": "USA_WIND homogeneous one-minute; zero denotes unavailable in legacy format"
+}
