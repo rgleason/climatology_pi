@@ -134,13 +134,63 @@ Atlantic Drift, Canary Current, North Equatorial Current, Equatorial
 Countercurrent, Kuroshio, Agulhas and Antarctic Circumpolar Current.  They are
 labelled advisory rather than misrepresented as statistical confidence tests.
 
+All 52 manifest outputs independently match their recorded SHA-256 checksums.
+The final comparison passes 28/28 regional physical sanity checks and 4/4 hard
+source-binding checks.  January and July wind masks, sector frequencies,
+sector speeds, calm probability and gale probability reproduce the
+source-derived ERA5 checkpoint exactly after wire quantisation.  January and
+July OSCAR valid masks are exact and each current component is within the
+legacy 0.025 kn half-step tolerance (largest observed error 0.02499999 kn).
+
+For context, the paired global old/new scalar differences are:
+
+| Field | Bias (new - old) | MAE | RMSE |
+|---|---:|---:|---:|
+| Sea-level pressure | +0.088 hPa | 1.863 hPa | 3.655 hPa |
+| Sea-surface temperature | +0.314 C | 0.600 C | 0.870 C |
+| Air temperature | -0.628 C | 0.886 C | 1.825 C |
+| Cloud cover | +2.150 percentage points | 9.815 | 15.419 |
+| Precipitation | +0.299 mm/day | 0.616 mm/day | 1.154 mm/day |
+| Relative humidity | -2.098 percentage points | 3.592 | 5.579 |
+
+These differences are expected to include both the much newer period and
+source/method changes; they are comparison diagnostics, not an assertion that
+the historical field was ground truth.  The full cell counts, paired masks and
+regional values remain in the machine-readable report.
+
+The packaged data occupy about 11 MB (60 files); the Release shared library is
+977,848 bytes.  The largest observed temporary working set during acquisition
+was about 7.4 GB, far below the 100 GB project ceiling.  The completed source
+workspace is about 3.7 GB and is disposable after release verification.
+
 ## Deployment boundary
 
-The release is built and deployed only through the isolated launcher at
-`/home/paul/Test-OpenCPN/bin/launch-test-opencpn`, whose binary, config,
-plugin-library and plugin-data roots are all below `/home/paul/Test-OpenCPN`.
-The normal OpenCPN 5.15 installation and profile are protected by pre/post
-checksums and are not installation targets.
+The release was built and deployed only through the isolated launcher at
+`/home/paul/Test-OpenCPN/bin/launch-test-opencpn`.  Its installed library is:
+
+`/home/paul/Test-OpenCPN/config/plugins/lib/libclimatology_pi.so`
+
+and its data/resource root is:
+
+`/home/paul/Test-OpenCPN/config/plugins/climatology_pi`
+
+The library SHA-256 is
+`3bec33d2aad6d516f2e12779a953f4d47deb589846ed7f5ac0d919f45c2e93a9`.
+All 52 installed manifest outputs were rehashed successfully after copying.
+The rollback backup is
+`/home/paul/Test-OpenCPN/backups/climatology-20260818T063319Z`.
+
+OpenCPN 5.14's real plugin loader found four candidates, declared Climatology
+compatible, loaded it, selected the expected isolated data directory, loaded
+its toolbar/panel resources and translation catalogue, and completed startup.
+No Climatology error or warning remained in the second launch.  The only
+warning was OpenCPN's unrelated failure to enumerate a network interface.
+
+The normal OpenCPN 5.15 installation and profile were protected by pre/post
+sentinels and were not installation targets.  Their library and configuration
+SHA-256 values, sizes and modification times remained unchanged; the complete
+production Climatology data-tree sentinel also remained unchanged across the
+installation and runtime test.
 
 ## Remaining limitations
 
@@ -157,3 +207,7 @@ checksums and are not installation targets.
 * Climatology describes historical frequency and mean conditions.  It cannot
   replace forecasts, current observations, prudent seamanship or official
   navigation products.
+* Automated tests and the real loader establish data, ABI and startup
+  behaviour.  A navigator should still make a human visual pass over each
+  overlay/control and exercise a representative xWeatherRouting route before
+  promotion from Test-OpenCPN to the working installation.

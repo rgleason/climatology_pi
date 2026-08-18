@@ -388,13 +388,20 @@ report rather than being represented as statistical confidence tests.
 * Calling the anonymous historical bundle “dataset v1” — no such upstream
   version convention has been established.
 
-## Open validation gates
+## Completed validation gates
 
-1. Strictly decode every released file and freeze representative metadata.
-2. Round-trip synthetic files independently within wire quantisation.
-3. Validate spatial orientation, the dateline, poles, missing coasts, and
-   mid-month temporal interpolation.
-4. Build source-specific modern products and compare source grid samples.
-5. Exercise the exact Weather Routing pointer semantics in a harness.
-6. Build with warnings and sanitizers where supported.
-7. install and validate only in Test-OpenCPN, then inspect its isolated log.
+1. Every released file decodes strictly and representative metadata is frozen.
+2. Independent synthetic round trips pass within wire quantisation.
+3. Spatial orientation, dateline, poles, missing coasts and exact temporal
+   interpolation have regression coverage.
+4. All source-specific products are built; 28/28 physical checks and 4/4 hard
+   source-binding checks pass, including exact ERA5 wind bytes and OSCAR U/V
+   within the 0.025 kn half-step.
+5. The exact Weather Routing pointer declarations are exercised by the ABI
+   harness without changing the consumer.
+6. Release, AddressSanitizer and UndefinedBehaviorSanitizer tests pass; Clang
+   static analysis reports no findings.
+7. Plugin 1.6.38.0 and dataset ocpn-climatology-2026.1 are installed only in
+   Test-OpenCPN.  Its real 5.14 loader reports the plugin compatible and loads
+   the isolated resources without a Climatology error or warning.  Production
+   OpenCPN sentinels remain unchanged.
