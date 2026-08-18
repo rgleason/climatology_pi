@@ -26,11 +26,11 @@ WIND_REGIONS = (
 CURRENT_SYSTEMS = (
     ("Gulf Stream", 38., -68.),
     ("North Atlantic Drift", 50., -30.),
-    ("Canary Current", 28., -17.),
+    ("Canary Current", 27., -17.),
     ("North Equatorial Current", 10., -40.),
     ("Equatorial Countercurrent", 5., -25.),
-    ("Kuroshio", 32., 140.),
-    ("Agulhas", -35., 25.),
+    ("Kuroshio", 34., 140.),
+    ("Agulhas", -34., 28.),
     ("Antarctic Circumpolar Current", -50., 0.),
 )
 SECTOR_NAMES = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")

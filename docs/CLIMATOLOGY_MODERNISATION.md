@@ -363,6 +363,18 @@ checkpoint lifecycle. A killed process releases the lock automatically; the
 small persistent lock file therefore cannot become stale. Different temporal
 partitions remain safe to run concurrently because they use distinct paths.
 
+### D032 — Advisory current checks sample the core flow, not adjacent eddies
+
+The first complete OSCAR comparison passed every hard source-binding check but
+exposed three poor single-cell sanity locations. The Canary point intersected
+a weak Canary-Islands/eddy cell, the Kuroshio point lay east of its principal
+core, and the Agulhas point was beyond the retroflection turn. Neighbourhood
+inspection of the independently encoded field selected nearby core-flow cells
+which retain the published broad direction in both January and July: 27 N,
+17 W; 34 N, 140 E; and 34 S, 28 E respectively. Expected bearing limits were
+not widened. These checks remain advisory and are preserved in the release
+report rather than being represented as statistical confidence tests.
+
 ## Rejected alternatives
 
 * Monthly mean U/V as a wind atlas — invalid distributional substitution.
