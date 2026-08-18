@@ -186,11 +186,36 @@ its toolbar/panel resources and translation catalogue, and completed startup.
 No Climatology error or warning remained in the second launch.  The only
 warning was OpenCPN's unrelated failure to enumerate a network interface.
 
-The normal OpenCPN 5.15 installation and profile were protected by pre/post
-sentinels and were not installation targets.  Their library and configuration
-SHA-256 values, sizes and modification times remained unchanged; the complete
-production Climatology data-tree sentinel also remained unchanged across the
-installation and runtime test.
+During the isolated implementation phase, the normal OpenCPN 5.15 installation
+and profile were protected by pre/post sentinels and were not installation
+targets.  Their library, configuration and data-tree sentinels remained
+unchanged throughout that phase.
+
+## Subsequent promotion to working OpenCPN
+
+After the isolated validation was complete, the user explicitly requested the
+same tested artefacts be promoted to working OpenCPN 5.15.0.  The production
+library and complete plugin data/resource tree were transactionally replaced;
+the existing configuration was not part of the installation and was restored
+byte-for-byte after runtime validation.  The installed locations are:
+
+* `/usr/lib/opencpn/libclimatology_pi.so` (also visible through Arch Linux's
+  `/usr/lib64` symlink);
+* `/usr/share/opencpn/plugins/climatology_pi`.
+
+The rollback backup is
+`/home/paul/OpenCPN-plugin-backups/climatology-working-20260818T065548Z`.
+All 52 installed manifest outputs pass their checksums and the production
+library has the same
+`3bec33d2aad6d516f2e12779a953f4d47deb589846ed7f5ac0d919f45c2e93a9`
+SHA-256 as the Test-OpenCPN artefact.
+
+Runtime validation used the actual desktop launcher
+`/home/paul/bin/opencpn-gribmerge`, which starts the in-tree OpenCPN 5.15.0
+binary with the user's xWeatherRouting/xGRIB search paths.  OpenCPN declared
+Climatology compatible, loaded the new library, selected the production data
+directory and loaded its resources and translation catalogue without a
+Climatology error or warning.
 
 ## Remaining limitations
 
