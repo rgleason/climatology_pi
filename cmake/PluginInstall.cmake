@@ -10,9 +10,11 @@ if (OCPN_FLATPAK_CONFIG)
   return()
 endif (OCPN_FLATPAK_CONFIG)
 
-if (NOT APPLE)
+# Only Linux/macOS use wxWidgets_LIBRARIES, windows will not execute this.
+if (UNIX AND NOT APPLE)
   target_link_libraries(${PACKAGE_NAME} ${wxWidgets_LIBRARIES} ${EXTRA_LIBS})
-endif (NOT APPLE)
+endif()
+
 
 if (WIN32)
   if (MSVC)

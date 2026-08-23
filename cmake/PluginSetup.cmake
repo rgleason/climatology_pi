@@ -28,51 +28,83 @@ else (NOT ${PACKAGE} MATCHES "(.*)_pi")
 endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
 string(TOUPPER "${PACKAGE}" TITLE_NAME)
 
-project(
-    ${PACKAGE}
-    LANGUAGES CXX
-    VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}
-)
+# project(
+#    ${PACKAGE}
+#    LANGUAGES CXX
+#    VERSION ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}
+# )
 
-# add library for use later
+# ------------------------------------------------------------- 
+#  wxWidgets auto detector for Windows/MSVC
+# ------------------------------------------------------------- 
+# Try explicit hint first (user can override from command line):
+#   -DwxWidgets_ROOT=C:/Users/fcgle/source/ocpn_wxWidgets
+
+if(NOT wxWidgets_ROOT)
+    get_filename_component(_SRC_ROOT "${CMAKE_SOURCE_DIR}" DIRECTORY)
+    set(_WX_CANDIDATE_1 "${_SRC_ROOT}/ocpn_wxWidgets")
+    set(_WX_CANDIDATE_2 "C:/Users/fcgle/source/ocpn_wxWidgets")
+
+    if(EXISTS "${_WX_CANDIDATE_1}/lib/vc_dll/mswu/wx/setup.h")
+        set(wxWidgets_ROOT "${_WX_CANDIDATE_1}")
+    elseif(EXISTS "${_WX_CANDIDATE_2}/lib/vc_dll/mswu/wx/setup.h")
+        set(wxWidgets_ROOT "${_WX_CANDIDATE_2}")
+    else()
+        message(FATAL_ERROR "wxWidgets auto-detect failed …")
+    endif()
+endif()
+
+set(OCPN_WXWIDGETS_INCLUDE_DIR     "${wxWidgets_ROOT}/include")
+set(OCPN_WXWIDGETS_GL_INCLUDE_DIR  "${wxWidgets_ROOT}/lib/vc_dll/mswu")
+set(OCPN_WXWIDGETS_LIB_DIR         "${wxWidgets_ROOT}/lib/vc_dll")
+
+message(STATUS "wxWidgets ROOT:        ${wxWidgets_ROOT}")
+message(STATUS "wxWidgets include:     ${OCPN_WXWIDGETS_INCLUDE_DIR}")
+message(STATUS "wxWidgets GL include:  ${OCPN_WXWIDGETS_GL_INCLUDE_DIR}")
+message(STATUS "wxWidgets lib dir:     ${OCPN_WXWIDGETS_LIB_DIR}")
+
+
+# -------------------------------------------
+# Create the plugin Target 
+# -------------------------------------------
 add_library(${PACKAGE_NAME} SHARED)
 
 # ---------------------------------------------------------------------------
-# wxWidgets include/link (Windows/MSVC only) — MUST be applied before compile
+# Attach  wxWidgets include dirs and build-time include (Win/MSVC) Apply after add_library before compile
 # ---------------------------------------------------------------------------
-# Apply before anything, immediately after add_library
-
-if(WIN32 AND MSVC)
-    message(STATUS "${CMLOC}Applying MSVC wxWidgets include/link paths (EARLY)")
-
-    target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
-        ${wxWidgets_INCLUDE_DIRS}
-    )
-
-    target_link_directories(${PACKAGE_NAME} BEFORE PRIVATE
-        ${wxWidgets_LIB_DIR}
-    )
-
-    target_link_libraries(${PACKAGE_NAME}
-        ${wxWidgets_LIBRARIES}
-    )
-endif()
-# ---------------------------------------------------------------------------
-# Plugin include directory (required for nlohmann/json.hpp and all plugin headers)
-# ---------------------------------------------------------------------------
-
 target_include_directories(${PACKAGE_NAME} PRIVATE
+    # wxWidgets: config-specific setup.h FIRST
+    ${OCPN_WXWIDGETS_GL_INCLUDE_DIR}  # ../lib/vc_dll/mswu
+    ${OCPN_WXWIDGETS_INCLUDE_DIR}     # ../include
+
+    # Plugin include + build-time include (generated version.h)
     ${PROJECT_SOURCE_DIR}/include
-)
-
-# ---------------------------------------------------------------------------
-# Build-time include directory (required for generated version.h)
-# ---------------------------------------------------------------------------
-
-target_include_directories(${PACKAGE_NAME} PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 
+# After target_include_directories(${PACKAGE_NAME} PRIVATE ...)
+# Ensure we use wxWidgets as DLLs (matches ocpn_wxWidgets build)
+target_compile_definitions(${PACKAGE_NAME} PRIVATE
+    WXUSINGDLL
+    WXUSINGDLL_BASE
+    WXUSINGDLL_CORE
+)
+
+get_target_property(_incs ${PACKAGE_NAME} INCLUDE_DIRECTORIES)
+message(STATUS "PACKAGE_NAME includes: ${_incs}")
+
+# --------------------------------------------------------
+# Attach wxWidgets lib directory
+# --------------------------------------------------------
+target_link_directories(${PACKAGE_NAME} BEFORE PRIVATE
+    ${OCPN_WXWIDGETS_LIB_DIR}
+)
+
+# ---------------------------------------------------------------------------
+# 14. Explicit wxWidgets linking (Release Unicode, Win32, MSVC, dynamic)
+#     This is the critical section that resolves ALL wx global symbols.
+# ---------------------------------------------------------------------------
+# Handled in PluginConfigure.cmake
 
 message(STATUS "${CMLOC}PROJECT_VERSION: ${PROJECT_VERSION}")
 
