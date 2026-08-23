@@ -20,6 +20,11 @@
 
 # Enable command tracing
 
+
+
+# For correct env":  call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x86 -host_arch=x86
+
+
 #!/bin/bash
 set -x
 
