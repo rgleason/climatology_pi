@@ -44,13 +44,14 @@ public:
     bool AllRequiredAvailable() const;
 	bool AllFilesPresent() const;
 
-	void OnDownloadProgress(wxCommandEvent& event);
-	void DestroyProgressDialog();
     void StartBackgroundDownload(bool interactive);
     void Cancel();
 	
-	bool CurlDownload(wxString url, const wxString& dest);
-
+	bool CurlDownload(wxString url, const wxString& dest);	
+	
+	void OnDownloadProgress(wxCommandEvent& event);
+	void DestroyProgressDialog();
+	
 private:
     friend class DownloadWorker;
 
@@ -58,11 +59,9 @@ private:
     wxString  m_dataDir;
 
     std::vector<DownloadFileEntry> m_files;
-    DownloadWorker* m_worker = nullptr;
-
-	wxGenericProgressDialog* m_progress = nullptr;
-
-
     mutable std::mutex m_mutex;
-    bool m_cancelled = false;
+    bool m_cancelled = false;	
+	
+    DownloadWorker* m_worker = nullptr;
+	wxGenericProgressDialog* m_progress = nullptr;
 };

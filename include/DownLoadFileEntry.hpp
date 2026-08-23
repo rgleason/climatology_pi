@@ -4,6 +4,8 @@
 
 #include <string>
 
+// no DownloadFileEntry.cpp
+
 struct DownloadFileEntry {
     std::string filename;
     std::string description;

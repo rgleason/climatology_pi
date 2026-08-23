@@ -1,15 +1,10 @@
 /******************************************************************************
  * ClimatologyDialog.cpp  —  Modern hand-written first dialog
  ******************************************************************************/
-#include "ClimatologyDialog.h"
-#include "ClimatologyOverlayFactory.h"
-#include "ClimatologyConfigDialog.h"
 
-// These can be moved here if removed from the header
-#include "ClimatologyEnums.h"
-#include "CycloneFilterParams.h"
-#include "CycloneUtils.h"
-#include "CycloneStructs.h"
+// Otherwise MSVC will misorder wx includes (wx/wxprec.h)
+// and the plugin API symbols will not resolve.
+#include "ocpn_plugin_guarded.h"
 
 // wxWidgets includes (only in .cpp)
 #include <wx/wxprec.h>
@@ -23,6 +18,15 @@
 #include <wx/choice.h>
 #include <wx/timer.h>
 #include <wx/html/htmlwin.h>
+
+#include "ClimatologyDialog.h"
+#include "ClimatologyOverlayFactory.h"
+#include "ClimatologyConfigDialog.h"
+
+#include "ClimatologyEnums.h"
+#include "CycloneFilterParams.h"
+#include "CycloneUtils.h"
+#include "CycloneStructs.h"
 
 extern ClimatologyOverlayFactory* g_pOverlayFactory;
 

@@ -1,6 +1,10 @@
 #include <GL/glew.h>
 #include "gldefs.h"
 
+// Otherwise MSVC will misorder wx includes (wx/wxprec.h)
+// and the plugin API symbols will not resolve.
+#include "ocpn_plugin_guarded.h"
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>

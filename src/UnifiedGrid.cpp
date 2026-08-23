@@ -1,4 +1,6 @@
 #include "UnifiedGrid.h"
+#include "CycloneStructs.h"
+#include "ClimatologyDataModel.h"
 
 // ============================================================================
 // Full UnifiedGrid.cpp — Modern unified climatology model
@@ -89,30 +91,79 @@ void UnifiedGrid::IndexToLatLon(int index, double& lat, double& lon) const
 // Normalization
 // ----------------------------------------------------------------------------
 
-float UnifiedGrid::NormalizeRawData(float value) const
+void UnifiedGrid::NormalizeRawData()
 {
-    if (std::isnan(value))
-        return 0.0f;
-
-    // Simple linear normalization placeholder
-    return value;
+    // Phase 1: no-op
 }
 
 // ----------------------------------------------------------------------------
 // Month slices
 // ----------------------------------------------------------------------------
 
-const std::vector<float>& UnifiedGrid::GetMonthSliceScalar(int month) const
-{
-    return scalar[month];
-}
-
 const std::vector<float>& UnifiedGrid::GetMonthSliceU(int month) const
 {
-    return u[month];
+    static const std::vector<float> empty;
+    return (month >= 0 && month < u.size()) ? u[month] : empty;
 }
 
 const std::vector<float>& UnifiedGrid::GetMonthSliceV(int month) const
 {
-    return v[month];
+    static const std::vector<float> empty;
+    return (month >= 0 && month < v.size()) ? v[month] : empty;
+}
+
+
+
+// ------------------------------------------------------------------------
+// LoadFromDataModel  Populate UnifiedGrid::cyclone_tracks from ClimatologyDataModel.
+// ---------------------------------------------------
+void UnifiedGrid::LoadFromDataModel(const ClimatologyDataModel& dm)
+{
+    // --- Geometry ---
+    rows    = dm.GetRows();
+    cols    = dm.GetCols();
+    lat0    = dm.GetLat0();
+    lon0    = dm.GetLon0();
+    latStep = dm.GetLatStep();
+    lonStep = dm.GetLonStep();
+
+    // --- Scalar + Vector month-major arrays ---
+    scalar = dm.scalar;
+    u      = dm.u;
+    v      = dm.v;
+
+    // --- Cyclone tracks ---
+	// Full CycloneTrack objects (id, name, basin, ENSO, points, metadata)
+    cyclone_tracks = dm.cyclone_tracks;
+
+    // --- Wind atlas ---
+    wind_atlas = dm.wind_atlas;
+
+    // --- ENSO index ---
+    for (int i = 0; i < 12; i++)
+        enso_index[i] = dm.enso_index[i];
+
+    // --- Normalization hook (empty for Phase 1) ---
+    NormalizeRawData();
+	
+	wxLogMessage("Wind atlas entries: %zu (expected %d)", 
+             wind_atlas.size(), rows * cols);
+
+}
+
+// ------------------------------------------------------------------------
+// GetStormCategory   Populate UnifiedGrid from ClimatologyDataModel
+// ------------------------------------------------------------------------
+
+int UnifiedGrid::GetStormCategory(float pressure, float wind) const
+{
+    // Saffir–Simpson hurricane wind scale (knots)
+    if (wind >= 137.0f) return 5;   // Cat 5
+    if (wind >= 113.0f) return 4;   // Cat 4
+    if (wind >= 96.0f)  return 3;   // Cat 3
+    if (wind >= 83.0f)  return 2;   // Cat 2
+    if (wind >= 64.0f)  return 1;   // Cat 1
+
+    // Tropical storm / depression
+    return 0;
 }

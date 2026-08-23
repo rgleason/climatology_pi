@@ -7,6 +7,10 @@
 // Unified‑model, GL/DC‑safe, correct include ordering
 //=============================================================================
 
+// Otherwise MSVC will misorder wx includes (wx/wxprec.h)
+// and the plugin API symbols will not resolve.
+#include "ocpn_plugin_guarded.h"
+
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
@@ -38,7 +42,7 @@
 #include <GL/gl.h>
 
 //=== OpenCPN Plugin API =======================================================
-#include "ocpn_plugin.h"
+//#include "ocpn_plugin.h"
 
 //=== Climatology Plugin Includes =============================================
 #include "ClimatologyOverlayFactory.h"
@@ -83,7 +87,6 @@ static std::vector<GridInfo> BuildGridInfo(const wxString& dataDir)
     return meta;
 }
 
-
 // ============================================================================
 // ClimatologyIsoBarMap
 // Model A: IsoBarMap subclass using per‑frame render params.
@@ -94,7 +97,7 @@ public:
     ClimatologyIsoBarMap(const wxString& name,
                          double spacing,
                          double step,
-                         ClimatologyOverlayFactory& factory,
+                         const ClimatologyOverlayFactory& factory,
                          int overlayType,
                          int units,
                          int month,
@@ -103,7 +106,7 @@ public:
         : IsoBarMap(name,
                     spacing,
                     step,
-                    factory,
+                    factory,   //now const
                     overlayType,
                     renderParams),
           m_factory(factory),
@@ -131,19 +134,7 @@ public:
     }
 
 private:
-    // Compute scalar parameter for contouring using unified NOAA model.
-    double CalcParameter(double lat, double lon) override
-    {
-        return m_factory.getCurValue(
-            SCALAR,
-            m_setting,
-            lat,
-            lon,
-            m_renderParams
-        );
-    }
-
-    ClimatologyOverlayFactory&      m_factory;
+    const ClimatologyOverlayFactory&      m_factory;
     int                             m_setting;
     int                             m_units;
     int                             m_month;
@@ -151,6 +142,17 @@ private:
     const ClimatologyRenderParams&  m_renderParams;
 };
 
+// Compute scalar parameter for contouring using unified NOAA model.
+double CalcParameter(double lat, double lon) override
+{
+	return m_factory.getCurValue(
+		SCALAR,
+		m_setting,
+		lat,
+		lon,
+		m_renderParams
+	);
+}
 
 void ClimatologyIsoBarMap::PlotDC(piDC* dc, PlugIn_ViewPort& vp)
 {
@@ -2301,6 +2303,17 @@ void ClimatologyOverlayFactory::DrawGLTexture(GLuint tex1, GLuint tex2,
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
+// Local GL helper (C-style)
+void mat4x4_identity(float* const m)
+{
+    for (int i = 0; i < 16; ++i)
+        m[i] = 0.0f;
+
+    m[0]  = 1.0f;
+    m[5]  = 1.0f;
+    m[10] = 1.0f;
+    m[15] = 1.0f;
+}
 
 
 // ============================================================================
@@ -5336,3 +5349,117 @@ ClimatologyOverlayFactory::GatherOverlaysForMode(DisplayMode mode,
 }
 
 
+// To fix errors so we can compile - 
+//  implement the legacy render overloads
+
+// modern overloads exist but are NOT used yet
+void RenderGridGL(const RenderGrid& grid,
+                  const ClimatologyRenderParams& p);
+
+// legacy renderer still expects ClimatologyColorGrid
+void RenderGridGL(const ClimatologyColorGrid& grid,
+                  const ClimatologyRenderParams& p);
+
+// modern overloads exist but are NOT used yet
+void RenderGridDC(const RenderGrid& grid,
+                  wxDC& dc,
+                  const ClimatologyRenderParams& p);
+
+// legacy renderer still expects ClimatologyColorGrid
+void RenderGridDC(const ClimatologyColorGrid& grid,
+                  wxDC& dc,
+                  const ClimatologyRenderParams& p);
+
+
+// Add Add delegating implementations
+
+void ClimatologyOverlayFactory::RenderGridGL(
+    const ClimatologyColorGrid& grid,
+    const ClimatologyRenderParams& p)
+{
+    RenderGrid r;
+    r.Allocate(grid.lat_count, grid.lon_count);
+
+    // pack wxColour → rgba
+    for (int iy = 0; iy < grid.lat_count; ++iy)
+    {
+        for (int ix = 0; ix < grid.lon_count; ++ix)
+        {
+            int idx = iy * grid.lon_count + ix;
+            wxColour c = grid.get(ix, iy);
+
+            RenderCell& rc = r.cells[idx];
+            rc.rgba =
+                (c.Red()   << 24) |
+                (c.Green() << 16) |
+                (c.Blue()  << 8)  |
+                (c.Alpha());
+        }
+    }
+
+    RenderGridGL(r, p); // call modern overload
+}
+
+void ClimatologyOverlayFactory::RenderGridDC(
+    const ClimatologyColorGrid& grid,
+    wxDC& dc,
+    const ClimatologyRenderParams& p)
+{
+    RenderGrid r;
+    r.Allocate(grid.lat_count, grid.lon_count);
+
+    for (int iy = 0; iy < grid.lat_count; ++iy)
+    {
+        for (int ix = 0; ix < grid.lon_count; ++ix)
+        {
+            int idx = iy * grid.lon_count + ix;
+            wxColour c = grid.get(ix, iy);
+
+            RenderCell& rc = r.cells[idx];
+            rc.rgba =
+                (c.Red()   << 24) |
+                (c.Green() << 16) |
+                (c.Blue()  << 8)  |
+                (c.Alpha());
+        }
+    }
+
+    RenderGridDC(r, dc, p); // call modern overload
+}
+
+
+
+// To get it compiling
+
+double ClimatologyOverlayFactory::NormalizeWind(double wind,
+                                                CycloneBasin basin) const
+{
+    // Temporary: identity mapping
+    return wind;
+}
+
+double ClimatologyOverlayFactory::NormalizePressure(double pressure) const
+{
+    // Temporary: identity mapping
+    return pressure;
+}
+
+
+// To get it compiling
+void ClimatologyOverlayFactory::DrawArrowGL(
+    double x1, double y1,
+    double x2, double y2,
+    const wxColour& color,
+    int width)
+{
+    // Minimal stub to satisfy linker
+    // Replace with real GL arrow drawing later
+
+    glColor4ub(color.Red(), color.Green(), color.Blue(), color.Alpha());
+    glLineWidth(width);
+
+    glBegin(GL_LINES);
+    glVertex2d(x1, y1);
+    glVertex2d(x2, y2);
+    glEnd();
+}

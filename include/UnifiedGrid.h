@@ -1,3 +1,7 @@
+// ============================================================================
+// Full UnifiedGrid.h — Header  - Modern unified climatology model
+// ============================================================================
+
 #pragma once
 
 #include <wx/wxprec.h>
@@ -9,41 +13,11 @@
 #include <cmath>
 
 #include "CycloneStructs.h"
-
-// ============================================================================
-// Full UnifiedGrid.h — Header  - Modern unified climatology model
-// ============================================================================
-
-// Forward declarations
-
-/*
-struct CyclonePoint {
-    double lat;
-    double lon;
-    double pressure;
-    double wind;
-};
-
-struct CycloneTrack {
-    std::vector<CyclonePoint> points;
-    int month;     // 0–11
-    int basin;     // enum CycloneBasin
-};
-*/
+#include "WindAtlasData.h"
 
 
+class ClimatologyDataModel;
 
-
-struct WindAtlasCell {
-    float speed;
-    float direction;
-};
-
-struct WindAtlasData {
-    int rows = 0;
-    int cols = 0;
-    std::vector<WindAtlasCell> cells;
-};
 
 class UnifiedGrid
 {
@@ -80,8 +54,8 @@ public:
     int  LatLonToIndex(double lat, double lon) const;
     void IndexToLatLon(int index, double& lat, double& lon) const;
 
-    // ---- Normalization ----
-    float NormalizeRawData(float value) const;
+	// ---- Normalization ----
+	void NormalizeRawData();
 
     // ---- Month slice ----
     const std::vector<float>& GetMonthSliceScalar(int month) const;
@@ -89,13 +63,17 @@ public:
     const std::vector<float>& GetMonthSliceV(int month) const;
 
     // ---- ENSO ----
-    std::vector<float> enso_index;
+	float enso_index[12];
+
 
     // ---- Wind Atlas ----
-    WindAtlasData wind_atlas;
-
+	std::vector<WindAtlasData::WindPolar> wind_atlas;
+    
     // ---- Cyclone Tracks ----
     std::vector<CycloneTrack> cyclone_tracks;
+	void LoadFromDataModel(const ClimatologyDataModel& dm);
+	int GetStormCategory(float pressure, float wind) const;
+	
 
 private:
     bool valid;

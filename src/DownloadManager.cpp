@@ -1,11 +1,11 @@
-#ifdef CLIMATOLOGY_BUNDLED_CURL
+#pragma message("CLIMATOLOGY_BUNDLED_CURL is defined")
 
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
 #endif
 
-
+// Always compiled:
 #include "DownloadManager.hpp"
 #include "DownloadFileEntry.hpp"
 #include "icons.h"
@@ -15,11 +15,6 @@
 #include <wx/zstream.h>
 #include <wx/wfstream.h>
 #include <wx/progdlg.h>
-
-#include <curl/curl.h>
-
-#include "ocpn_plugin.h"
-
 
 #ifndef wxPD_APP_MODAL
 #define wxPD_APP_MODAL 0
@@ -149,6 +144,11 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 }
 
 // Curl download begins here
+// Only curl‑dependent parts under the macro:
+#ifdef CLIMATOLOGY_BUNDLED_CURL
+
+#include <curl/curl.h>
+
 bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
 {
     wxLogMessage("curl version: %s", curl_version());
@@ -177,8 +177,8 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
     }
 
     // LOG CAINFO PATH
-    wxString ca = GetPluginDataDir("climatology_pi") +
-                  wxFileName::GetPathSeparator() + "cacert.pem";
+	wxString ca = m_dataDir + "cacert.pem";
+
     std::string ca_utf8 = ca.ToStdString();
     wxLogMessage("Climatology: Using CAINFO = %s", ca_utf8.c_str());
 	wxLogMessage("Climatology: CA file exists? %d", wxFileExists(ca));
@@ -307,17 +307,53 @@ wxThread::ExitCode DownloadWorker::Entry()
 
         filesDone++;
 
-    progress_update:
-        wxCommandEvent progressEvt(EVT_DM_PROGRESS);
-        int pct = totalFiles > 0 ? (filesDone * 100) / totalFiles : 100;
-        progressEvt.SetInt(pct);
-        wxQueueEvent(m_mgr->m_parent, progressEvt.Clone());
+	progress_update:
+		wxCommandEvent progressEvt(EVT_DM_PROGRESS);
+		int pct = totalFiles > 0 ? (filesDone * 100) / totalFiles : 100;
+		progressEvt.SetInt(pct);
+		wxQueueEvent(m_mgr->m_parent, progressEvt.Clone());
+	}
+
+	wxCommandEvent evt(EVT_DM_COMPLETE);
+	wxQueueEvent(m_mgr->m_parent, evt.Clone());
+
+	return (wxThread::ExitCode)0;
+
+}
+
+
+void DownloadManager::StartBackgroundDownload(bool interactive)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (m_worker) {
+        wxLogMessage("Climatology: Download already in progress");
+        return;
     }
 
-    wxCommandEvent evt(EVT_DM_COMPLETE);
-    wxQueueEvent(m_mgr->m_parent, evt.Clone());
+    m_cancelled = false;
 
-    return (wxThread::ExitCode)0;
+    if (interactive) {
+        m_parent->Bind(EVT_DM_PROGRESS,
+                       &DownloadManager::OnDownloadProgress,
+                       this);
+
+        m_progress = new wxProgressDialog(
+            _("Climatology Data Download"),
+            _("Downloading climatology data files..."),
+            100,
+            m_parent,
+            wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_SMOOTH
+        );
+    }
+
+    m_worker = new DownloadWorker(this, interactive);
+    if (m_worker->Run() != wxTHREAD_NO_ERROR) {
+        wxLogWarning("Climatology: Failed to start download worker thread");
+        delete m_worker;
+        m_worker = nullptr;
+        DestroyProgressDialog();
+    }
 }
 
 
