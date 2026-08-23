@@ -25,6 +25,9 @@
  */
  
 #pragma once
+#pragma message("Compiling IsoBarMap.cpp from: " __FILE__)
+
+#include "IsoBarMap.h"
 
 // Otherwise MSVC will misorder wx includes (wx/wxprec.h)
 // and the plugin API symbols will not resolve.
@@ -35,9 +38,6 @@
 #include <wx/wx.h>
 #endif
  
-#include "ocpn_plugin.h"
-#include "IsoBarMap.h"
-
 #include <GL/glew.h>
 #include <wx/glcanvas.h>
 #include <wx/progdlg.h>
@@ -117,8 +117,8 @@ void IsoBarMap::BuildParamCache(ParamCache& cache, double lat)
 // ------------------------------------------------------------
 // Constructor / destructor
 // ------------------------------------------------------------
-
-IsoBarMap::IsoBarMap(wxString name,
+#pragma optimize("", off)
+IsoBarMap::IsoBarMap(const wxString& name,
                      double spacing,
                      double step,
                      const ClimatologyOverlayFactory& factory,
@@ -143,7 +143,7 @@ IsoBarMap::IsoBarMap(wxString name,
       m_renderParams(renderParams)
 {
 }
-
+#pragma optimize("", on)
 
 
 

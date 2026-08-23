@@ -25,6 +25,7 @@
  */
 
 #pragma once
+#pragma message("Using IsoBarMap.h from: " __FILE__)
 
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
@@ -39,7 +40,7 @@ class piDC;                 // forward declare instead of including piDC.h
 struct PlugIn_ViewPort;
 
 class ClimatologyOverlayFactory;
-class ClimatologyRenderParams;
+struct ClimatologyRenderParams;
 
 
 //=== Lightweight includes =====================================================
@@ -99,7 +100,7 @@ public:
 class IsoBarMap
 {
 public:
-    IsoBarMap(wxString name,
+    IsoBarMap(const wxString& name,
               double spacing,
               double step,
               const ClimatologyOverlayFactory& factory,
@@ -113,13 +114,16 @@ public:
     void PlotGL(PlugIn_ViewPort& vp);
     virtual void PlotDC(piDC* dc, PlugIn_ViewPort& vp);
 
-    bool m_bNeedsRecompute = false;
-    bool m_bComputing      = false;
+    bool m_bNeedsRecompute;
+    bool m_bComputing;
 
 protected:
     double m_Spacing;
     double m_Step;
     double m_PoleAccuracy;
+    const ClimatologyOverlayFactory& m_factory;
+    int                              m_setting;
+    const ClimatologyRenderParams&   m_renderParams;
 
 private:
     virtual double CalcParameter(double lat, double lon) = 0;
@@ -161,7 +165,5 @@ private:
     bool     m_bPolar;
     wxColour m_Color;
 
-    const ClimatologyOverlayFactory& m_factory;
-    int                              m_setting;
-    const ClimatologyRenderParams&   m_renderParams;
+
 };

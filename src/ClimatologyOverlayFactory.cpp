@@ -109,17 +109,17 @@ public:
                     factory,   //now const
                     overlayType,
                     renderParams),
-          m_factory(factory),
-          m_setting(overlayType),
           m_units(units),
           m_month(month),
-          m_day(day),
-          m_renderParams(renderParams)
-    {}
+          m_day(day)
+     {}
 	
 	void PlotDC(piDC* dc, PlugIn_ViewPort& vp) override;
+	
+	// override of IsoBarMap::CalcParameter
+	// Compute scalar parameter for contouring using unified NOAA model declaration.
+	double CalcParameter(double lat, double lon) override;
 
-    // Check if cached IsoBarMap matches requested settings.
     bool SameSettings(double spacing,
                       double step,
                       int units,
@@ -134,30 +134,29 @@ public:
     }
 
 private:
-    const ClimatologyOverlayFactory&      m_factory;
-    int                             m_setting;
     int                             m_units;
     int                             m_month;
     int                             m_day;
-    const ClimatologyRenderParams&  m_renderParams;
 };
 
-// Compute scalar parameter for contouring using unified NOAA model.
-double CalcParameter(double lat, double lon) override
-{
-	return m_factory.getCurValue(
-		SCALAR,
-		m_setting,
-		lat,
-		lon,
-		m_renderParams
-	);
-}
 
 void ClimatologyIsoBarMap::PlotDC(piDC* dc, PlugIn_ViewPort& vp)
 {
     // Forward to base class implementation
 	IsoBarMap::PlotDC(dc, vp);
+}
+
+
+// Compute scalar parameter for contouring using unified NOAA model.
+double ClimatologyIsoBarMap::CalcParameter(double lat, double lon)
+{
+    return m_factory.getCurValue(
+        SCALAR,
+        m_setting,
+        lat,
+        lon,
+        m_renderParams
+    );
 }
 
 
