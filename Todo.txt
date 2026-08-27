@@ -1,27 +1,27 @@
 TODO — Climatology Modernization Roadmap
 
-0. Stabilize build
+0. Stabilize build  DONE
    - Add stubs for Modern UnifiedGrid and RenderGrid.
    - Comment out broken rendering paths temporarily.
    - Ensure dialogs compile even if non-functional.
 
-1. Freeze legacy code
+1. Freeze legacy code  DONE
    - Rename old UnifiedGrid → UnifiedGridRaw.
    - Stop modifying UnifiedGridRaw entirely.
 
-2. Finish Modern UnifiedGrid
+2. Finish Modern UnifiedGrid  DONE
    - Implement geometry fields (rows, cols, lat0, lon0, steps).
    - Implement scalar/u/v month-major arrays.
    - Implement cyclone_tracks, wind_atlas, enso_index.
    - Implement LatLonToIndex(), GetMonthSlice(), GetStormCategory(), GetENSOIndex().
    - Implement NormalizeRawData() (empty for now).
 
-3. Stabilize ClimatologyDataModel
+3. Stabilize ClimatologyDataModel  DONE
    - Ensure raw loaders (WindData, CurrentData, CycloneStructs, WindAtlasData) compile.
    - Do NOT connect them to rendering yet.
    - Prepare them to feed Modern UnifiedGrid.
 
-4. Create RenderGrid (empty but compiling)
+4. Create RenderGrid (empty but compiling)  
    - Implement empty BuildFromUnifiedGrid().
    - Implement empty InterpolateMonth(), ApplyColorMap(), ApplyTransparency().
    - Implement empty ApplyCycloneOverlay(), ApplyWindAtlasOverlay().
@@ -115,13 +115,13 @@ TODO — Climatology Modernization Roadmap
 ===========================
 UnifiedGrid
 
-STEP1 — Finish UnifiedGrid (remaining work: 5–7 hours)
+STEP 1 — Finish UnifiedGrid (remaining work: 5–7 hours)
 
 You already have 90% of UnifiedGrid. Here is the remaining work, in the exact order to do it:
 1. Add cyclone_tracks container DONE
 
 Populate from ClimatologyDataModel.
-2. Add wind_atlas container  Structure:
+2. Add wind_atlas container  Structure:  DONE
 [ ] Populate from ClimatologyDataModel (raw cyclone loader)
 
 
@@ -133,23 +133,29 @@ struct WindAtlasPolar {
 std::vector<std::vector<WindAtlasPolar>> wind_atlas;
 
 Populate from WindAtlasData.
-3. Add enso_index[12]
+
+3. Add enso_index[12]  DONE
 
 Simple float array.
-4. Implement GetStormCategory()
+
+4. Implement GetStormCategory()  DONE
 
 Move logic from OverlayFactory into UnifiedGrid.
-5. Implement GetENSOIndex()
+
+5. Implement GetENSOIndex()  DONE
 
 Trivial accessor.
-6. Implement NormalizeRawData()
+
+6. Implement NormalizeRawData()  DONE
 
 Empty placeholder.
 ⭐ When this step is done:
 
 UnifiedGrid is complete and frozen. No more refactoring. No more modernization. No more churn.
 
-STEP 2 — Keep RenderGridStub active (0 hours)
+------------------------------------
+
+STEP 2 — Keep RenderGridStub active (0 hours)
 
 You do NOT implement RenderGrid now.
 
@@ -160,10 +166,12 @@ RenderGridStub stays:
     providing function signatures
     doing nothing
 
-This is correct for Phase 1.
+This is correct for Phase 1.
 ⭐ When this step is done:
 
 OverlayFactory compiles without touching rendering.
+
+--------------------------------
 ⭐ STEP 3 — Keep OverlayFactory legacy (0 hours)
 
 You do NOT migrate rendering. You do NOT migrate overlays. You do NOT touch color maps.
@@ -172,9 +180,11 @@ OverlayFactory stays exactly as it is.
 ⭐ When this step is done:
 
 The plugin still renders using the legacy pipeline.
+
+----------------------------------
 ⭐ STEP 4 — Connect UnifiedGrid to legacy pipeline (1–2 hours)
 
-This is the only integration step in Phase 1.
+This is the only integration step in Phase 1.
 
 Inside OverlayFactory:
 
@@ -195,11 +205,11 @@ The plugin:
     uses UnifiedGrid internally
     uses legacy renderer externally
 
-This is the end of Phase 1.
+This is the end of Phase  1.
 
 =======================================
 
-3. Phase 1 Cyclone Verification Checklist
+3. Phase 1 Cyclone Verification Checklist
 Use this to confirm cyclone integration is complete for Phase 1.
 
 ✔ Structures  
