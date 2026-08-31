@@ -63,6 +63,13 @@ ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
     DimeWindow( this );
     PopulateTrackingControls();
 
+    // The fitted legacy layout is technically large enough, but cramped in
+    // practice (especially around the title and direction fields).  Establish
+    // a comfortable DPI-aware initial width without making it a minimum: the
+    // resize border remains fully functional.
+    const wxSize initial_size = GetSize();
+    SetSize(wxMax(initial_size.x, FromDIP(380)), initial_size.y);
+
     // run fit delayed (buggy wxwidgets)
     m_fittimer.Connect(wxEVT_TIMER, wxTimerEventHandler
                        ( ClimatologyDialog::OnFitTimer ), NULL, this);
@@ -221,7 +228,16 @@ void ClimatologyDialog::PopulateTrackingControls()
     SetControlsVisible(ClimatologyOverlaySettings::SEADEPTH, m_cbSeaDepth, m_tSeaDepth);
 
     Refresh();
+    FitKeepingWidth();
+}
+
+void ClimatologyDialog::FitKeepingWidth()
+{
+    const int current_width = GetSize().x;
     Fit();
+    const wxSize fitted_size = GetSize();
+    if(current_width > fitted_size.x)
+        SetSize(current_width, fitted_size.y);
 }
 
 void ClimatologyDialog::RefreshRedraw()

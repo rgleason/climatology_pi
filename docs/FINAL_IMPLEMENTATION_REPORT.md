@@ -47,10 +47,12 @@ after asynchronous load and again after cyclone preparation, covering both the
 standard WeatherRouting plugin (which reparses `CLIMATOLOGY` messages) and
 xWeatherRouting (which additionally resets its preparation guard).
 
-The final GUI acceptance remains deliberately pending until the headless
-release gates and isolated Test-OpenCPN installation described later in this
-report are complete.  No 1.6.39.0 artefact is installed into the normal
-OpenCPN profile or system plugin directories.
+The complete feature set passed GUI acceptance in the isolated Test-OpenCPN
+installation after the headless release gates.  A subsequent cosmetic change
+gives the resizable Display Control a roomier 380-DIP initial width while
+preserving the user's ability to make it narrower or wider.  No 1.6.39.0
+artefact is installed into the normal OpenCPN profile or system plugin
+directories.
 
 ## Compatibility-first design
 
@@ -98,11 +100,11 @@ detached test harness.  These are pre-existing consumer build/test-fixture
 defects and do not change or adapt the Climatology API.
 
 The final release package is
-`climatology_pi-1.6.39.0-arch-x86_64-rolling.tar.gz` (11,322,214 bytes,
+`climatology_pi-1.6.39.0-arch-x86_64-rolling.tar.gz` (11,322,313 bytes,
 SHA-256
-`88d91f8475c3659e4fc38e66c1df9f5c9d0558997ea2f202377869bec00e5128`).
+`1a9ef7acd974e041239faa654e8cf82923adebadb03242767297f0036e206254`).
 The stripped packaged library is 1,055,536 bytes with SHA-256
-`139edfecab47296a3cec9a80e4683beb3899be295e5da04fba916668626d3ce1`.
+`15c95c695d7a4ed0b58f942e285231fe07b1887ede99801cf6284fff0e6a5629`.
 It has no embedded RPATH/RUNPATH.  After extracting the package, all 52
 manifest-declared data files independently matched both their recorded sizes
 and SHA-256 checksums, and the loader/service test passed against those exact

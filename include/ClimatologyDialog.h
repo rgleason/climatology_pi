@@ -102,7 +102,9 @@ private:
     void OnClose( wxCloseEvent& event );
     void OnCBAny( wxCommandEvent& event );
 
-    void OnFitTimer( wxTimerEvent & ) { Fit(); }
+    void OnFitTimer( wxTimerEvent & ) { FitKeepingWidth(); }
+
+    void FitKeepingWidth();
 
     void Now();
     

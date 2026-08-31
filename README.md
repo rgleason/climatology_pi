@@ -20,6 +20,21 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 ```
 
+The repository is self-contained for a source build: the plugin data and the
+required OpenCPN API/build support are committed as ordinary files.  Despite
+the historical entries in `.gitmodules`, there are no active gitlinks, so a
+recursive clone is not required.  The Phase 0-10 handoff branch is
+`reconstruction/phase-0-10`.
+
+A binary package is optional for development.  It is useful for installing a
+specific candidate into an OpenCPN test profile, but is not needed to inspect,
+build, test, or continue the source work.  On a configured native build it can
+be produced with:
+
+```sh
+cmake --build build --target package -j2
+```
+
 The ABI test freezes the three exact pointer signatures consumed by Weather
 Routing. The runtime tests cover dateline/polar handling, missing-data
 interpolation and direction interpolation through 0/360 degrees.
