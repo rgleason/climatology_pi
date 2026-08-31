@@ -29,7 +29,7 @@ cmake_minimum_required(VERSION 3.15)
 project(
     climatology_pi
     LANGUAGES CXX
-    VERSION 1.6.47.0
+    VERSION 0.0.0.0   # temporary placeholder
 )
 
 # PACKAGE / PACKAGE_NAME are used by PluginSetup.cmake and PluginPackage.cmake
@@ -89,6 +89,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 message(STATUS "MODULE PATH: ${CMAKE_MODULE_PATH}")
 
+# Force plugins to install into a local staging directory
+set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install")
+
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 ##---------------------------------------------------------------------------
@@ -106,6 +109,11 @@ set(VERSION_MINOR "6")
 set(VERSION_PATCH "48")
 set(VERSION_TWEAK "0")
 set(VERSION_DATE  "08/27/2026")
+
+# Reconstruct the Project full version number
+set(PROJECT_VERSION
+    "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${VERSION_TWEAK}"
+)
 
 set(OCPN_MIN_VERSION "ov58")
 set(OCPN_API_VERSION_MAJOR "1")
@@ -176,6 +184,14 @@ include(PluginSetup)
 
 # At this point, ${PACKAGE_NAME} (climatology_pi) is a valid target.
 
+
+# ---------------------------------------------------------------------------
+# 12. PluginConfigure — version.h, packaging metadata, etc.
+#     Where wxWidgets linking happens.
+# ---------------------------------------------------------------------------
+
+include(PluginConfigure)
+
 # ---------------------------------------------------------------------------
 # 10. Add plugin/API include dirs (but not wx includes) BEFORE any sources are added
 # ---------------------------------------------------------------------------
@@ -190,12 +206,27 @@ target_include_directories(${PACKAGE_NAME} BEFORE PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 11. Add Curl + OpenGL
+# ---------------------------------------------------------------------------
+
+# Fallback path for curl
+set(CMAKE_PREFIX_PATH "C:/Users/fcgle/source/vcpkg/installed/x86-windows")
+# Use vcpkg curl (Schannel backend on Windows)
+find_package(CURL CONFIG REQUIRED)
+
+target_link_libraries(${PACKAGE_NAME} PRIVATE
+    CURL::libcurl
+    opengl32
+    glu32
+)
+
+
+# ---------------------------------------------------------------------------
 # 11. Add Plugin sources
 # ---------------------------------------------------------------------------
 set(SRC_LIST
     src/climatology_pi.cpp
     src/climatology_shaders.cpp
-    src/climatology_curl.cpp
 
     src/ClimatologyConfigDialog.cpp
     src/ClimatologyConstants.cpp
@@ -219,25 +250,20 @@ target_sources(${PACKAGE_NAME} PRIVATE ${SRC_LIST})
 
 # no add_library here, that stays in PluginSetup
 
-# ---------------------------------------------------------------------------
-# 12. PluginConfigure — version.h, packaging metadata, etc.
-#     Where wxWidgets linking happens.
-# ---------------------------------------------------------------------------
-include(PluginConfigure)
+
 
 # ---------------------------------------------------------------------------
 # 13. Third-party libraries (ocpn::api curl, glew, bzip2)
 # ---------------------------------------------------------------------------
-set(CURL_ROOT  "C:/Users/fcgle/source/climatology_pi/win_curl/output32")
+
+# Hard-coded vcpkg paths (stable, reliable)
 set(GLEW_ROOT  "C:/Users/fcgle/source/vcpkg/installed/x86-windows")
 set(BZIP2_ROOT "C:/Users/fcgle/source/vcpkg/installed/x86-windows")
 
-target_compile_definitions(${PACKAGE_NAME} PRIVATE CLIMATOLOGY_BUNDLED_CURL)
-
 target_include_directories(${PACKAGE_NAME} PRIVATE
-    ${CURL_ROOT}/include
     ${GLEW_ROOT}/include
     ${BZIP2_ROOT}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/win_curl/include   # curl headers only
 )
 
 target_link_libraries(${PACKAGE_NAME} PRIVATE
@@ -245,7 +271,6 @@ target_link_libraries(${PACKAGE_NAME} PRIVATE
     ocpn::tinyxml
     ocpn::zlib
 
-    ${CURL_ROOT}/lib/libcurl_imp.lib
     ${GLEW_ROOT}/lib/glew32.lib
     ${BZIP2_ROOT}/lib/bz2.lib
 )
@@ -292,9 +317,26 @@ include(PluginPackage)
 # 16. Windows Runtime Dependencies
 # ---------------------------------------------------------------------------
 if(WIN32)
-    install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
-        DESTINATION plugins/climatology_pi)
+	#   install(FILES "${CMAKE_SOURCE_DIR}/cacert.pem"
+	#      DESTINATION plugins/climatology_pi)
 
+	# Copy data files into the plugin runtime directory
+	file(COPY
+		${CMAKE_CURRENT_SOURCE_DIR}/data/manifest.json
+		${CMAKE_CURRENT_SOURCE_DIR}/data/cacert.pem
+#		DESTINATION ${PLUGIN_OUTPUT_DIR}/data
+		DESTINATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/plugins/climatology_pi/data
+	)
+
+
+	# Install manifest.json and cacert.pem into the plugin data directory
+	install(FILES
+		${CMAKE_CURRENT_SOURCE_DIR}/data/manifest.json
+		${CMAKE_CURRENT_SOURCE_DIR}/data/cacert.pem
+		DESTINATION ${CMAKE_INSTALL_PREFIX}/plugins/climatology_pi/data
+	)
     install(FILES "C:/Users/fcgle/source/vcpkg/installed/x86-windows/bin/glew32.dll"
-        DESTINATION plugins/climatology_pi)
+        DESTINATION plugins/climatology_pi		
+	)
+	
 endif()

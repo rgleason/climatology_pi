@@ -19,14 +19,22 @@ endif ()
 
 # Export variables used in plugin setup: GIT_HASH, GIT_COMMIT, PKG_TARGET,
 # PKG_TARGET_VERSION and PKG_NVR
-if (NOT ${PACKAGE} MATCHES "(.*)_pi")
-  set(PACKAGE_NAME ${PACKAGE}_pi)
-  set(PACKAGE_FILE_NAME "${PACKAGE}_pi")
-else (NOT ${PACKAGE} MATCHES "(.*)_pi")
-  set(PACKAGE_NAME ${PACKAGE})
-  set(PACKAGE_FILE_NAME "${PACKAGE}")
-endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
+
+#if (NOT ${PACKAGE} MATCHES "(.*)_pi")
+#  set(PACKAGE_NAME ${PACKAGE}_pi)
+#  set(PACKAGE_FILE_NAME "${PACKAGE}_pi")
+#else (NOT ${PACKAGE} MATCHES "(.*)_pi")
+#  set(PACKAGE_NAME ${PACKAGE})
+#  set(PACKAGE_FILE_NAME "${PACKAGE}")
+#endif (NOT ${PACKAGE} MATCHES "(.*)_pi")
+
+set(PACKAGE_NAME "${PACKAGE}_pi")
+set(PACKAGE_FILE_NAME "${PACKAGE}_pi")
+
+
 string(TOUPPER "${PACKAGE}" TITLE_NAME)
+
+
 
 # project(
 #    ${PACKAGE}

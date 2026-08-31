@@ -20,7 +20,9 @@
   <target-version>${PKG_TARGET_VERSION}</target-version>
   <target-arch>${ARCH}</target-arch>
   <tarball-url>
-    ${PKG_URL}
+    <!-- Cloudsmith URL will be substituted by upload script -->
+	https://dl.cloudsmith.io/public/--pkg_repo--/raw/names/--name--/versions/--version--/--filename--
+	<!--   ${PKG_URL}  -->
   </tarball-url>
   <info-url> ${XML_INFO_URL} </info-url>
 </plugin>
