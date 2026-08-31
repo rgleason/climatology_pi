@@ -24,10 +24,14 @@
  ***************************************************************************
  */
 
+#include <atomic>
 #include <list>
 #include <map>
+#include <memory>
 #include <vector>
 
+#include "ClimatologyDataService.h"
+#include "ClimatologyQueryEngine.h"
 #include "zuFile.h"
 
 #include "IsoBarMap.h"
@@ -243,6 +247,14 @@ public:
         double lat1, double lon1, double lat2, double lon2,
         const wxDateTime &date, int dayrange);
 
+    bool IsReady() const
+    { return m_bCompletedLoading.load(std::memory_order_acquire); }
+    // Called from the OpenCPN main thread. Returns true once for each
+    // completed asynchronous load and publishes either the snapshot or error.
+    bool PollDatasetLoad(bool &succeeded, wxString &error);
+    std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> Snapshot() const
+    { return m_snapshot; }
+
     wxSemaphore m_cyclone_cache_semaphore;
     std::map<int, std::list<CycloneState*> > m_cyclone_cache;
 
@@ -255,9 +267,13 @@ public:
     bool m_bAllTimes;
 
     std::list<wxString> m_FailedFiles; // maybe loaded some data, but some is corrupted or missing
-    bool m_bCompletedLoading; // finished loading climatology data without abort
+    std::atomic<bool> m_bCompletedLoading;
 
 private:
+    void StartDatasetLoad();
+    void PublishDataset(
+        std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> snapshot);
+    void BuildLegacyCycloneViews();
     void Load();
     void LoadInternal(wxGenericProgressDialog *progressdialog);
     void Free();
@@ -332,4 +348,8 @@ private:
     std::map<int, ElNinoYear> m_ElNinoYears;
 
     wxString m_sFailedMessage;
+
+    climatology::ClimatologyDataService m_dataService;
+    std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> m_snapshot;
+    std::unique_ptr<climatology::ClimatologyQueryEngine> m_query;
 };

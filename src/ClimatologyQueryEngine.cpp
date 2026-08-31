@@ -48,6 +48,21 @@ double InterpolateDirection(double first, double second, double first_weight)
     return value < 0.0 ? value + 360.0 : value;
 }
 
+double SeaDepthMetres(double index)
+{
+    static const double table[] = {
+        0, 10, 20, 30, 50, 75, 100, 125, 150, 200, 250, 300, 400,
+        500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500,
+        1750, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000,
+        6500, 7000, 7500, 8000, 9000, 10000};
+    if(!std::isfinite(index)) return NaN();
+    if(index <= 0.0) return table[0];
+    if(index >= 39.0) return table[39];
+    const int lower = static_cast<int>(std::floor(index));
+    const int upper = lower + 1;
+    return table[lower] + (table[upper] - table[lower]) * (index - lower);
+}
+
 double WindCellValue(const MonthlyWindDistributionField& field,
                      const WindDistributionCell& cell,
                      QueryComponent component)
@@ -168,7 +183,9 @@ double ClimatologyQueryEngine::ValueMonth(
     const MonthlyScalarField* scalar = m_snapshot->Scalar(field);
     if(!scalar || !scalar->available[month])
         return NaN();
-    return Sample(scalar->geometry, scalar->values[month], latitude, longitude);
+    const double value = Sample(scalar->geometry, scalar->values[month],
+                                latitude, longitude);
+    return field == DatasetField::SeaDepth ? SeaDepthMetres(value) : value;
 }
 
 double ClimatologyQueryEngine::Value(

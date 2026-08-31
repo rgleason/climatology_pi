@@ -8,6 +8,9 @@ src/icons.cpp
 src/zuFile.cpp
 src/ClimatologyMath.cpp
 src/ClimatologyDataset.cpp
+src/ClimatologyChecksum.cpp
+src/ClimatologyDataService.cpp
+src/ClimatologyDatasetLoader.cpp
 src/ClimatologyQueryEngine.cpp
 include/climatology_pi.h
 include/ClimatologyConfigDialog.h
@@ -23,4 +26,7 @@ include/ClimatologyMath.h
 include/ClimatologyAPI.h
 include/ClimatologyProviderAPI.h
 include/ClimatologyDataset.h
+include/ClimatologyChecksum.h
+include/ClimatologyDataService.h
+include/ClimatologyDatasetLoader.h
 include/ClimatologyQueryEngine.h

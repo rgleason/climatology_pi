@@ -60,6 +60,17 @@ extern QString qtStyleSheet;
 
 #define CLIMATOLOGY_TOOL_POSITION    -1          // Request default positioning of toolbar tool
 
+class climatology_pi;
+
+class ClimatologyLoadTimer : public wxTimer
+{
+public:
+      explicit ClimatologyLoadTimer(climatology_pi *plugin) : m_plugin(plugin) {}
+      void Notify() override;
+private:
+      climatology_pi *m_plugin;
+};
+
 class climatology_pi : public opencpn_plugin_118
 {
 public:
@@ -110,7 +121,9 @@ public:
       void SendTimelineMessage(wxDateTime time);
 
 private:
+      friend class ClimatologyLoadTimer;
       void FreeData();
+      void OnDatasetLoadTimer();
 
       bool LoadConfig(void);
       bool SaveConfig(void);
@@ -125,6 +138,8 @@ private:
 
       int              m_climatology_dialog_x, m_climatology_dialog_y;
       int              m_climatology_dialog_sx, m_climatology_dialog_sy;
+
+      ClimatologyLoadTimer m_dataset_load_timer;
 
 };
 

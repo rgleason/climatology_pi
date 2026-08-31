@@ -29,6 +29,7 @@
 
 #include <cinttypes>
 #include <cstdint>
+#include <ctime>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -43,6 +44,7 @@
 
 #include "climatology_pi.h"
 #include "ClimatologyAPI.h"
+#include "ClimatologyProviderAPI.h"
 
 #include <wx/ffile.h>
 #include "icons.h"
@@ -62,8 +64,6 @@ extern "C" DECL_EXP void destroy_pi(opencpn_plugin* p)
 {
     delete p;
 }
-
-static climatology_pi *s_climatology_pi;
 
 template<typename Function>
 static std::string FunctionPointerText(Function function)
@@ -111,7 +111,7 @@ wxString ClimatologyDatasetVersion()
 
 
 climatology_pi::climatology_pi(void *ppimgr)
-      :opencpn_plugin_118(ppimgr)
+      :opencpn_plugin_118(ppimgr), m_dataset_load_timer(this)
 {
       m_pClimatologyDialog = nullptr;
 
@@ -119,7 +119,6 @@ climatology_pi::climatology_pi(void *ppimgr)
       initialize_images();
 
       //original technique using images in file  icon.cpp
-      s_climatology_pi = this;
 
     // Build the full path to the panel icon
     wxFileName fn(GetPluginDataDir("climatology_pi"), "");
@@ -145,6 +144,7 @@ climatology_pi::climatology_pi(void *ppimgr)
 
 climatology_pi::~climatology_pi()
 {
+      m_dataset_load_timer.Stop();
       FreeData();
       delete _img_climatology;
 }
@@ -180,6 +180,9 @@ int climatology_pi::Init()
       _img_climatology, wxITEM_NORMAL, _("Climatology"), _T(""), NULL,
 	  CLIMATOLOGY_TOOL_POSITION, 0, this);
 #endif
+      // Create the hidden facade on OpenCPN's main thread.  API callbacks may
+      // later run on routing workers and must never construct wx controls.
+      CreateOverlayFactory();
       SendClimatology(true);
 
       return (WANTS_OVERLAY_CALLBACK |
@@ -194,6 +197,7 @@ int climatology_pi::Init()
 
 bool climatology_pi::DeInit()
 {
+    m_dataset_load_timer.Stop();
     SendClimatology(false);
     FreeData();
     RemovePlugInTool(m_leftclick_tool_id);
@@ -277,13 +281,42 @@ void climatology_pi::CreateOverlayFactory()
 
     // Create the drawing factory
     g_pOverlayFactory = new ClimatologyOverlayFactory( *m_pClimatologyDialog );
-
-    if(g_pOverlayFactory->m_bCompletedLoading) {
-        SendClimatology(true);
-        m_pClimatologyDialog->UpdateTrackingControls();
-        m_pClimatologyDialog->FitLater(); // buggy wx
-    }
+    m_dataset_load_timer.Start(50);
     m_pClimatologyDialog->Hide();
+}
+
+void ClimatologyLoadTimer::Notify()
+{
+    if(m_plugin)
+        m_plugin->OnDatasetLoadTimer();
+}
+
+void climatology_pi::OnDatasetLoadTimer()
+{
+    if(!g_pOverlayFactory) {
+        m_dataset_load_timer.Stop();
+        return;
+    }
+    bool succeeded = false;
+    wxString error;
+    if(!g_pOverlayFactory->PollDatasetLoad(succeeded, error))
+        return;
+
+    m_dataset_load_timer.Stop();
+    SendClimatology(succeeded);
+    if(succeeded) {
+        m_pClimatologyDialog->UpdateTrackingControls();
+        m_pClimatologyDialog->FitLater();
+        RequestRefresh(m_parent_window);
+        return;
+    }
+
+    wxLogError("climatology_pi: dataset load failed: " + error);
+    wxMessageDialog dialog(m_pClimatologyDialog,
+        _("The Climatology dataset could not be loaded. The matching complete "
+          "versioned dataset must be reinstalled.\n\n") + error,
+        _("Climatology"), wxOK | wxICON_ERROR);
+    dialog.ShowModal();
 }
 
 void climatology_pi::SetDefaults(void)
@@ -298,9 +331,7 @@ int climatology_pi::GetToolbarToolCount(void)
 static bool ClimatologyData(int setting, const wxDateTime &date, double lat, double lon,
                             double &dir, double &speed)
 {
-    s_climatology_pi->CreateOverlayFactory();
-    // if ClimatologyData is called again while loading data in CreateOverlayFactory
-    if (!g_pOverlayFactory)
+    if (!g_pOverlayFactory || !g_pOverlayFactory->IsReady())
         return false;
 
     speed = g_pOverlayFactory->getValue(MAG, setting, lat, lon, &date);
@@ -338,10 +369,161 @@ static int ClimatologyCycloneTrackCrossings(double lat1, double lon1, double lat
                                                     date, dayrange);
 }
 
+static std::int32_t FinishClimatologyQuery(
+    const climatology_api::QueryV1 *query,
+    climatology_api::ResultV1 *result,
+    climatology_api::Status status)
+{
+    if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
+        return climatology_api::STATUS_INVALID_REQUEST;
+    climatology_api::ResultV1 output = climatology_api::MakeResultV1();
+    output.status = status;
+    if(query) {
+        output.variable = query->variable;
+        output.scenario = query->scenario;
+    }
+    *result = output;
+    return status;
+}
+
+static bool ScalarVariableDetails(std::uint32_t variable, int &setting,
+                                  std::uint32_t &unit)
+{
+    switch(variable) {
+    case climatology_api::VARIABLE_SEA_LEVEL_PRESSURE:
+        setting = ClimatologyOverlaySettings::SLP;
+        unit = climatology_api::UNIT_HECTOPASCALS; return true;
+    case climatology_api::VARIABLE_SEA_SURFACE_TEMPERATURE:
+        setting = ClimatologyOverlaySettings::SST;
+        unit = climatology_api::UNIT_DEGREES_CELSIUS; return true;
+    case climatology_api::VARIABLE_AIR_TEMPERATURE:
+        setting = ClimatologyOverlaySettings::AT;
+        unit = climatology_api::UNIT_DEGREES_CELSIUS; return true;
+    case climatology_api::VARIABLE_CLOUD_COVER:
+        setting = ClimatologyOverlaySettings::CLOUD;
+        unit = climatology_api::UNIT_PERCENT; return true;
+    case climatology_api::VARIABLE_PRECIPITATION:
+        setting = ClimatologyOverlaySettings::PRECIPITATION;
+        unit = climatology_api::UNIT_MILLIMETRES_PER_DAY; return true;
+    case climatology_api::VARIABLE_RELATIVE_HUMIDITY:
+        setting = ClimatologyOverlaySettings::RELATIVE_HUMIDITY;
+        unit = climatology_api::UNIT_PERCENT; return true;
+    case climatology_api::VARIABLE_LIGHTNING:
+        setting = ClimatologyOverlaySettings::LIGHTNING;
+        unit = climatology_api::UNIT_LIGHTNING_INDEX; return true;
+    case climatology_api::VARIABLE_SEA_DEPTH:
+        setting = ClimatologyOverlaySettings::SEADEPTH;
+        unit = climatology_api::UNIT_METRES; return true;
+    default: return false;
+    }
+}
+
+static std::int32_t ClimatologyQueryV1(
+    const climatology_api::QueryV1 *query,
+    climatology_api::ResultV1 *result)
+{
+    if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
+        return climatology_api::STATUS_INVALID_REQUEST;
+    const climatology_api::Status validation =
+        climatology_api::ValidateQueryV1(query);
+    if(validation != climatology_api::STATUS_OK)
+        return FinishClimatologyQuery(query, result, validation);
+    if(!g_pOverlayFactory || !g_pOverlayFactory->IsReady())
+        return FinishClimatologyQuery(query, result,
+                                      climatology_api::STATUS_NOT_READY);
+
+    const std::time_t timestamp = static_cast<std::time_t>(query->unix_time_utc);
+    if(static_cast<std::int64_t>(timestamp) != query->unix_time_utc)
+        return FinishClimatologyQuery(query, result,
+                                      climatology_api::STATUS_INVALID_REQUEST);
+    wxDateTime date(timestamp);
+    if(!date.IsValid())
+        return FinishClimatologyQuery(query, result,
+                                      climatology_api::STATUS_INVALID_REQUEST);
+    date = date.ToUTC();
+
+    climatology_api::ResultV1 output = climatology_api::MakeResultV1();
+    output.variable = query->variable;
+    output.scenario = query->scenario;
+    if(query->variable == climatology_api::VARIABLE_WIND_10M) {
+        double frequencies[climatology_api::WIND_SECTOR_COUNT] = {};
+        double speeds[climatology_api::WIND_SECTOR_COUNT] = {};
+        double gale = 0.0, calm = 0.0;
+        if(!g_pOverlayFactory->InterpolateWindAtlas(
+               date, query->latitude_degrees_north,
+               query->longitude_degrees_east, frequencies, speeds,
+               gale, calm))
+            return FinishClimatologyQuery(query, result,
+                                          climatology_api::STATUS_UNKNOWN);
+        output.value_kind = climatology_api::VALUE_KIND_WIND_DISTRIBUTION;
+        output.unit = climatology_api::UNIT_KNOTS;
+        output.direction_convention =
+            climatology_api::DIRECTION_METEOROLOGICAL_FROM_TRUE_NORTH;
+        output.flags = climatology_api::RESULT_HAS_WIND_DISTRIBUTION |
+                       climatology_api::RESULT_HAS_CALM_PROBABILITY |
+                       climatology_api::RESULT_HAS_GALE_PROBABILITY;
+        for(std::size_t sector = 0;
+            sector < climatology_api::WIND_SECTOR_COUNT; ++sector) {
+            output.sector_direction_degrees_true[sector] = 45.0 * sector;
+            output.sector_frequency[sector] = frequencies[sector];
+            output.sector_speed_knots[sector] = speeds[sector];
+        }
+        output.calm_probability = calm;
+        output.gale_probability = gale;
+    } else if(query->variable == climatology_api::VARIABLE_SURFACE_CURRENT) {
+        const double eastward = g_pOverlayFactory->getValue(
+            U, ClimatologyOverlaySettings::CURRENT,
+            query->latitude_degrees_north, query->longitude_degrees_east,
+            &date);
+        const double northward = g_pOverlayFactory->getValue(
+            V, ClimatologyOverlaySettings::CURRENT,
+            query->latitude_degrees_north, query->longitude_degrees_east,
+            &date);
+        if(!std::isfinite(eastward) || !std::isfinite(northward))
+            return FinishClimatologyQuery(query, result,
+                                          climatology_api::STATUS_UNKNOWN);
+        output.value_kind = climatology_api::VALUE_KIND_VECTOR;
+        output.unit = climatology_api::UNIT_KNOTS;
+        output.direction_convention =
+            climatology_api::DIRECTION_OCEANOGRAPHIC_TO_TRUE_NORTH;
+        output.flags = climatology_api::RESULT_HAS_VECTOR;
+        output.eastward_value = eastward;
+        output.northward_value = northward;
+        output.speed = std::hypot(eastward, northward);
+        if(output.speed > 0.0) {
+            output.direction_degrees_true =
+                std::atan2(eastward, northward) * 180.0 / M_PI;
+            if(output.direction_degrees_true < 0.0)
+                output.direction_degrees_true += 360.0;
+        }
+    } else {
+        int setting = 0;
+        std::uint32_t unit = climatology_api::UNIT_NONE;
+        if(!ScalarVariableDetails(query->variable, setting, unit))
+            return FinishClimatologyQuery(
+                query, result, climatology_api::STATUS_UNSUPPORTED_VARIABLE);
+        const double value = g_pOverlayFactory->getValue(
+            MAG, setting, query->latitude_degrees_north,
+            query->longitude_degrees_east, &date);
+        if(!std::isfinite(value))
+            return FinishClimatologyQuery(query, result,
+                                          climatology_api::STATUS_UNKNOWN);
+        output.value_kind = climatology_api::VALUE_KIND_SCALAR;
+        output.unit = unit;
+        output.flags = climatology_api::RESULT_HAS_SCALAR;
+        output.scalar_value = value;
+    }
+    output.status = climatology_api::STATUS_OK;
+    *result = output;
+    return climatology_api::STATUS_OK;
+}
+
 // Compile-time guards for the pointer ABI advertised in SendClimatology().
 static ClimatologyDataFunction const checked_climatology_data = &ClimatologyData;
 static ClimatologyWindAtlasFunction const checked_wind_atlas_data = &ClimatologyWindAtlasData;
 static ClimatologyCycloneCrossingsFunction const checked_cyclone_crossings = &ClimatologyCycloneTrackCrossings;
+static climatology_api::QueryV1Function const checked_query_v1 =
+    &ClimatologyQueryV1;
 
 void climatology_pi::OnToolbarToolCallback(int id)
 {
@@ -411,6 +593,11 @@ void climatology_pi::SendClimatology(bool valid)
     } else {
         v["ClimatologyDatasetVersion"] = "legacy/unversioned";
     }
+    const bool ready = valid && g_pOverlayFactory &&
+                       g_pOverlayFactory->IsReady();
+    v["ClimatologyReady"] = ready;
+    v["ClimatologyLoadState"] = !valid ? "unavailable" :
+        (ready ? "ready" : "loading");
 
     v["ClimatologyDataPtr"] = FunctionPointerText(
         valid ? ClimatologyData : nullptr);
@@ -418,6 +605,25 @@ void climatology_pi::SendClimatology(bool valid)
         valid ? ClimatologyWindAtlasData : nullptr);
     v["ClimatologyCycloneTrackCrossingsPtr"] = FunctionPointerText(
         valid ? ClimatologyCycloneTrackCrossings : nullptr);
+
+    v["ClimatologyQueryAPIVersion"] = climatology_api::QUERY_API_V1;
+    v["ClimatologyQueryV1Ptr"] = FunctionPointerText(
+        valid ? ClimatologyQueryV1 : nullptr);
+    Json::Value scenarios(Json::arrayValue);
+    scenarios.append("all-years");
+    v["ClimatologyQueryCapabilities"]["scenarios"] = scenarios;
+    Json::Value variables(Json::arrayValue);
+    variables.append("wind-10m-distribution");
+    variables.append("surface-current-vector");
+    variables.append("sea-level-pressure");
+    variables.append("sea-surface-temperature");
+    variables.append("air-temperature");
+    variables.append("cloud-cover");
+    variables.append("precipitation");
+    variables.append("relative-humidity");
+    variables.append("lightning");
+    variables.append("sea-depth");
+    v["ClimatologyQueryCapabilities"]["variables"] = variables;
 
     Json::FastWriter writer;
     SendPluginMessage(wxT("CLIMATOLOGY"), writer.write( v ));
@@ -456,6 +662,7 @@ void climatology_pi::SendTimelineMessage(wxDateTime time)
 
 void climatology_pi::FreeData()
 {
+    m_dataset_load_timer.Stop();
     delete g_pOverlayFactory;
     g_pOverlayFactory = NULL;
     if(m_pClimatologyDialog) {

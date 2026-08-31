@@ -158,93 +158,110 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
 
     m_bAllTimes = false;
 
-    Load();
-
-    if(m_FailedFiles.size()) {
-        const wxString data_directory = ClimatologyDataDirectory();
-        const bool versioned_dataset =
-            wxFileExists(data_directory + "dataset-manifest.json") ||
-            wxFileExists(data_directory + "DATASET_PROVENANCE.md") ||
-            wxFileExists(data_directory + "wind-extras01.gz");
-        wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
-        if( m_sFailedMessage.Len() > FAILED_FILELIST_MSG_LEN )
-            failed_msg.Append("...\n\n");
-        const wxString recovery = versioned_dataset
-            ? _("This is a versioned dataset. Reinstall the matching complete "
-                "dataset; individual legacy files will not be mixed into it.")
-            : _("Would you like to try to download the archived legacy files?");
-        wxMessageDialog mdlg(&m_dlg,
-                             _("Some Data Failed to load:\n")
-                             + failed_msg + recovery,
-                             _("Climatology"),
-                             (versioned_dataset ? wxOK : wxYES | wxNO) |
-                                 wxICON_WARNING);
-        if(mdlg.ShowModal() == wxID_YES && !versioned_dataset) {
-            int i = 0;
-            bool failed = false;
-            wxString path = ClimatologyDataDirectory();
-        
-            wxString servers[] = {"https://raw.githubusercontent.com"};
-            int servercount = ((sizeof servers) / (sizeof *servers));
-            // Immutable commit matching the historical packaged bundle.
-            wxString url = "/seandepagnier/climatology_pi_data/"
-                           "006120320bde2c1ad8da10a911cdf2b0f3bffe0d/";
-
-            for(std::list<wxString>::iterator it = m_FailedFiles.begin();
-                it != m_FailedFiles.end(); it++ ) {
-                wxString fn = *it;
-                if(!fn.EndsWith(".txt"))
-                    fn += ".gz"; // download gzipped file
-                int j;
-                for(j=0; j<servercount; j++) {
-                    int ind = (i+j)%servercount;
-                    wxString urlpath = servers[ind] + url;
-                
-                    _OCPN_DLStatus status = OCPN_downloadFile(
-                        urlpath + fn,
-                        path+fn, _("downloading climatology data file"),
-                        wxString::Format("File %d of %d ", ++i, static_cast<int>(m_FailedFiles.size())),
-                        *_img_climatology, GetOCPNCanvasWindow(),
-                        OCPN_DLDS_ELAPSED_TIME|OCPN_DLDS_ESTIMATED_TIME|OCPN_DLDS_REMAINING_TIME|
-                        OCPN_DLDS_SPEED|OCPN_DLDS_SIZE|OCPN_DLDS_URL|
-                        OCPN_DLDS_CAN_ABORT|OCPN_DLDS_AUTO_CLOSE, 20);
-                    if(status == OCPN_DL_NO_ERROR)
-                        break;
-                    if(status == OCPN_DL_ABORTED)
-                        return;
-                }
-                if(j == servercount)
-                    failed = true;
-            }
-
-            if(failed) {
-                wxMessageDialog mdlg(&m_dlg,
-                                     _("Some Data Failed to download.\n"
-                                       "Climatology data incomplete"),
-                                     _("Climatology"), wxOK | wxICON_WARNING);
-                mdlg.ShowModal();
-            } else {
-                Load();
-                if(m_FailedFiles.size()) {
-                    wxString failed_msg = m_sFailedMessage.Left(FAILED_FILELIST_MSG_LEN);
-                    wxMessageDialog mdlg(&m_dlg,
-                                         _("Some Data Failed to load.") +"\n"
-                                           + failed_msg + "...\n" +
-                                         _("Climatology data incomplete."),
-                                         _("Climatology"), wxOK | wxICON_WARNING);
-                    mdlg.ShowModal();
-                }
-            }
-        }
-    }
-
-    if(!m_FailedFiles.size())
-        m_bCompletedLoading = true;
+    StartDatasetLoad();
 }
 
 ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
 {
+    m_dataService.CancelAndWait();
     Free();
+}
+
+void ClimatologyOverlayFactory::StartDatasetLoad()
+{
+    const wxScopedCharBuffer path = ClimatologyDataDirectory().utf8_str();
+    if(!m_dataService.Start(path.data() ? path.data() : ""))
+        wxLogError(climatology_pi + _("could not start dataset loader"));
+}
+
+bool ClimatologyOverlayFactory::PollDatasetLoad(bool &succeeded, wxString &error)
+{
+    climatology::DatasetLoadResult result;
+    if(!m_dataService.TakeCompletion(result))
+        return false;
+
+    succeeded = result.Succeeded();
+    if(succeeded) {
+        PublishDataset(result.snapshot);
+        return true;
+    }
+
+    for(std::vector<std::string>::const_iterator it = result.errors.begin();
+        it != result.errors.end(); ++it) {
+        if(!error.empty()) error += "\n";
+        error += wxString::FromUTF8(it->c_str());
+    }
+    if(result.cancelled && error.empty())
+        error = _("Dataset loading was cancelled.");
+    if(error.empty())
+        error = _("Dataset loading failed without diagnostic details.");
+    return true;
+}
+
+void ClimatologyOverlayFactory::PublishDataset(
+    std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> snapshot)
+{
+    m_snapshot = snapshot;
+    m_query.reset(new climatology::ClimatologyQueryEngine(snapshot));
+    const climatology::DatasetAvailability &available = snapshot->availability;
+    wxCheckBox *controls[] = {
+        m_dlg.m_cbWind, m_dlg.m_cbCurrent, m_dlg.m_cbPressure,
+        m_dlg.m_cbSeaTemperature, m_dlg.m_cbAirTemperature,
+        m_dlg.m_cbCloudCover, m_dlg.m_cbPrecipitation,
+        m_dlg.m_cbRelativeHumidity, m_dlg.m_cbLightning,
+        m_dlg.m_cbSeaDepth};
+    for(std::size_t field = 0;
+        field < static_cast<std::size_t>(climatology::DatasetField::Count);
+        ++field)
+        controls[field]->Enable(available.fields[field]);
+    m_dlg.m_cbCyclones->Enable(available.cyclones);
+    m_dlg.m_cfgdlg->m_cbElNino->Enable(available.enso);
+    m_dlg.m_cfgdlg->m_cbLaNina->Enable(available.enso);
+    m_dlg.m_cfgdlg->m_cbNeutral->Enable(available.enso);
+
+    BuildLegacyCycloneViews();
+    m_bCompletedLoading.store(true, std::memory_order_release);
+    if(available.cyclones)
+        BuildCycloneCache();
+    wxLogMessage(climatology_pi + _("dataset ready: ") +
+                 wxString::FromUTF8(snapshot->metadata.version.c_str()));
+}
+
+void ClimatologyOverlayFactory::BuildLegacyCycloneViews()
+{
+    std::list<Cyclone*> *destinations[6] = {
+        &m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
+    for(std::size_t basin = 0; basin < 6; ++basin)
+        for(std::vector<climatology::CycloneTrack>::const_iterator track =
+                m_snapshot->cyclones.basins[basin].begin();
+            track != m_snapshot->cyclones.basins[basin].end(); ++track) {
+            Cyclone *legacy_track = new Cyclone;
+            for(std::vector<climatology::CycloneSegment>::const_iterator segment =
+                    track->segments.begin(); segment != track->segments.end();
+                ++segment) {
+                const ::CycloneState::State state =
+                    static_cast< ::CycloneState::State>(segment->state);
+                const CycloneDateTime time(segment->time.day,
+                    segment->time.month, segment->time.year,
+                    segment->time.hour);
+                legacy_track->states.push_back(new ::CycloneState(
+                    state, time, segment->latitude0, segment->longitude0,
+                    segment->latitude1, segment->longitude1,
+                    segment->wind_knots, segment->pressure_hpa));
+            }
+            destinations[basin]->push_back(legacy_track);
+        }
+
+    m_ElNinoYears.clear();
+    for(std::map<int, std::array<double, climatology::kClimatologyMonths> >
+            ::const_iterator year = m_snapshot->enso_by_year.begin();
+        year != m_snapshot->enso_by_year.end(); ++year) {
+        ElNinoYear values;
+        for(std::size_t month = 0; month < climatology::kClimatologyMonths;
+            ++month)
+            values.months[month] = year->second[month];
+        m_ElNinoYears[year->first] = values;
+    }
 }
 
 void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
@@ -277,44 +294,21 @@ bool ClimatologyOverlayFactory::InterpolateWindAtlasTime(int month, int nmonth, 
                                                          double *directions, double *speeds,
                                                          double &gale, double &calm)
 {
-    if(!m_WindData[month] || !m_WindData[nmonth])
+    if(!m_query)
         return false;
-    WindData::WindPolar *polar1 = m_WindData[month]->GetPolar(lat, positive_degrees(lon));
-    WindData::WindPolar *polar2 = m_WindData[nmonth]->GetPolar(lat, positive_degrees(lon));
-
-    if(!polar1 || !polar2)
+    climatology::MonthPosition position;
+    position.month = month;
+    position.next_month = nmonth;
+    position.current_weight = dpos;
+    climatology::WindDistributionResult result;
+    if(!m_query->WindDistribution(lat, lon, position, result))
         return false;
-
-    gale = (dpos*polar1->gale + (1-dpos)*polar2->gale) / 100.0;
-    calm = (dpos*polar1->calm + (1-dpos)*polar2->calm) / 100.0;
-
-    int dir_cnt = m_WindData[month]->dir_cnt;
-
-    double totald1 = 0, totald2 = 0;
-    for(int i=0; i<dir_cnt; i++) {
-        totald1 += polar1->directions[i];
-        totald2 += polar2->directions[i];
+    for(std::size_t sector = 0; sector < climatology::kWindSectors; ++sector) {
+        directions[sector] = result.frequency[sector];
+        speeds[sector] = result.speed_knots[sector];
     }
-
-    for(int i=0; i<dir_cnt; i++) {
-        double direction1 = polar1->directions[i]/m_WindData[month]->direction_resolution;
-        double direction2 = polar2->directions[i]/m_WindData[nmonth]->direction_resolution;
-        directions[i] = dpos*direction1 + (1-dpos)*direction2;
-
-        double speed1 = (double)polar1->speeds[i] / m_WindData[month]->speed_multiplier;
-        double speed2 = (double)polar2->speeds[i] / m_WindData[nmonth]->speed_multiplier;
-
-        if(direction1) {
-            if(direction2)
-                speeds[i] = dpos*speed1 + (1-dpos)*speed2;
-            else
-                speeds[i] = speed1;
-        } else if(direction2)
-            speeds[i] = speed2;
-        else
-            speeds[i] = 0;
-    }
-
+    gale = result.gale_probability;
+    calm = result.calm_probability;
     return true;
 }
 
@@ -333,50 +327,8 @@ bool ClimatologyOverlayFactory::InterpolateWindAtlas(const wxDateTime &date,
     int month, nmonth;
     double dpos;
     GetDateInterpolation(&date, month, nmonth, dpos);
-
-    double idirections[4][8], ispeeds[4][8], igale[4], icalm[4];
-
-    double lats[2] = {floor(lat), ceil(lat)}, lons[2] = {floor(lon), ceil(lon)};
-    double latd = lat - lats[0], lond = lon - lons[0];
-    bool havedata[4];
-
-    for(int lati = 0; lati<2; lati++)
-        for(int loni = 0; loni<2; loni++) {
-            int i = 2*lati + loni;
-            havedata[i] = InterpolateWindAtlasTime(month, nmonth, dpos, lats[lati], lons[loni],
-                                                   idirections[i], ispeeds[i], igale[i], icalm[i]);
-        }
-
-    /* fill in missing data */
-    int searchdata[4][3] = {{1, 2, 3}, {0, 3, 2}, {3, 0, 1}, {2, 1, 0}};
-    for(int i = 0; i<4; i++)
-        if(!havedata[i]) {
-            for(int j = 0; j < 3; j++) {
-                int k = searchdata[i][j];
-                if(havedata[k]) {
-                    memcpy(idirections[i], idirections[k], sizeof *idirections);
-                    memcpy(ispeeds[i], ispeeds[k], sizeof *ispeeds);
-                    igale[i] = igale[k];
-                    icalm[i] = icalm[k];
-                    goto outer_continue;
-                }
-            }
-            return false;
-        outer_continue:;
-        }
-
-    int dir_cnt = m_WindData[month]->dir_cnt;
-    for(int i=0; i<dir_cnt; i++) {
-        directions[i] = interpquad(idirections[0][i], idirections[1][i],
-                                   idirections[2][i], idirections[3][i], latd, lond);
-        speeds[i] = interpquad(ispeeds[0][i], ispeeds[1][i],
-                               ispeeds[2][i], ispeeds[3][i], latd, lond);
-    }
-
-    gale = interpquad(igale[0], igale[1], igale[2], igale[3], latd, lond);
-    calm = interpquad(icalm[0], icalm[1], icalm[2], icalm[3], latd, lond);
-
-    return true;
+    return InterpolateWindAtlasTime(month, nmonth, dpos, lat, lon,
+                                    directions, speeds, gale, calm);
 }
 
 void ClimatologyOverlayFactory::DrawLine( double x1, double y1, double x2, double y2,
@@ -1566,10 +1518,11 @@ bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
     double s;
     double latoff = 0, lonoff = 0;
     switch(setting) {
-    case ClimatologyOverlaySettings::WIND:   
-        s = m_WindData[month]->longitudes / 360;
-        latoff = 90.0/m_WindData[month]->latitudes;
-        lonoff = 180.0/m_WindData[month]->longitudes;
+    case ClimatologyOverlaySettings::WIND:
+        if(!m_snapshot || !m_snapshot->wind.available[month]) return false;
+        s = m_snapshot->wind.geometry.columns / 360.0;
+        latoff = 90.0/m_snapshot->wind.geometry.rows;
+        lonoff = 180.0/m_snapshot->wind.geometry.columns;
         break;
     case ClimatologyOverlaySettings::CURRENT: s = 3;  break;
     case ClimatologyOverlaySettings::SLP:     s = .5; break;
@@ -2131,7 +2084,8 @@ static double InterpTable(double ind, const double table[], int tablesize)
 double ClimatologyOverlayFactory::getValueMonth(enum Coord coord, int setting,
                                                 double lat, double lon, int month)
 {
-    if(!m_bCompletedLoading)
+    if(!IsReady() || setting < ClimatologyOverlaySettings::WIND ||
+       setting > ClimatologyOverlaySettings::SEADEPTH)
         return NAN;
 
     if(coord != MAG &&
@@ -2142,50 +2096,13 @@ double ClimatologyOverlayFactory::getValueMonth(enum Coord coord, int setting,
     if(isnan(lat) || isnan(lon))
         return NAN;
 
-    switch(setting) {
-    case ClimatologyOverlaySettings::WIND:
-        if(m_WindData[month])
-            return m_WindData[month]->InterpWind(coord, lat, lon);
-        break;
-    case ClimatologyOverlaySettings::CURRENT:
-        if(m_CurrentData[month])
-            return m_CurrentData[month]->InterpCurrent(coord, lat, lon);
-        break;
-    case ClimatologyOverlaySettings::SLP:
-        return InterpArray((-lat+90)/2-.5, positive_degrees(lon-1.5)/2,
-                           m_slp[month][0], 90, 180) * .01f + 1000.0;
-    case ClimatologyOverlaySettings::SST:
-        return InterpArray((-lat+90)-.5, positive_degrees(lon-.5),
-                           m_sst[month][0], 180, 360) * .001f + 15.0;
-    case ClimatologyOverlaySettings::AT:
-        return InterpArray((-lat+90)/2-.5, positive_degrees(lon-.5)/2,
-                           m_at[month][0], 90, 180) / 3.0;
-    case ClimatologyOverlaySettings::CLOUD:
-        return InterpArray((-lat+90)/2-.5, positive_degrees(lon-.5)/2,
-                           m_cld[month][0], 90, 180) * .001f * 12.5;
-    case ClimatologyOverlaySettings::PRECIPITATION:
-        return InterpArray((-lat+90)/2.5, positive_degrees(lon-2)/2.5,
-                           m_precip[month][0], 72, 144) * .002f;
-    case ClimatologyOverlaySettings::RELATIVE_HUMIDITY:
-        return InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_rhum[month][0], 180, 360)/2.0;
-    case ClimatologyOverlaySettings::LIGHTNING:
-        return InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_lightn[month][0], 180, 360);
-    case ClimatologyOverlaySettings::SEADEPTH:
-    {
-        double ind = InterpArray((-lat+90), positive_degrees(lon-.5),
-                           m_seadepth[0], 180, 360);
-        const double table[] = {0, 10, 20, 30, 50, 75, 100, 125, 150,
-                                200, 250, 300, 400, 500, 600, 700, 800,
-                                900, 1000, 1100, 1200, 1300, 1400, 1500,
-                                1750, 2000, 2500, 3000, 3500, 4000, 4500,
-                                5000, 5500, 6000, 6500, 7000, 7500, 8000,
-                                9000, 10000};
-        return InterpTable(ind, table, (sizeof table) / (sizeof *table));
-    }
-    }
-    return NAN;
+    climatology::QueryComponent component = climatology::QueryComponent::Magnitude;
+    if(coord == U) component = climatology::QueryComponent::Eastward;
+    else if(coord == V) component = climatology::QueryComponent::Northward;
+    else if(coord == DIRECTION) component = climatology::QueryComponent::Direction;
+    return m_query->ValueMonth(
+        static_cast<climatology::DatasetField>(setting), component,
+        lat, lon, month);
 }
 
 double ClimatologyOverlayFactory::getValue(enum Coord coord, int setting,
@@ -2194,19 +2111,19 @@ double ClimatologyOverlayFactory::getValue(enum Coord coord, int setting,
     int month, nmonth;
     double dpos;
     GetDateInterpolation(date, month, nmonth, dpos);
-
-    double v1 = getValueMonth(coord, setting, lat, lon, month);
-    double v2 = getValueMonth(coord, setting, lat, lon, nmonth);
-
-    if(coord == DIRECTION) {
-        if(isnan(v1)) return v2;
-        if(isnan(v2)) return v1;
-        if(v1 - v2 > 180) v1 -= 360;
-        if(v2 - v1 > 180) v2 -= 360;
-        return positive_degrees(dpos * v1 + (1-dpos) * v2);
-    }
-
-    return interp_value(v2, v1, dpos);
+    if(!IsReady() || setting < ClimatologyOverlaySettings::WIND ||
+       setting > ClimatologyOverlaySettings::SEADEPTH)
+        return NAN;
+    climatology::QueryComponent component = climatology::QueryComponent::Magnitude;
+    if(coord == U) component = climatology::QueryComponent::Eastward;
+    else if(coord == V) component = climatology::QueryComponent::Northward;
+    else if(coord == DIRECTION) component = climatology::QueryComponent::Direction;
+    climatology::MonthPosition position;
+    position.month = month;
+    position.next_month = nmonth;
+    position.current_weight = dpos;
+    return m_query->Value(static_cast<climatology::DatasetField>(setting),
+                          component, lat, lon, position);
 }
 
 double ClimatologyOverlayFactory::getCurCalibratedValue(enum Coord coord, int setting, double lat, double lon)
@@ -2530,14 +2447,14 @@ void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPo
     double step;
     switch(setting) {
     case ClimatologyOverlaySettings::WIND:
-        if(!m_WindData[month])
+        if(!m_snapshot || !m_snapshot->wind.available[month])
             return;
-        step = 360.0 / m_WindData[month]->longitudes;
+        step = m_snapshot->wind.geometry.longitude_step;
         break;
     case ClimatologyOverlaySettings::CURRENT:
-        if(!m_CurrentData[month])
+        if(!m_snapshot || !m_snapshot->current.available[month])
             return;
-        step = 360.0 / m_CurrentData[month]->longitudes;
+        step = m_snapshot->current.geometry.longitude_step;
         break;
     default: return;
     }
@@ -2619,11 +2536,12 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
 
     GetDateInterpolation(NULL, month, nmonth, dpos);
 
-    if(!m_WindData[month] || !m_WindData[nmonth])
+    if(!m_snapshot || !m_snapshot->wind.available[month] ||
+       !m_snapshot->wind.available[nmonth])
         return;
 
-    double latstep = 180.0 / (m_WindData[month]->latitudes);
-    double lonstep = 360.0 / (m_WindData[month]->longitudes);
+    double latstep = m_snapshot->wind.geometry.latitude_step;
+    double lonstep = m_snapshot->wind.geometry.longitude_step;
     const double r = 12;
     double size = m_dlg.m_cfgdlg->m_sWindAtlasSize->GetValue();
     double spacing = m_dlg.m_cfgdlg->m_sWindAtlasSpacing->GetValue();
@@ -2634,8 +2552,9 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
     while((vp.lon_max - vp.lon_min) / lonstep > w / spacing)
         lonstep *= 2;
 
-    int dir_cnt = m_WindData[month]->dir_cnt;
-    double latoff = 90.0/m_WindData[month]->latitudes, lonoff = 180.0/m_WindData[month]->longitudes;
+    int dir_cnt = climatology::kWindSectors;
+    double latoff = 90.0/m_snapshot->wind.geometry.rows;
+    double lonoff = 180.0/m_snapshot->wind.geometry.columns;
 
     for(double lat = round(vp.lat_min/latstep)*latstep-latoff; lat <= vp.lat_max+1; lat+=latstep)
         for(double lon = round(vp.lon_min/lonstep)*lonstep-lonoff; lon <= vp.lon_max+1; lon+=lonstep) {
@@ -2886,6 +2805,8 @@ static void QueryGL()
 
 bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
 {
+    if(!IsReady())
+        return false;
     m_dc = &dc;
 
     if(!dc.GetDC()) {

@@ -180,6 +180,9 @@ SET(SRCS
             src/zuFile.cpp
             src/ClimatologyMath.cpp
             src/ClimatologyDataset.cpp
+            src/ClimatologyChecksum.cpp
+            src/ClimatologyDataService.cpp
+            src/ClimatologyDatasetLoader.cpp
             src/ClimatologyQueryEngine.cpp
 )
 
@@ -199,6 +202,9 @@ SET(HDRS
             include/ClimatologyAPI.h
             include/ClimatologyProviderAPI.h
             include/ClimatologyDataset.h
+            include/ClimatologyChecksum.h
+            include/ClimatologyDataService.h
+            include/ClimatologyDatasetLoader.h
             include/ClimatologyQueryEngine.h
 )
 
@@ -238,14 +244,20 @@ if(BUILD_TESTING)
     tests/test_climatology_math.cpp
     src/ClimatologyMath.cpp
   )
+  target_compile_options(climatology_math_tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
   target_include_directories(climatology_math_tests PRIVATE include)
   add_test(NAME climatology_math COMMAND climatology_math_tests)
   add_executable(climatology_api_tests tests/test_climatology_api.cpp)
+  target_compile_options(climatology_api_tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
   target_include_directories(climatology_api_tests PRIVATE include)
   add_test(NAME climatology_api COMMAND climatology_api_tests)
   add_executable(climatology_provider_api_tests
     tests/test_climatology_provider_api.cpp
   )
+  target_compile_options(climatology_provider_api_tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
   target_include_directories(climatology_provider_api_tests PRIVATE include)
   add_test(NAME climatology_provider_api COMMAND climatology_provider_api_tests)
   add_executable(climatology_dataset_tests
@@ -254,8 +266,30 @@ if(BUILD_TESTING)
     src/ClimatologyQueryEngine.cpp
     src/ClimatologyMath.cpp
   )
+  target_compile_options(climatology_dataset_tests PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
   target_include_directories(climatology_dataset_tests PRIVATE include)
   add_test(NAME climatology_dataset COMMAND climatology_dataset_tests)
+  if(UNIX AND NOT QT_ANDROID)
+    add_executable(climatology_loader_tests
+      tests/test_climatology_loader.cpp
+      src/ClimatologyDataset.cpp
+      src/ClimatologyChecksum.cpp
+      src/ClimatologyDataService.cpp
+      src/ClimatologyDatasetLoader.cpp
+      src/ClimatologyQueryEngine.cpp
+      src/ClimatologyMath.cpp
+      src/zuFile.cpp
+    )
+    target_compile_options(climatology_loader_tests PRIVATE
+      $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
+    target_include_directories(climatology_loader_tests PRIVATE include)
+    target_link_libraries(climatology_loader_tests PRIVATE ZLIB::ZLIB BZip2::BZip2)
+    target_compile_definitions(climatology_loader_tests PRIVATE
+      CLIMATOLOGY_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+    )
+    add_test(NAME climatology_loader COMMAND climatology_loader_tests)
+  endif()
 endif()
 
 ##==============================================================
