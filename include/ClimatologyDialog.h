@@ -34,6 +34,7 @@ class wxSizer;
 // Forward declarations for plugin classes
 class ClimatologyOverlayFactory;
 class ClimatologyConfigDialog;
+class climatology_pi; 
 
 // Includes needed for member variables
 #include "ClimatologyRenderParams.h"
@@ -58,15 +59,15 @@ struct OverlayRowWidgets {
 // ---------------------------------------------------------------------------
 class ClimatologyDialog : public wxDialog
 {
-
 public:
     ClimatologyDialog(wxWindow* parent,
+                      climatology_pi* plugin,
                       ClimatologyOverlayFactory* factory,
                       wxWindowID id,
                       const wxString& title,
                       const wxPoint& pos,
                       const wxSize& size);
-					  
+
     // Event handlers
     void OnClose(wxCloseEvent& evt);
     void OnMonthChanged(wxCommandEvent& evt);
@@ -88,9 +89,13 @@ public:
 	// To permit ClimatologyConfigDialog to modify ClimatologyDialog data  (parents data)
 	CycloneParams& GetCycloneParams() { return m_cycloneParams; }
 	CycloneFilterParams& GetCycloneFilter() { return m_cycloneFilter; }
-
+	StandardDisplayParams& GetDisplayParams() { return m_displayParams; }
+	climatology_pi* GetPlugin() { return m_pi; }
 
 private:
+    climatology_pi* m_pi; 
+    CycloneParams m_cycloneParams;
+	
     // UI builders
     wxSizer* BuildTimelineBar();
     wxSizer* BuildOverlayList();
@@ -108,7 +113,6 @@ private:
     ClimatologyRenderParams   m_renderParams;
     	
 	// --- Cyclone unified model (owned by ClimatologyDialog) ---
-	CycloneParams        m_cycloneParams;
 	CycloneFilterParams  m_cycloneFilter;
 
     // Timeline widgets

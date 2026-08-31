@@ -12,6 +12,7 @@
 
 #include "ManifestLoader.hpp"
 #include "ManifestEntry.hpp"
+#include "nlohmann/json.hpp"
 
 #include <wx/progdlg.h>
 #include <wx/file.h>
@@ -19,11 +20,10 @@
 #include <wx/log.h>
 #include <wx/dir.h>
 
-
-// ADD nlohmann/json
-#include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+static const std::string BASE_URL =
+    "https://raw.githubusercontent.com/rgleason/climatology_pi_data/master/";
 
 ManifestLoader::ManifestLoader(const std::string& manifestPath)
     : m_manifestPath(manifestPath)
@@ -34,125 +34,63 @@ bool ManifestLoader::Load(std::vector<ManifestEntry>& entries)
 {
     entries.clear();
 
-    if (!wxFileExists(m_manifestPath))
-    {
+    wxFile file(wxString::FromUTF8(m_manifestPath.c_str()));
+    if (!file.IsOpened()) {
         wxLogWarning("Climatology: manifest.json not found: %s", m_manifestPath.c_str());
         return false;
     }
 
     wxString jsonText;
-    wxFile file(m_manifestPath);
-
-    if (!file.IsOpened() || !file.ReadAll(&jsonText))
-    {
+    if (!file.ReadAll(&jsonText)) {
         wxLogWarning("Climatology: Failed to read manifest.json");
         return false;
     }
 
-    std::string jsonString = jsonText.ToStdString();
-
     json root;
-
     try {
-        root = json::parse(jsonString);
+        root = json::parse(jsonText.ToStdString());
     }
-    catch (const std::exception& e)
-    {
-        wxLogWarning("Climatology: JSON parse error in manifest.json: %s", e.what());
+    catch (const std::exception& e) {
+        wxLogWarning("Climatology: JSON parse error: %s", e.what());
         return false;
     }
 
-    // Validate root type
-    if (!root.is_array())
-    {
-        wxLogWarning("Climatology: manifest.json root must be an array, but is type '%s'",
-                     root.type_name());
+    if (!root.is_array()) {
+        wxLogWarning("Climatology: manifest.json root must be an array");
         return false;
     }
 
-    // Iterate entries
-    for (size_t i = 0; i < root.size(); ++i)
-    {
-        const json& item = root[i];
-
-        // Validate object type
+    for (const auto& item : root) {
         if (!item.is_object())
-        {
-            wxLogWarning("Climatology: manifest entry %zu is not an object", i);
             continue;
-        }
 
-        // Validate required fields
-        if (!item.contains("filename"))
-        {
-            wxLogWarning("Climatology: manifest entry %zu missing required field 'filename'", i);
+        if (!item.contains("filename") || !item["filename"].is_string())
             continue;
-        }
-        if (!item["filename"].is_string())
-        {
-            wxLogWarning("Climatology: manifest entry %zu: 'filename' must be a string", i);
-            continue;
-        }
 
-        // Optional fields with type validation
-        std::string description = "";
-        if (item.contains("description"))
-        {
-            if (!item["description"].is_string())
-            {
-                wxLogWarning("Climatology: manifest entry %zu: 'description' must be a string", i);
-            }
-            else
-                description = item["description"].get<std::string>();
-        }
+        ManifestEntry e;
+        e.filename = item["filename"].get<std::string>();
 
-        uint64_t size = 0;
-        if (item.contains("size"))
-        {
-            if (!item["size"].is_number_integer())
-            {
-                wxLogWarning("Climatology: manifest entry %zu: 'size' must be an integer", i);
-            }
-            else
-                size = item["size"].get<uint64_t>();
-        }
+        if (item.contains("description") && item["description"].is_string())
+            e.description = item["description"].get<std::string>();
 
-        std::string checksum = "";
-        if (item.contains("checksum"))
-        {
-            if (!item["checksum"].is_string())
-            {
-                wxLogWarning("Climatology: manifest entry %zu: 'checksum' must be a string", i);
-            }
-            else
-                checksum = item["checksum"].get<std::string>();
-        }
+        if (item.contains("checksum") && item["checksum"].is_string())
+            e.checksum = item["checksum"].get<std::string>();
 
-        // Sanitize filename using wxString
-        wxString fname(item["filename"].get<std::string>());
+        if (item.contains("size") && item["size"].is_number_integer())
+            e.size = item["size"].get<uint64_t>();
 
-        fname.Trim(true).Trim(false);
-        fname.Replace("\r", "");
-        fname.Replace("\n", "");
+        if (item.contains("required") && item["required"].is_boolean())
+            e.required = item["required"].get<bool>();
 
-        if (fname.StartsWith("./"))
-            fname = fname.Mid(2);
+        // URL: either provided or constructed
+        if (item.contains("url") && item["url"].is_string())
+            e.url = item["url"].get<std::string>();
+        else
+            e.url = BASE_URL + e.filename;
 
-        while (fname.StartsWith("/"))
-            fname = fname.Mid(1);
-
-        ManifestEntry entry;
-        entry.filename   = fname.ToStdString();
-        entry.description = description;
-        entry.size        = size;
-        entry.checksum    = checksum;
-
-        entries.push_back(entry);
+        entries.push_back(e);
     }
 
-    wxLogMessage("Climatology: Loaded %llu manifest entries",
-                 static_cast<unsigned long long>(entries.size()));
-
+    wxLogMessage("Climatology: Loaded %zu manifest entries", entries.size());
     return true;
 }
-

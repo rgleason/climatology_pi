@@ -12,11 +12,9 @@
 
 #pragma message("Header: " __FILE__)
 
-
 #include <wx/timer.h>
 #include <wx/notebook.h>
 #include <wx/event.h>
-
 
 // --- Forward declarations (wxWidgets) ---
 class wxPanel;
@@ -38,6 +36,7 @@ class wxCommandEvent;
 // --- Forward declarations (plugin classes) ---
 class ClimatologyOverlayFactory;
 class ClimatologyDialog;
+class climatology_pi;
 
 // --- Includes required for member variables ---
 #include "DisplayMode.h"
@@ -71,13 +70,13 @@ public:
     // @param displayParams   Reference to global StandardDisplayParams.
     // @param cycloneParams   Reference to global CycloneParams.
      
-    ClimatologyConfigDialog(wxWindow* parent,
-                            ClimatologyOverlayFactory* factory);
-
-    ClimatologyConfigDialog(ClimatologyDialog* parent,
-                            StandardDisplayParams& displayParams,
-                            CycloneParams& cycloneParams);
-
+	// NEW main constructor 
+    ClimatologyConfigDialog(ClimatologyDialog* parent);
+	
+	// If you still want the factory-based one, declare it too:
+    // ClimatologyConfigDialog(wxWindow* parent,
+    //                         ClimatologyOverlayFactory* factory);
+    
     ~ClimatologyConfigDialog();
 
     // Persist all settings to wxFileConfig.
@@ -85,21 +84,17 @@ public:
 	CycloneFilterParams GetCycloneFilterParams() const;
 		
     void Save();
-   // --- Persistence helpers ----------------------------------------------
     void LoadSettings();
     void SaveSettings();
 	
 	// No cycloneParams stored here anymore
     // No GetCycloneParams() here
     // No m_parent->anything() here
-
 	// Construct the dialog for 4-tab Config cyclones
-    // ClimatologyConfigDialog(wxWindow* parent, ClimatologyOverlayFactory* factory);
-
 
 private:
  
-    ClimatologyDialog* m_parent;
+    ClimatologyDialog* m_parent = nullptr;
 
     // Model references (no legacy structs)
     StandardDisplayParams m_displayParams;
@@ -109,51 +104,55 @@ private:
     void ApplyTheme();   // wraps DimeWindow(this)
 
     // Owner
-       wxTimer                m_refreshTimer;
+    wxTimer                m_refreshTimer;
 
-     // Last selected overlay type index (UI state)
+    // Last selected overlay type index (UI state)
 	int m_lastOverlayType = OVERLAY_WIND;
-
-    // --- UI <-> model sync -------------------------------------------------
-
 	
+    // UI building (called only from constructor)
+    wxPanel* BuildStandardTab(wxWindow* parent);
+    wxPanel* BuildWindAtlasTab(wxWindow* parent);
+    wxPanel* BuildCyclonesTab(wxWindow* parent);
+    wxPanel* BuildInfoTab(wxWindow* parent);
+
+    // UI synchronization
     void SyncStandardTabFromModel();
     void SyncStandardTabToModel();
-
     void SyncWindAtlasTabFromModel();
     void SyncWindAtlasTabToModel();
-
     void SyncCyclonesTabFromModel();
     void SyncCyclonesTabToModel();
-
-    // --- Event handlers ----------------------------------------------------
+	
+    // Event handlers
     void OnPageChanged(wxNotebookEvent& event);
-
-    void OnUpdate();                             // generic fan-out
+    void OnRefreshTimer(wxTimerEvent& event);
+ 	void OnUpdateCyclones(wxEvent& event);
+	void OnUpdateCyclonesSpin(wxSpinEvent& event);
+	void OnCycloneFilterChanged(wxCommandEvent& event);	
+	
+    void OnUpdate();                         // generic fan-out
     void OnUpdate(wxCommandEvent& event)        { OnUpdate(); }
     void OnUpdateSpin(wxSpinEvent& event)       { OnUpdate(); }
     void OnUpdateScroll(wxScrollEvent& event)   { OnUpdate(); }
     void OnUpdateColor(wxColourPickerEvent& e)  { OnUpdate(); }
 
     void OnUpdateOverlayConfig(wxCommandEvent& event);
-
- 	void OnUpdateCyclones(wxEvent& event);
-	void OnUpdateCyclonesSpin(wxSpinEvent& event);
 	void OnUpdateCyclonesDate(wxDateEvent& event);
-	void OnCycloneFilterChanged(wxCommandEvent& event);
     void OnCyclonesDateChanged(wxDateEvent& event);
 
     void OnPaintKey(wxPaintEvent& event);
     void OnEnabled(wxCommandEvent& event);
+	
     void OnAboutAuthor(wxCommandEvent& event);
+	void OnRedownloadAll(wxCommandEvent& event);
+	void OnDownloadMissing(wxCommandEvent& event);
+	void OnCheckIntegrity(wxCommandEvent& event);
+	
     void OnClose(wxCommandEvent& event) { Hide(); }
-    void OnRefreshTimer(wxTimerEvent& event);
-
-
+	
 
     // --- Notebook + tabs ---------------------------------------------------
     wxNotebook* m_notebook = nullptr;
-
     wxPanel*    m_panelStandard  = nullptr;
     wxPanel*    m_panelWindAtlas = nullptr;
     wxPanel*    m_panelCyclones  = nullptr;

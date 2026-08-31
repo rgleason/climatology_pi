@@ -41,15 +41,18 @@ wxEND_EVENT_TABLE()
 // ---------------------------------------------------------------------------
 
 ClimatologyDialog::ClimatologyDialog(wxWindow* parent,
-                  ClimatologyOverlayFactory* factory,
-                  wxWindowID id,
-                  const wxString& title,
-                  const wxPoint& pos,
-                  const wxSize& size)
-   : wxDialog(parent, id, title, pos, size,
-              wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
+                                     climatology_pi* plugin,
+                                     ClimatologyOverlayFactory* factory,
+                                     wxWindowID id,
+                                     const wxString& title,
+                                     const wxPoint& pos,
+                                     const wxSize& size)
+    : wxDialog(parent, id, title, pos, size,
+               wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER)
     , m_factory(factory)
+    , m_pi(plugin)      
 {
+
     DimeWindow(this);
 
     // -----------------------------------------------------------------------
@@ -344,13 +347,14 @@ void ClimatologyDialog::OnOverlayCheck(wxCommandEvent& evt)
     PushParamsToFactoryAndRender();
 }
 
-void ClimatologyDialog::OnCyclonesConfig(wxCommandEvent& evt)
+void ClimatologyDialog::OnCyclonesConfig(wxCommandEvent& event)
 {
-    // Second 4-tab config dialog; now requires parent + factory
-    ClimatologyConfigDialog cfg(this, m_factory);
-    cfg.ShowModal();
-    PushParamsToFactoryAndRender();
+    ClimatologyConfigDialog dlg(this);
+    dlg.ShowModal();
 }
+
+
+
 
 void ClimatologyDialog::OnClose(wxCloseEvent& evt)
 {

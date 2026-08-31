@@ -146,9 +146,14 @@ public:
 	
     void SetViewPort(PlugIn_ViewPort* vp);
 
+	// ==== Parameter accessors ===========
+    CycloneFilterParams& GetCycloneFilter();
 	StandardDisplayParams& GetDisplayParams() { return m_displayParams; }
 	CycloneParams&        GetCycloneParams()  { return m_cycloneParams; }
-
+	
+	// ==== Query methods (the new ones you're adding) ==============
+    bool IsOverlayVisible(int overlayType) const;
+    wxString GetValueAtPosition(int overlayType, double lat, double lon);
 
     // Build render parameters for a single overlay
 	void BuildRenderParams(int overlayIndex,
@@ -245,6 +250,7 @@ public:
     //=== Cyclone History Access =============================================
     bool GetStormHistory(int stormID, std::vector<CyclonePoint>& out);
     bool GetStormHistoryPoint(int stormID, int index, CyclonePoint& out);
+	
 
 private:
     //=========================================================================

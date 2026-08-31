@@ -28,6 +28,7 @@ echo.
 cmake -A Win32 -T v143 ^
     -DOCPN_TARGET=MSVC ^
     -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+    -DCMAKE_TOOLCHAIN_FILE=C:/Users/fcgle/source/vcpkg/scripts/buildsystems/vcpkg.cmake ^
     -S . -B build
 
 if errorlevel 1 (

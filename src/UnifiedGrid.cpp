@@ -149,6 +149,26 @@ void UnifiedGrid::LoadFromDataModel(const ClimatologyDataModel& dm)
 	wxLogMessage("Wind atlas entries: %zu (expected %d)", 
              wind_atlas.size(), rows * cols);
 
+	// --- UnifiedGrid Self-Test ---
+	wxLogMessage("UnifiedGrid: Geometry rows=%d cols=%d lat0=%f lon0=%f latStep=%f lonStep=%f",
+				 rows, cols, lat0, lon0, latStep, lonStep);
+
+	for (int m = 0; m < 12; m++) {
+		wxLogMessage("UnifiedGrid: Month %d scalar size=%zu u size=%zu v size=%zu",
+					 m,
+					 scalar[m].size(),
+					 u[m].size(),
+					 v[m].size());
+	}
+
+	wxLogMessage("UnifiedGrid: Cyclone tracks loaded: %zu", cyclone_tracks.size());
+	wxLogMessage("UnifiedGrid: Wind atlas entries: %zu", wind_atlas.size());
+		int ensoCount = 0;
+		for (int i = 0; i < 12; i++)
+			if (!std::isnan(enso_index[i]))
+				ensoCount++;
+	wxLogMessage("UnifiedGrid: ENSO index entries: %d", ensoCount);
+
 }
 
 // ------------------------------------------------------------------------

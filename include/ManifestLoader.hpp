@@ -14,6 +14,7 @@ public:
 
     // Load entries from manifest.json into the vector
     bool Load(std::vector<ManifestEntry>& entries);
+	
 
 private:
     std::string m_manifestPath;

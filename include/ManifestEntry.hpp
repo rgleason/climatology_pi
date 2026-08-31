@@ -5,9 +5,9 @@
 
 struct ManifestEntry {
     std::string filename;
-	std::string url;
     std::string description;
-    uint64_t size = 0;
     std::string checksum;
-    bool required = true;   // ← THIS FIELD IS REQUIRED
+    uint64_t size = 0;
+    bool required = true;
+    std::string url;        // ← LAST, matching manifest.json
 };

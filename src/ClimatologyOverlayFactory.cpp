@@ -1,5 +1,5 @@
 // ============================================================================
-// ClimatologyOverlayFactory.cpp  (Model A — unified render params, safe‑clean)
+// ClimatologyOverlayFactory.cpp  (Model A — unified render params, safe clean)
 // ============================================================================
 
 //=============================================================================
@@ -28,6 +28,8 @@
 #include <wx/wfstream.h>
 #include <wx/zstream.h>
 #include <wx/textfile.h>
+#include <wx/dir.h>
+
 
 //=== STL =====================================================================
 #include <memory>
@@ -270,6 +272,54 @@ ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
             delete[] m_pOverlay[m][s].m_data;
 }
 
+// ========================================================================
+// Public accessor methods that query the factory's state.
+// =======================================================================
+
+bool ClimatologyOverlayFactory::IsOverlayVisible(int overlayType) const
+{
+    if (overlayType < 0 || overlayType >= NUM_OVERLAYS)
+        return false;
+    return m_displayParams.showOverlayType[overlayType];
+}
+
+/*
+wxString ClimatologyOverlayFactory::GetValueAtPosition(int overlayType, double lat, double lon)
+{
+    if (overlayType < 0 || overlayType >= NUM_OVERLAYS)
+        return wxEmptyString;
+    
+    if (!m_displayParams.showOverlayType[overlayType])
+        return wxEmptyString;
+    
+    // Query the data model for the value at this position
+    double value = GetDataValue(overlayType, lat, lon);
+    
+    if (std::isnan(value) || value == INVALID_DATA_VALUE)
+        return wxEmptyString;
+    
+    // Format with units
+    return FormatValueWithUnits(overlayType, value, m_displayParams.units[overlayType]);
+}
+*/
+
+wxString ClimatologyOverlayFactory::GetValueAtPosition(int overlayType, double lat, double lon)
+{
+    if (overlayType < 0 || overlayType >= NUM_OVERLAYS)
+        return wxEmptyString;
+    
+    if (!m_displayParams.showOverlayType[overlayType])
+        return wxEmptyString;
+    
+    // TODO: Implement actual data querying from the data model
+    // This requires:
+    // 1. GetDataValue() method to query the data grid at lat/lon
+    // 2. INVALID_DATA_VALUE constant definition
+    // 3. FormatValueWithUnits() method to format the value with proper units
+	// 4. See above    
+    // For now, return empty to allow compilation
+    return wxEmptyString;
+}
 
 // ============================================================================
 // SetParams()
@@ -346,8 +396,6 @@ void ClimatologyOverlayFactory::BuildRenderParams(
 	outParams.monthInterpolation = 1.0; // or compute interpolation
 }
 
-    
-
 // ============================================================================
 // SetCycloneFilter()
 // Store cyclone filter parameters (NOT appearance).
@@ -374,6 +422,32 @@ void ClimatologyOverlayFactory::SetViewPort(PlugIn_ViewPort* vp)
 bool ClimatologyOverlayFactory::Load()
 {
     wxGenericProgressDialog* progress = nullptr;
+	
+	wxString dataDir = ClimatologyDataDirectory();
+	wxLogMessage("Climatology_pi: Using data directory: %s", dataDir);
+
+    // --- Data folder self-test ---
+    wxDir dir(dataDir);
+    if (!dir.IsOpened()) {
+        wxLogMessage("Climatology_pi: ERROR — Data directory could not be opened.");
+    } else {
+        int fileCount = 0;
+        wxString filename;
+
+        bool cont = dir.GetFirst(&filename);
+        while (cont) {
+            fileCount++;
+            wxFileName fn(dataDir, filename);
+            wxULongLong size = fn.GetSize();
+            wxLogMessage("Climatology_pi: File: %s Size: %llu bytes",
+                         filename, size.GetValue());
+            cont = dir.GetNext(&filename);
+        }
+
+        wxLogMessage("Climatology_pi: Total files in data directory: %d", fileCount);
+    }
+
+    // --- Now load the actual data ---
     m_bCompletedLoading = LoadInternal(progress);
     return m_bCompletedLoading;
 }
@@ -603,7 +677,9 @@ bool ClimatologyOverlayFactory::LoadScalarNOAA()
 
     for (int m = 0; m < 12; m++)
     {
-        // Resize all scalar arrays for this month
+        wxLogMessage("Factory: Loading NOAA scalar datasets for month %d", m);
+		
+		// Resize all scalar arrays for this month
         m_slp[m].resize(SLP_LAT * SLP_LON);
         m_sst[m].resize(SST_LAT * SST_LON);
         m_at[m].resize(AT_LAT * AT_LON);
@@ -645,7 +721,9 @@ bool ClimatologyOverlayFactory::LoadWindNOAA()
         m_WindData[m]->v.resize(WIND_LAT * WIND_LON);
 
         // Load NOAA wind vector fields
+		wxLogMessage("Factory: Loading NOAA wind_u for month %d", m);
         ok &= ReadNOAAFile("wind_u", m, m_WindData[m]->u.data(), WIND_LAT, WIND_LON);
+		wxLogMessage("Factory: Loading NOAA wind_v for month %d", m);	
         ok &= ReadNOAAFile("wind_v", m, m_WindData[m]->v.data(), WIND_LAT, WIND_LON);
     }
 
@@ -668,7 +746,10 @@ bool ClimatologyOverlayFactory::LoadCurrentNOAA()
         m_CurrentData[m]->v.resize(CUR_LAT * CUR_LON);
 
         // Load NOAA current vector fields
+        wxLogMessage("Factory: Loading NOAA current_u for month %d", m);		
         ok &= ReadNOAAFile("current_u", m, m_CurrentData[m]->u.data(), CUR_LAT, CUR_LON);
+		
+		wxLogMessage("Factory: Loading NOAA current_v for month %d", m);
         ok &= ReadNOAAFile("current_v", m, m_CurrentData[m]->v.data(), CUR_LAT, CUR_LON);
     }
 
@@ -1266,6 +1347,8 @@ bool ClimatologyOverlayFactory::LoadCyclonePoints()
     for (const wxString& fname : files)
     {
         wxString file = dataDir + "/cyclones/" + fname;
+		
+		wxLogMessage("Factory: Loading cyclone basin file: %s", file);
 
         if (!wxFileExists(file))
             continue;
@@ -3348,7 +3431,7 @@ bool ClimatologyOverlayFactory::BuildCycloneTracks()
         m_cycloneData.tracks.push_back(track);
         m_cycloneData.idToIndex[id] = idx;
     }
-
+	wxLogMessage("Factory: Built %zu cyclone tracks", m_cycloneData.tracks.size());
     return true;
 }
 
@@ -5425,6 +5508,11 @@ void ClimatologyOverlayFactory::RenderGridDC(
 
     RenderGridDC(r, dc, p); // call modern overload
 }
+
+
+
+
+
 
 
 

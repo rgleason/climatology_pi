@@ -73,7 +73,6 @@ using json = nlohmann::json;
 #include "CycloneFilterParams.h"
 #include "WindAtlasParams.h"
 #include "DownloadManager.hpp"
-#include "DownloadFileEntry.hpp"
 
 class ClimatologyDialog;
 class ClimatologyConfigDialog;
@@ -106,8 +105,16 @@ public:
     climatology_pi(void* ppimgr);
     virtual ~climatology_pi();
 
-    //virtual void UpdateFollowState(int mode, bool enabled) override;  //api121
-    //virtual void OnTideCurrentClick(TCClickInfo info) override;     //api121
+	// Accessors for ConfigDialog
+ 	DownloadManager* GetDownloadManager() { return m_downloadManager.get(); }
+    wxString GetDataDir() const { return m_plugin_dir; }
+
+	// Download manager
+    void OnStartupTimer(wxTimerEvent& event);
+    void OnDownloadComplete(wxCommandEvent& event);
+	
+	// For 4 Tab About button
+	void StartDownload(bool interactive);
 
     // Required plugin API
     int  Init(void) override;
@@ -120,11 +127,13 @@ public:
     int GetPlugInVersionPatch() override;
     int GetPlugInVersionPost() override;
 
+
     wxBitmap* GetPlugInBitmap() override;
     wxString  GetCommonName() override;
     wxString  GetShortDescription() override;
     wxString  GetLongDescription() override;
 	
+
     // Toolbar + dialogs
     void OnToolbarToolCallback(int id) override;
 
@@ -145,16 +154,20 @@ public:
     bool SaveConfig(void);
 
     void SetColorScheme(PI_ColorScheme cs) override;
-
+	
 	private:
+
+   // Startup
+    wxTimer m_startupTimer;
+    bool    m_bCompletedLoading = false;
+	
+	std::unique_ptr<DownloadManager> m_downloadManager;
+	wxString m_plugin_dir;
+		
     // Internal helpers
     void CreateOverlayFactory();
     void FreeData();
     void BootstrapDataDirectory();
-
-    // Download manager
-    void OnStartupTimer(wxTimerEvent& event);
-    void OnDownloadComplete(wxCommandEvent& event);
 
     // Persistent + runtime parameters
     StandardDisplayParams m_params;
@@ -163,14 +176,10 @@ public:
     ClimatologyDialog*        m_pClimatologyDialog = nullptr;  // Quick access
     ClimatologyConfigDialog*  m_pConfigDialog      = nullptr;  // Modal 4‑tab config
 
-    // Download manager
-    std::unique_ptr<DownloadManager> m_downloadManager;
-
     // Plugin config + UI
     wxFileConfig* m_pconfig = nullptr;
     wxWindow*     m_parent_window = nullptr;
 
-    wxString m_plugin_dir;
     wxBitmap m_panelBitmap;
 
     // Toolbar
@@ -182,9 +191,7 @@ public:
     int m_climatology_dialog_sx = 0;
     int m_climatology_dialog_sy = 0;
 
-    // Startup
-    wxTimer m_startupTimer;
-    bool    m_bCompletedLoading = false;
+ 
 };	
 
 #endif // _CLIMATOLOGY_PI_PLUGIN_H_

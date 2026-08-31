@@ -1,5 +1,5 @@
-#ifndef _UNIFIED_GRID_H_
-#define _UNIFIED_GRID_H_
+#ifndef _UNIFIED_GRID_RAW_H_
+#define _UNIFIED_GRID_RAW_H_
 
 #include <vector>
 

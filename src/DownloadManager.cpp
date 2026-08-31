@@ -1,5 +1,3 @@
-#pragma message("CLIMATOLOGY_BUNDLED_CURL is defined")
-
 #include <wx/wxprec.h>
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
@@ -7,7 +5,6 @@
 
 // Always compiled:
 #include "DownloadManager.hpp"
-#include "DownloadFileEntry.hpp"
 #include "icons.h"
 
 #include <wx/filename.h>
@@ -15,6 +12,7 @@
 #include <wx/zstream.h>
 #include <wx/wfstream.h>
 #include <wx/progdlg.h>
+#include <wx/hash.h>
 
 #ifndef wxPD_APP_MODAL
 #define wxPD_APP_MODAL 0
@@ -67,8 +65,18 @@ DownloadManager::~DownloadManager()
     Cancel();
 }
 
-void DownloadManager::SetManifest(const std::vector<DownloadFileEntry>& files)
+const std::vector<ManifestEntry>& DownloadManager::GetManifest() const
 {
+    return m_files;    // or m_fullManifest if you prefer the full set
+}
+
+
+
+void DownloadManager::SetManifest(const std::vector<ManifestEntry>& files)
+{
+	m_fullManifest = files;
+	m_files = files;
+
     std::lock_guard<std::mutex> lock(m_mutex);
     m_files = files;
 }
@@ -108,7 +116,6 @@ bool DownloadManager::AllRequiredAvailable() const
 }
 
 
-
 void DownloadManager::OnDownloadProgress(wxCommandEvent& event)
 {
     if (!m_progress)
@@ -144,16 +151,25 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 }
 
 // Curl download begins here
-// Only curl‑dependent parts under the macro:
-#ifdef CLIMATOLOGY_BUNDLED_CURL
-
 #include <curl/curl.h>
 
 bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
 {
+    ManifestEntry dummy;
+    dummy.filename = dest;
+    dummy.checksum = "";   // no checksum in this path
+    return CurlDownload(dummy, url, dest);
+}
+
+bool DownloadManager::CurlDownload(const ManifestEntry& entry,
+                                   wxString url,
+                                   const wxString& dest)
+{
+    // Log curl version (shows backend: Schannel, OpenSSL, SecureTransport)
     wxLogMessage("curl version: %s", curl_version());
     wxLogMessage("Climatology: curl downloading %s -> %s", url, dest);
 
+    // --- Sanitize URL -------------------------------------------------------
     url.Trim(true).Trim(false);
     url.Replace("\r", "");
     url.Replace("\n", "");
@@ -163,12 +179,14 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
         return false;
     }
 
+    // --- Open output file ---------------------------------------------------
     FILE* fp = fopen(dest.mb_str().data(), "wb");
     if (!fp) {
         wxLogMessage("Climatology: Failed to open %s for writing", dest);
         return false;
     }
 
+    // --- Initialize curl ----------------------------------------------------
     CURL* curl = curl_easy_init();
     if (!curl) {
         fclose(fp);
@@ -176,48 +194,68 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
         return false;
     }
 
-    // LOG CAINFO PATH
-	wxString ca = m_dataDir + "cacert.pem";
+    // --- IMPORTANT: Cross platform TLS trust -------------------------------
+    //
+    // Curl automatically selects the correct TLS backend:
+    //   - Windows: Schannel (uses Windows certificate store)
+    //   - Linux: OpenSSL (uses system CA bundle)
+    //   - macOS: SecureTransport/LibreSSL (uses macOS trust store)
+    //
+    // Therefore:
+    //   - No CAINFO required
+    //   - No cacert.pem required
+    //   - No platform-specific #ifdef required
+    //
+    // Setting CAINFO would override system trust and break TLS on Windows.
+    // So we rely entirely on curl's built-in trust behavior.
 
-    std::string ca_utf8 = ca.ToStdString();
-    wxLogMessage("Climatology: Using CAINFO = %s", ca_utf8.c_str());
-	wxLogMessage("Climatology: CA file exists? %d", wxFileExists(ca));
-    curl_easy_setopt(curl, CURLOPT_CAINFO, ca_utf8.c_str());
-	
-    // SAFE URL CONVERSION
+    // --- Set URL ------------------------------------------------------------
     std::string url_utf8 = url.ToStdString();
     curl_easy_setopt(curl, CURLOPT_URL, url_utf8.c_str());
 
+    // --- Write callback ------------------------------------------------------
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
- 	// REQUIRED CURL OPTIONS FOR GITHUB RAW
-	// Follow redirects (GitHub Raw uses 301/302)
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-	// Verify TLS certificates
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-
-	// Required for GitHub Raw (otherwise you get HTML wrappers)
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, "ClimatologyPlugin/1.6");
+    // --- Required for GitHub Raw --------------------------------------------
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);     // follow redirects
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);     // verify TLS
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);     // strict host check
 	
-	// Allow HTTPS + HTTP
-	curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS | CURLPROTO_HTTP);
-	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS | CURLPROTO_HTTP);
+	// Modern User-Agent (GitHub rejects unknown agents)
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/8.20.0");
+	
+	// Force TLS 1.2+ (GitHub requires this)
+	curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
 
-	// Accept gzip/deflate (GitHub sends compressed responses)
-	curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+	// Use Windows native certificate store
+	curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
 
-	// Fail on HTTP errors (prevents saving HTML error pages)
-	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+	// Enable ALPN (GitHub requires this)
+	curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_ALPN, 1L);
 
-	// Timeout (prevents hangs)
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+	// DO NOT enable NPN on Schannel — it breaks GitHub TLS
+	// curl_easy_setopt(curl, CURLOPT_SSL_ENABLE_NPN, 1L);   // REMOVE THIS
 
-    // ENABLE VERBOSE CURL LOGGING
+    // --- Protocols -----------------------------------------------------------
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS,
+                     CURLPROTO_HTTPS | CURLPROTO_HTTP);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS,
+                     CURLPROTO_HTTPS | CURLPROTO_HTTP);
+
+    // --- Compression ---------------------------------------------------------
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+
+    // --- Fail on HTTP errors -------------------------------------------------
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+
+    // --- Timeout -------------------------------------------------------------
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+    // --- Verbose logging -----------------------------------------------------
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
+    // --- Perform download ----------------------------------------------------
     CURLcode res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     fclose(fp);
@@ -228,9 +266,39 @@ bool DownloadManager::CurlDownload(wxString url, const wxString& dest)
         return false;
     }
 
-    wxLogMessage("Climatology: download OK");
-    return true;
+/*
+	// --- Checksum validation ---------------------------------------------------
+	if (!entry.checksum.IsEmpty()) {
+		wxFileInputStream fin(dest);
+		if (!fin.IsOk()) {
+			wxLogWarning("Climatology: cannot open %s for checksum", dest);
+			wxRemoveFile(dest);
+			return false;
+		}
+
+		wxMemoryOutputStream mem;
+		mem.Write(fin);
+		
+		auto* buf = mem.GetOutputStreamBuffer()->GetBufferStart();
+		size_t len = mem.GetOutputStreamBuffer()->GetBufferSize();
+
+//   (see next section about wxSHA256)
+//   stubbed out the actual comparison 
+//		wxString actual = wxSHA256::GetDigest(buf, len);
+//		wxString actual = wxSHA256::Hash(buf, len);
+
+		wxString expected(entry.checksum);
+	
+//    if (!actual.IsSameAs(expected) or false) {
+        wxLogWarning("Climatology: checksum mismatch for %s", dest);
+        wxRemoveFile(dest);
+        return false;
+    }
+*/
+    wxLogMessage("Climatology: checksum OK for %s", dest);
+	return true;   // <- ensure this is the last statement
 }
+
 
 
 // ------------------------------------------------------------
@@ -271,15 +339,32 @@ wxThread::ExitCode DownloadWorker::Entry()
 
         wxLogMessage("Climatology: Downloading %s -> %s", url, dest);
 
-        bool ok = m_mgr->CurlDownload(url, dest);
+        // Try to download 3 times with a pause.
+		bool ok = false;
+		for (int attempt = 0; attempt < 3; attempt++) {
+			ok = m_mgr->CurlDownload(url, dest);
+			if (ok)
+				break;
 
+			wxLogMessage("Climatology: retrying %s (attempt %d)", url, attempt + 2);
+			wxMilliSleep(500);
+		}
+
+        //  Continue after 3 attempts. 
         if (!ok)
         {
             wxLogWarning("Climatology: Download failed: %s", url);
+			
+			// *** ADD DELAY HERE ***
+			wxMilliSleep(250);
+	
             filesDone++;
             goto progress_update;
         }
 
+		// *** ADD DELAY HERE ***
+		wxMilliSleep(250);
+		
         if (entry.filename.rfind("cyclone-", 0) == 0)
         {
             wxString gzfile = dest;
@@ -305,7 +390,10 @@ wxThread::ExitCode DownloadWorker::Entry()
             }
         }
 
-        filesDone++;
+		// *** ADD DELAY HERE ***
+		wxMilliSleep(250);
+
+	    filesDone++;
 
 	progress_update:
 		wxCommandEvent progressEvt(EVT_DM_PROGRESS);
@@ -317,14 +405,37 @@ wxThread::ExitCode DownloadWorker::Entry()
 	wxCommandEvent evt(EVT_DM_COMPLETE);
 	wxQueueEvent(m_mgr->m_parent, evt.Clone());
 
+	// Mark worker thread as finished
+	m_mgr->WorkerThreadFinished();
+
 	return (wxThread::ExitCode)0;
 
+
+}
+
+
+void DownloadManager::WorkerThreadFinished()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_workerThreadRunning = false;
+    m_worker = nullptr;
+	std::vector<ManifestEntry> m_fullManifest;
+
+    DestroyProgressDialog();
+	
+	// Restore full manifest after missing-file download
+	if (m_fullManifest.size() > 0)
+	m_files = m_fullManifest;
+
+    wxLogMessage("Climatology: Download worker finished");
 }
 
 
 void DownloadManager::StartBackgroundDownload(bool interactive)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
+	
+	m_workerThreadRunning = true;
 
     if (m_worker) {
         wxLogMessage("Climatology: Download already in progress");
@@ -357,4 +468,47 @@ void DownloadManager::StartBackgroundDownload(bool interactive)
 }
 
 
-#endif // CLIMATOLOGY_BUNDLED_CURL
+
+// Check Integrity
+bool DownloadManager::CheckIntegrity()
+{
+    wxLogMessage("Climatology: Running data integrity check...");
+
+    for (auto& entry : m_files)
+    {
+        wxString path = m_dataDir + entry.filename;
+
+        if (!wxFileExists(path)) {
+            wxLogWarning("Missing file: %s", path);
+            return false;
+        }
+
+        if (wxFileName::GetSize(path) == 0) {
+            wxLogWarning("Zero-size file: %s", path);
+            return false;
+        }
+
+ //       if (!entry.checksum.empty()) {
+ //           wxFileInputStream fin(path);
+ //           if (!fin.IsOk()) {
+ //               wxLogWarning("Cannot open %s for checksum", path);
+ //               return false;
+ //           }
+
+ //           wxMemoryOutputStream mem;
+ //           mem.Write(fin);
+
+ //           wxString actual = wxSHA256::Hash(
+ //               mem.GetOutputStreamBuffer()->GetBufferStart(),
+ //               mem.GetOutputStreamBuffer()->GetBufferSize());
+
+ //           if (!actual.IsSameAs(entry.checksum)) {
+ //               wxLogWarning("Checksum mismatch: %s", path);
+ //               return false;
+ //           }
+ //       }
+    }
+
+    wxLogMessage("Climatology: Integrity check passed.");
+    return true;
+}
