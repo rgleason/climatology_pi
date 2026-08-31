@@ -71,9 +71,9 @@ set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historical w
 
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "6")
-set(VERSION_PATCH "38")
+set(VERSION_PATCH "39")
 set(VERSION_TWEAK "0")
-set(VERSION_DATE  "17/08/2026")#DD/MM/YYYY format
+set(VERSION_DATE  "31/08/2026")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
@@ -82,7 +82,7 @@ set(OCPN_API_VERSION_MINOR "18")
 set(WX_VER "32")
 set(WX_VER_PATCH "8")
 
-set(TP_COMMENT "  * Legacy-compatible modern dataset pipeline and runtime correctness fixes")
+set(TP_COMMENT "  * Immutable asynchronous dataset, query, and render-preparation architecture")
 
 set(PARENT "opencpn")
 

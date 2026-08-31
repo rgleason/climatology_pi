@@ -93,8 +93,10 @@ ZUFILE * zu_open(const char *fname, const char *mode, int type)
                 int bzerror=BZ_OK;
                 f->zfile = (void *) BZ2_bzReadOpen(&bzerror,f->faux,0,0,NULL,0);
                 if (bzerror != BZ_OK) {
-                    BZ2_bzReadClose (&bzerror,(BZFILE*)(f->zfile));
+                    if (f->zfile)
+                        BZ2_bzReadClose (&bzerror,(BZFILE*)(f->zfile));
                     fclose(f->faux);
+                    f->faux = NULL;
                     f->zfile = NULL;
                 }
             } else {
@@ -227,14 +229,21 @@ int zu_seek(ZUFILE *f, long offset, int whence)
             else {    // BAD : reopen file
                 BZ2_bzReadClose (&bzerror,(BZFILE*)(f->zfile));
                 bzerror=BZ_OK;
-                rewind(f->faux);
+                f->zfile = NULL;
+                if (fseek(f->faux, 0, SEEK_SET) != 0) {
+                    f->ok = 0;
+                    return -1;
+                }
                 f->pos = 0;
                 f->zfile = (void *) BZ2_bzReadOpen(&bzerror,f->faux,0,0,NULL,0);
-                if (bzerror != BZ_OK) {
-                    BZ2_bzReadClose (&bzerror,(BZFILE*)(f->zfile));
+                if (bzerror != BZ_OK || !f->zfile) {
+                    if (f->zfile)
+                        BZ2_bzReadClose (&bzerror,(BZFILE*)(f->zfile));
                     fclose(f->faux);
+                    f->faux = NULL;
                     f->zfile = NULL;
                     f->ok = 0;
+                    return -1;
                 }
                 res = zu_bzSeekForward(f, offset);
             }
@@ -273,4 +282,3 @@ void   zu_rewind(ZUFILE *f)
 {
     zu_seek(f, 0, SEEK_SET);
 }
-

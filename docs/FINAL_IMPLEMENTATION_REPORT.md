@@ -1,8 +1,8 @@
 # Climatology modernisation implementation report
 
-This report is completed with the measured release and deployment evidence at
-the end of the implementation run; the design and audit findings below are
-already fixed in the repository history.
+This report records the measured implementation, release, and deployment
+evidence.  The 1.6.38.0 modern-dataset baseline and its earlier deployments
+are retained below as provenance; the current Phase 0-10 candidate is 1.6.39.0.
 
 ## Scope and baseline
 
@@ -13,10 +13,44 @@ D'Epagnier's `master` at `1e9f04072a11f227e58fde8c45efc8e1348f6597` was
 audited independently.  Rick's tree is the appropriate OpenCPN build baseline;
 neither tree had modernised the scientific data-generation workflow.
 
-The produced plugin is **1.6.38.0**.  The dataset has a separate identity,
-**ocpn-climatology-2026.1**, and reports that identity in the About panel and
-the additive Climatology JSON response.  This is research/planning
+The modern-dataset baseline plugin was **1.6.38.0**.  The Phase 0-10
+reconstruction release candidate is **1.6.39.0**.  The dataset has a separate
+identity, **ocpn-climatology-2026.1**, and reports that identity in the About
+panel and the additive Climatology JSON response.  This is research/planning
 climatology, not a forecast or official navigational data.
+
+## Phase 0-10 reconstruction release candidate
+
+Version 1.6.39.0 starts from the complete, working 1.6.38.0 feature set and
+implements the reconstruction architecture behind compatibility gates.  It
+does not replace the UI or remove any field, overlay, cyclone control, timeline
+behaviour, or Weather Routing integration.
+
+The runtime now loads and validates the complete versioned dataset on a joined,
+cancellable worker, then atomically publishes an immutable snapshot.  A
+stateless query engine is shared by the UI, rendering, and both legacy and
+typed provider APIs.  Dataset failure is explicit and fail-closed; no partial
+modern/legacy mixture can be published.
+
+Render settings are captured on the GUI thread as typed value state.  Isobar
+calculation, texture raster preparation, and cyclone filtering/spatial indexing
+run without wxWidgets UI access on worker threads.  Only final drawing-resource
+publication and OpenGL upload remain on the render thread.  Workers are
+cancellable, joined during shutdown, and never display dialogs.  The cyclone
+index is immutable after publication and is swapped only after current readers
+have left their bounded permits.
+
+The three historical function-pointer signatures and the accepted 0.10-1.6
+provider interval remain exact.  The additive typed provider does not alter
+the broker payload consumed by older clients.  Dataset readiness is republished
+after asynchronous load and again after cyclone preparation, covering both the
+standard WeatherRouting plugin (which reparses `CLIMATOLOGY` messages) and
+xWeatherRouting (which additionally resets its preparation guard).
+
+The final GUI acceptance remains deliberately pending until the headless
+release gates and isolated Test-OpenCPN installation described later in this
+report are complete.  No 1.6.39.0 artefact is installed into the normal
+OpenCPN profile or system plugin directories.
 
 ## Compatibility-first design
 
@@ -31,6 +65,47 @@ The exact declarations copied from xWeatherRouting are frozen with compile-time
 type assertions.  Provider signatures now match its `const wxDateTime&`
 contract exactly.  No incompatible API or new routing dependency was
 introduced.
+
+## Phase 10 headless release gates
+
+The final 1.6.39.0 source and release artefacts passed the following gates on
+31 August 2026 before installation or GUI testing:
+
+* a clean GCC Release build and all five plugin tests (math, historical ABI,
+  typed provider API, immutable dataset/query/render preparation, and the real
+  loader/service) passed;
+* a clean Clang RelWithDebInfo build passed the same five tests;
+* the Debug AddressSanitizer/UndefinedBehaviorSanitizer build passed all five
+  tests, with LeakSanitizer alone disabled because this ptrace sandbox cannot
+  host it;
+* the Debug ThreadSanitizer build passed the dataset and real loader/service
+  concurrency tests, including repeated load cancellation and joining;
+* Clang static analysis reported no project-owned finding.  Its two remaining
+  reports are both in the installed wxWidgets `wx/buffer.h` system header;
+* xWeatherRouting at
+  `fb10a975d7dff105aa5c11cf481f7f7c36a4e7f1` built and passed all 175
+  headless tests, including its Climatology thread-guard tests;
+* standard WeatherRouting at
+  `22dd1f099ff067f6c36a953664a54180fdf9d955` built and passed all 78
+  headless tests.
+
+The two consumer builds used detached `/tmp` source snapshots, leaving both
+consumer repositories untouched.  The current standard WeatherRouting
+snapshot required a forced `<cstdint>` include for GCC 16 and two missing
+OpenCPN test mocks (`GetWaypointGUIDArray` and `fromDMM_Plugin`) in that
+detached test harness.  These are pre-existing consumer build/test-fixture
+defects and do not change or adapt the Climatology API.
+
+The release package is
+`climatology_pi-1.6.39.0-arch-x86_64-rolling.tar.gz` (11,322,011 bytes,
+SHA-256
+`bf698f92e29245ed9a70377d3e5360d7473293447ad7236f64eebc9f18771d91`).
+The packaged library is 1,262,712 bytes with SHA-256
+`7c08de3a2341adbab03883a65bc2a219cf5261226f4dcee0beaaf800b26f2c15`.
+It has no embedded RPATH/RUNPATH.  After extracting the package, all 52
+manifest-declared data files independently matched both their recorded sizes
+and SHA-256 checksums, and the loader/service test passed against those exact
+packaged data bytes.
 
 ## Historical dataset findings
 
@@ -163,7 +238,7 @@ The packaged data occupy about 11 MB (60 files); the Release shared library is
 was about 7.4 GB, far below the 100 GB project ceiling.  The completed source
 workspace is about 3.7 GB and is disposable after release verification.
 
-## Deployment boundary
+## Earlier 1.6.38.0 Test-OpenCPN deployment evidence
 
 The release was built and deployed only through the isolated launcher at
 `/home/paul/Test-OpenCPN/bin/launch-test-opencpn`.  Its installed library is:
@@ -191,7 +266,7 @@ and profile were protected by pre/post sentinels and were not installation
 targets.  Their library, configuration and data-tree sentinels remained
 unchanged throughout that phase.
 
-## Subsequent promotion to working OpenCPN
+## Earlier 1.6.38.0 promotion to working OpenCPN
 
 After the isolated validation was complete, the user explicitly requested the
 same tested artefacts be promoted to working OpenCPN 5.15.0.  The production

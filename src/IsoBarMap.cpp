@@ -465,6 +465,13 @@ ContourText IsoBarMap::ContourCacheData(double value)
 /* draw text of the value of a conptour at a given location */
 void IsoBarMap::DrawContour(piDC *dc, PlugIn_ViewPort &VP, double contour, double lat, double lon)
 {
+    // A null drawing context denotes the legacy OpenGL path.  Line drawing for
+    // that path is currently disabled, so there is no valid text renderer
+    // either.  Keep the contour traversal harmless until an explicit GL text
+    // implementation is provided.
+    if(!dc)
+        return;
+
     int index = (contour - m_MinContour) / m_Spacing;
     if(index < 0 || index >= m_contourcachesize)
         return;

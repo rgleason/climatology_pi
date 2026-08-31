@@ -3,22 +3,76 @@
 #include "ClimatologyChecksum.h"
 #include "ClimatologyDataService.h"
 #include "ClimatologyRenderPreparation.h"
+#include "zuFile.h"
 
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <string>
 #include <thread>
+#include <unistd.h>
 
 using namespace climatology;
 
-int main()
+namespace {
+
+void WriteBzipFixture(const char *path, const char *contents)
 {
+    FILE *output = std::fopen(path, "wb");
+    assert(output);
+    int error = BZ_OK;
+    BZFILE *stream = BZ2_bzWriteOpen(&error, output, 9, 0, 30);
+    assert(error == BZ_OK && stream);
+    BZ2_bzWrite(&error, stream, const_cast<char *>(contents),
+                static_cast<int>(std::strlen(contents)));
+    assert(error == BZ_OK);
+    unsigned int input_bytes = 0;
+    unsigned int output_bytes = 0;
+    BZ2_bzWriteClose(&error, stream, 0, &input_bytes, &output_bytes);
+    assert(error == BZ_OK);
+    assert(input_bytes == std::strlen(contents));
+    assert(std::fclose(output) == 0);
+}
+
+void TestBzipBackwardSeek()
+{
+    char path[] = "/tmp/climatology-zu-XXXXXX";
+    const int descriptor = mkstemp(path);
+    assert(descriptor >= 0);
+    assert(close(descriptor) == 0);
+
+    const char contents[] = "climatology bzip seek fixture";
+    WriteBzipFixture(path, contents);
+
+    ZUFILE *stream = zu_open(path, "rb", ZU_COMPRESS_BZIP);
+    assert(stream);
+    char buffer[64] = {};
+    assert(zu_read(stream, buffer, 12) == 12);
+    assert(zu_seek(stream, 0, SEEK_SET) == 0);
+    assert(zu_read(stream, buffer, sizeof(contents) - 1) ==
+           static_cast<int>(sizeof(contents) - 1));
+    assert(std::memcmp(buffer, contents, sizeof(contents) - 1) == 0);
+    assert(zu_close(stream) == 0);
+    assert(unlink(path) == 0);
+}
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    TestBzipBackwardSeek();
+
+    const std::string data_directory =
+        argc > 1 ? argv[1] : CLIMATOLOGY_TEST_DATA_DIR;
+
     assert(Sha256("", 0) ==
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     assert(Sha256("abc", 3) ==
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 
-    ClimatologyDatasetLoader loader(CLIMATOLOGY_TEST_DATA_DIR);
+    ClimatologyDatasetLoader loader(data_directory);
     const DatasetLoadResult loaded = loader.Load();
     assert(loaded.Succeeded());
     assert(loaded.snapshot->metadata.version == "ocpn-climatology-2026.1");
@@ -69,7 +123,7 @@ int main()
     assert(!cyclone_index.index.empty());
 
     ClimatologyDataService service;
-    assert(service.Start(CLIMATOLOGY_TEST_DATA_DIR));
+    assert(service.Start(data_directory));
     assert(service.State() == DatasetLoadState::Loading ||
            service.State() == DatasetLoadState::Ready);
     DatasetLoadResult asynchronous;
@@ -86,11 +140,11 @@ int main()
     // plugin is disabled while OpenCPN remains live.
     for(int iteration = 0; iteration < 8; ++iteration) {
         ClimatologyDataService cancellable;
-        assert(cancellable.Start(CLIMATOLOGY_TEST_DATA_DIR));
+        assert(cancellable.Start(data_directory));
         cancellable.CancelAndWait();
         assert(cancellable.State() == DatasetLoadState::Cancelled ||
                cancellable.State() == DatasetLoadState::Ready);
-        assert(cancellable.Start(CLIMATOLOGY_TEST_DATA_DIR));
+        assert(cancellable.Start(data_directory));
         cancellable.CancelAndWait();
     }
 
