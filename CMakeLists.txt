@@ -294,6 +294,8 @@ if(BUILD_TESTING)
       CLIMATOLOGY_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
     )
     add_test(NAME climatology_loader COMMAND climatology_loader_tests)
+    add_test(NAME climatology_packaged_layout
+      COMMAND climatology_loader_tests "${CMAKE_CURRENT_SOURCE_DIR}")
   endif()
 endif()
 

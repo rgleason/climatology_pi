@@ -71,17 +71,18 @@ introduced.
 The final 1.6.39.0 source and release artefacts passed the following gates on
 31 August 2026 before installation or GUI testing:
 
-* a clean GCC Release build and all five plugin tests (math, historical ABI,
+* a clean GCC Release build and all six plugin tests (math, historical ABI,
   typed provider API, immutable dataset/query/render preparation, and the real
-  loader/service) passed;
-* a clean Clang RelWithDebInfo build passed the same five tests;
-* the Debug AddressSanitizer/UndefinedBehaviorSanitizer build passed all five
+  loader/service in both source and packaged resource-root layouts) passed;
+* a clean Clang RelWithDebInfo build passed the same six tests;
+* the Debug AddressSanitizer/UndefinedBehaviorSanitizer build passed all six
   tests, with LeakSanitizer alone disabled because this ptrace sandbox cannot
   host it;
 * the Debug ThreadSanitizer build passed the dataset and real loader/service
   concurrency tests, including repeated load cancellation and joining;
-* Clang static analysis reported no project-owned finding.  Its two remaining
-  reports are both in the installed wxWidgets `wx/buffer.h` system header;
+* Clang static analysis reported no project-owned finding.  After excluding
+  bundled third-party dependencies, its two remaining reports are both in the
+  installed wxWidgets `wx/buffer.h` system header;
 * xWeatherRouting at
   `fb10a975d7dff105aa5c11cf481f7f7c36a4e7f1` built and passed all 175
   headless tests, including its Climatology thread-guard tests;
@@ -96,16 +97,43 @@ OpenCPN test mocks (`GetWaypointGUIDArray` and `fromDMM_Plugin`) in that
 detached test harness.  These are pre-existing consumer build/test-fixture
 defects and do not change or adapt the Climatology API.
 
-The release package is
-`climatology_pi-1.6.39.0-arch-x86_64-rolling.tar.gz` (11,322,011 bytes,
+The final release package is
+`climatology_pi-1.6.39.0-arch-x86_64-rolling.tar.gz` (11,322,214 bytes,
 SHA-256
-`bf698f92e29245ed9a70377d3e5360d7473293447ad7236f64eebc9f18771d91`).
-The packaged library is 1,262,712 bytes with SHA-256
-`7c08de3a2341adbab03883a65bc2a219cf5261226f4dcee0beaaf800b26f2c15`.
+`88d91f8475c3659e4fc38e66c1df9f5c9d0558997ea2f202377869bec00e5128`).
+The stripped packaged library is 1,055,536 bytes with SHA-256
+`139edfecab47296a3cec9a80e4683beb3899be295e5da04fba916668626d3ce1`.
 It has no embedded RPATH/RUNPATH.  After extracting the package, all 52
 manifest-declared data files independently matched both their recorded sizes
 and SHA-256 checksums, and the loader/service test passed against those exact
 packaged data bytes.
+
+## Phase 10 isolated runtime deployment
+
+The first automated Test-OpenCPN startup caught a package-integration defect:
+the scoped UTF-8 path passed to the asynchronous loader referred to a temporary
+`wxString`, causing the worker to look in the plugin resource root instead of
+its `data/` child.  The path is now copied to owning storage before the worker
+starts.  As a compatibility defence, the loader also accepts either the direct
+data directory or a versioned plugin resource root containing `data/`; the
+second layout is a dedicated headless regression test.
+
+The rebuilt package was installed only into the isolated Test-OpenCPN profile.
+Its library is
+`/home/paul/Test-OpenCPN/config/plugins/lib/libclimatology_pi.so`, its complete
+resource tree is
+`/home/paul/Test-OpenCPN/config/plugins/climatology_pi`, and its rollback backup
+is
+`/home/paul/Test-OpenCPN/backups/climatology-pre-1.6.39.0-20260831T143004Z`.
+All 52 installed manifest files were rehashed successfully and the real
+loader/service test passed against the installed tree.
+
+The repeated OpenCPN 5.15.0 startup selected the isolated data path, loaded the
+plugin and translation catalogue, published dataset
+`ocpn-climatology-2026.1`, and then deactivated the plugin and exited cleanly.
+There was no Climatology error or warning.  The remaining filter-file and
+network-interface warnings belong to the existing Test-OpenCPN core testbed.
+The normal OpenCPN plugin installation was not changed.
 
 ## Historical dataset findings
 

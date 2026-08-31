@@ -35,6 +35,21 @@ bool FileExists(const std::string& path)
     return stream.good();
 }
 
+std::string ResolveDataDirectory(const std::string& directory)
+{
+    if(FileExists(JoinPath(directory, "dataset-manifest.json")))
+        return directory;
+
+    // OpenCPN exposes the plugin resource root, while callers focused on the
+    // dataset often already pass its data child.  Accept both forms for a
+    // versioned package, but retain the historical direct-directory fallback
+    // when no manifest identifies the nested layout.
+    const std::string packaged_data = JoinPath(directory, "data");
+    if(FileExists(JoinPath(packaged_data, "dataset-manifest.json")))
+        return packaged_data;
+    return directory;
+}
+
 std::uint64_t FileSize(const std::string& path)
 {
     std::ifstream stream(path.c_str(), std::ios::binary | std::ios::ate);
@@ -665,7 +680,7 @@ bool Cancelled(const std::atomic<bool>* cancel)
 
 ClimatologyDatasetLoader::ClimatologyDatasetLoader(
     const std::string& data_directory)
-    : m_dataDirectory(data_directory)
+    : m_dataDirectory(ResolveDataDirectory(data_directory))
 {
 }
 

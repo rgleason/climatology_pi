@@ -259,8 +259,14 @@ void ClimatologyOverlayFactory::CancelBackgroundWork()
 
 void ClimatologyOverlayFactory::StartDatasetLoad()
 {
-    const wxScopedCharBuffer path = ClimatologyDataDirectory().utf8_str();
-    if(!m_dataService.Start(path.data() ? path.data() : ""))
+    // Keep the wxString alive until its scoped UTF-8 view has been copied into
+    // owning storage.  Constructing the scoped buffer directly from a
+    // temporary wxString leaves it referring to destroyed string storage.
+    const wxString data_directory = ClimatologyDataDirectory();
+    const wxScopedCharBuffer path = data_directory.utf8_str();
+    const std::string owned_path(path.data() ? path.data() : "");
+    wxLogMessage(climatology_pi + _("loading dataset from: ") + data_directory);
+    if(!m_dataService.Start(owned_path))
         wxLogError(climatology_pi + _("could not start dataset loader"));
 }
 
