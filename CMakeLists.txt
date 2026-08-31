@@ -179,6 +179,8 @@ SET(SRCS
             src/icons.cpp
             src/zuFile.cpp
             src/ClimatologyMath.cpp
+            src/ClimatologyDataset.cpp
+            src/ClimatologyQueryEngine.cpp
 )
 
 
@@ -195,6 +197,9 @@ SET(HDRS
 			include/zuFile.h
 			include/ClimatologyMath.h
             include/ClimatologyAPI.h
+            include/ClimatologyProviderAPI.h
+            include/ClimatologyDataset.h
+            include/ClimatologyQueryEngine.h
 )
 
 add_definitions(-DPLUGIN_USE_SVG)
@@ -238,6 +243,19 @@ if(BUILD_TESTING)
   add_executable(climatology_api_tests tests/test_climatology_api.cpp)
   target_include_directories(climatology_api_tests PRIVATE include)
   add_test(NAME climatology_api COMMAND climatology_api_tests)
+  add_executable(climatology_provider_api_tests
+    tests/test_climatology_provider_api.cpp
+  )
+  target_include_directories(climatology_provider_api_tests PRIVATE include)
+  add_test(NAME climatology_provider_api COMMAND climatology_provider_api_tests)
+  add_executable(climatology_dataset_tests
+    tests/test_climatology_dataset.cpp
+    src/ClimatologyDataset.cpp
+    src/ClimatologyQueryEngine.cpp
+    src/ClimatologyMath.cpp
+  )
+  target_include_directories(climatology_dataset_tests PRIVATE include)
+  add_test(NAME climatology_dataset COMMAND climatology_dataset_tests)
 endif()
 
 ##==============================================================

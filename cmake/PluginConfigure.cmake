@@ -51,20 +51,19 @@ else ()
       OUTPUT_VARIABLE GIT_REPOSITORY_TAG
       OUTPUT_STRIP_TRAILING_WHITESPACE
     )
+    # Ask git for the configured upstream directly.  Parsing
+    # `git status --porcelain -b` breaks as soon as the local branch name
+    # itself contains a slash (for example reconstruction/phase-0-10).
     execute_process(
-      COMMAND git status --porcelain -b
+      COMMAND git rev-parse --abbrev-ref --symbolic-full-name @{upstream}
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-      OUTPUT_VARIABLE GIT_STATUS
+      OUTPUT_VARIABLE GIT_UPSTREAM
       OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
     )
-    string(FIND ${GIT_STATUS} "..." START_TRACKED)
-    if (NOT START_TRACKED EQUAL -1)
-      string(FIND ${GIT_STATUS} "/" END_TRACKED)
-      math(EXPR START_TRACKED "${START_TRACKED}+3")
-      math(EXPR END_TRACKED "${END_TRACKED}-${START_TRACKED}")
-      string(SUBSTRING ${GIT_STATUS} ${START_TRACKED} ${END_TRACKED}
-                       GIT_REPOSITORY_REMOTE
-      )
+    if (NOT "${GIT_UPSTREAM}" STREQUAL "")
+      string(REGEX REPLACE "/.*$" "" GIT_REPOSITORY_REMOTE
+                           "${GIT_UPSTREAM}")
       message(STATUS "${CMLOC}GIT_REPOSITORY_REMOTE: ${GIT_REPOSITORY_REMOTE}")
       execute_process(
         COMMAND git remote get-url ${GIT_REPOSITORY_REMOTE}
