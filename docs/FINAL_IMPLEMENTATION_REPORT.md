@@ -50,9 +50,9 @@ xWeatherRouting (which additionally resets its preparation guard).
 The complete feature set passed GUI acceptance in the isolated Test-OpenCPN
 installation after the headless release gates.  A subsequent cosmetic change
 gives the resizable Display Control a roomier 380-DIP initial width while
-preserving the user's ability to make it narrower or wider.  No 1.6.39.0
-artefact is installed into the normal OpenCPN profile or system plugin
-directories.
+preserving the user's ability to make it narrower or wider.  Promotion to the
+working OpenCPN occurred only after this isolated acceptance and is recorded
+separately below.
 
 ## Compatibility-first design
 
@@ -136,6 +136,34 @@ plugin and translation catalogue, published dataset
 There was no Climatology error or warning.  The remaining filter-file and
 network-interface warnings belong to the existing Test-OpenCPN core testbed.
 The normal OpenCPN plugin installation was not changed.
+
+## Phase 10 promotion to working OpenCPN
+
+After the user confirmed that no feature regression was visible, the exact
+tested package was promoted to the OpenCPN 5.15 desktop launcher.  To avoid
+mixing the reconstruction library with the older system resource tree, both
+halves of the package live under the dedicated versioned prefix:
+
+`/home/paul/OpenCPN-Working-Plugins/climatology-1.6.39.0`
+
+The desktop launcher puts that prefix's `lib/opencpn` directory first for
+Climatology and its `share` directory ahead of the system XDG data roots.  It
+no longer selects the old `plugins/climatology_pi/build-release` library.  The
+system plugin and data files remain untouched.  The previous launcher is the
+rollback file:
+
+`/home/paul/bin/opencpn-gribmerge.pre-climatology-1.6.39.0-20260831`
+
+The promoted library has SHA-256
+`15c95c695d7a4ed0b58f942e285231fe07b1887ede99801cf6284fff0e6a5629`.
+All 52 manifest outputs rehashed successfully in the working prefix, and the
+real loader/service test passed against that installed resource root.
+
+Runtime verification through the actual desktop launcher loaded the library
+from the versioned prefix, selected the matching resource and translation
+directories, and published `ocpn-climatology-2026.1`.  No Climatology error or
+warning was logged.  The working OpenCPN was left open for the user's final GUI
+check.
 
 ## Historical dataset findings
 
