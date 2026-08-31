@@ -38,6 +38,7 @@
 
 #include "climatology_pi.h"
 #include "ClimatologyConfigDialog.h"
+#include "ClimatologyState.h"
 
 static const wxString units0_names[] = {"Knots", "M/S", "MPH", "KPH", wxEmptyString};
 static const wxString units1_names[] = {"MilliBars", "mmHG", wxEmptyString};
@@ -67,51 +68,14 @@ wxString ClimatologyConfigDialog::SettingName(int setting)
 
 double ClimatologyOverlaySettings::CalibrationOffset(int setting)
 {
-    /* only have offset for fahrenheit */
-    if(unittype[setting] == 3 && Settings[setting].m_Units == FAHRENHEIT)
-        return 32*5/9.0;
-    return 0;
+    return climatology::CalibrationForField(
+        setting, Settings[setting].m_Units).offset;
 }
 
 double ClimatologyOverlaySettings::CalibrationFactor(int setting)
 {
-    switch(unittype[setting]) {
-    case 0: switch(Settings[setting].m_Units) {
-        case KNOTS:  return 1;
-        case M_S:    return 1.852 / 3.6;
-        case MPH:    return 1.15;
-        case KPH:    return 1.85;
-        } break;
-    case 1: switch(Settings[setting].m_Units) {
-        case MILLIBARS: return 1;
-        case MMHG: return 1 / (1.33);
-        } break;
-    case 2: {
-        double mul = 1;
-        switch(Settings[setting].m_Units) {
-        case MM_DAY:   case IN_DAY:   mul /= 365.24; break;
-        case MM_MONTH: case IN_MONTH: mul /= 12.; break;
-        }
-        switch(Settings[setting].m_Units) {
-        case MM_DAY: case MM_MONTH:               mul *= 1000.; break;
-        case IN_DAY: case IN_MONTH: case IN_YEAR: mul *= 39.37; break;
-        case FT_MONTH: case FT_YEAR:              mul *= 3.28; break;
-        }
-        return mul;
-    }
-    case 3: switch(Settings[setting].m_Units) {
-        case CELCIUS:     return 1;
-        case FAHRENHEIT: return 9./5;
-        } break;
-    case 4: return 1;
-    case 5: return 1;
-    case 6: switch(Settings[setting].m_Units) {
-        case METERS: return 1;
-        case FEET:   return 3.28;
-        } break;
-    }
-
-    return 1;
+    return climatology::CalibrationForField(
+        setting, Settings[setting].m_Units).factor;
 }
 
 void ClimatologyOverlaySettings::Load()

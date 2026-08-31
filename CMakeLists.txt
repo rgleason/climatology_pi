@@ -184,6 +184,7 @@ SET(SRCS
             src/ClimatologyDataService.cpp
             src/ClimatologyDatasetLoader.cpp
             src/ClimatologyQueryEngine.cpp
+            src/ClimatologyRenderPreparation.cpp
 )
 
 
@@ -206,6 +207,8 @@ SET(HDRS
             include/ClimatologyDataService.h
             include/ClimatologyDatasetLoader.h
             include/ClimatologyQueryEngine.h
+            include/ClimatologyState.h
+            include/ClimatologyRenderPreparation.h
 )
 
 add_definitions(-DPLUGIN_USE_SVG)
@@ -264,6 +267,7 @@ if(BUILD_TESTING)
     tests/test_climatology_dataset.cpp
     src/ClimatologyDataset.cpp
     src/ClimatologyQueryEngine.cpp
+    src/ClimatologyRenderPreparation.cpp
     src/ClimatologyMath.cpp
   )
   target_compile_options(climatology_dataset_tests PRIVATE
@@ -278,6 +282,7 @@ if(BUILD_TESTING)
       src/ClimatologyDataService.cpp
       src/ClimatologyDatasetLoader.cpp
       src/ClimatologyQueryEngine.cpp
+      src/ClimatologyRenderPreparation.cpp
       src/ClimatologyMath.cpp
       src/zuFile.cpp
     )

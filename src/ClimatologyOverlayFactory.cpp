@@ -53,10 +53,14 @@
 
 #include "climatology_pi.h"
 #include "ClimatologyMath.h"
+#include "ClimatologyRenderPreparation.h"
 //#include "gldefs.h"
 #include "icons.h"
 
+#include <atomic>
+#include <limits>
 #include <sstream>
+#include <thread>
 
 #define FAILED_FILELIST_MSG_LEN 150
 
@@ -129,16 +133,79 @@ static bool s_bnoglrepeat = true;
 
 double ClimatologyIsoBarMap::CalcParameter(double lat, double lon)
 {
-    return m_factory.getCalibratedValueMonth(MAG, m_setting, lat, lon, m_month);
+    return m_calibration.Apply(
+        m_factory.getValueMonth(MAG, m_setting, lat, lon, m_month));
 }
 
 #define CYCLONE_CACHE_SEMAPHORE_COUNT 4
+
+struct ClimatologyIsobarJob {
+    int setting = -1;
+    int month = 0;
+    int units = 0;
+    double spacing = 0.0;
+    double step = 0.0;
+    std::unique_ptr<ClimatologyIsoBarMap> map;
+    std::thread worker;
+    std::atomic<bool> done{false};
+    bool succeeded = false;
+};
+
+struct ClimatologyTextureJob {
+    int setting = -1;
+    int month = 0;
+    int width = 0;
+    int height = 0;
+    double latoff = 0.0;
+    double lonoff = 0.0;
+    std::vector<unsigned char> pixels;
+    std::thread worker;
+    std::atomic<bool> cancel{false};
+    std::atomic<bool> done{false};
+    bool succeeded = false;
+};
+
+struct ClimatologyCycloneJob {
+    climatology::CycloneFilterState filters;
+    climatology::CycloneSpatialIndex cache;
+    std::thread worker;
+    std::atomic<bool> cancel{false};
+    std::atomic<bool> done{false};
+    bool succeeded = false;
+};
+
+static bool SameCycloneFilters(const climatology::CycloneFilterState &a,
+                               const climatology::CycloneFilterState &b)
+{
+    return a.tropical == b.tropical && a.subtropical == b.subtropical &&
+        a.extratropical == b.extratropical && a.remnant == b.remnant &&
+        a.minimum_wind_knots == b.minimum_wind_knots &&
+        a.maximum_pressure_hpa == b.maximum_pressure_hpa &&
+        a.start_utc == b.start_utc && a.end_utc == b.end_utc &&
+        a.include_enso_unavailable == b.include_enso_unavailable &&
+        a.include_el_nino == b.include_el_nino &&
+        a.include_la_nina == b.include_la_nina &&
+        a.include_neutral == b.include_neutral && a.day_span == b.day_span;
+}
+
+static double IsobarStep(int selection)
+{
+    switch(selection) {
+    default: return 4.0;
+    case 1: return 2.0;
+    case 2: return 1.0;
+    case 3: return .5;
+    case 4: return .25;
+    }
+}
+
 ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     : //m_bUpdateCyclones(true),
     m_cyclone_cache_semaphore(CYCLONE_CACHE_SEMAPHORE_COUNT),
     m_bCompletedLoading(false),
     m_dlg(dlg), m_Settings(dlg.m_cfgdlg->m_Settings),
-    m_cyclonesDisplayList(0), m_cyclone_drawn_counter(0)
+    m_cyclonesDisplayList(0),
+    m_cycloneRequestPending(false), m_disableCyclonesForPerformance(false)
 {
     // make sure the user data directory exists
     wxFileName::Mkdir(ClimatologyDataDirectory(), wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
@@ -164,7 +231,30 @@ ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
 ClimatologyOverlayFactory::~ClimatologyOverlayFactory()
 {
     m_dataService.CancelAndWait();
+    CancelBackgroundWork();
     Free();
+}
+
+void ClimatologyOverlayFactory::CancelBackgroundWork()
+{
+    if(m_isobarJob) {
+        m_isobarJob->map->m_bNeedsRecompute.store(true,
+                                                  std::memory_order_release);
+        if(m_isobarJob->worker.joinable()) m_isobarJob->worker.join();
+        m_isobarJob.reset();
+    }
+    if(m_textureJob) {
+        m_textureJob->cancel.store(true, std::memory_order_release);
+        if(m_textureJob->worker.joinable()) m_textureJob->worker.join();
+        m_textureJob.reset();
+    }
+    m_readyTexture.reset();
+    if(m_cycloneJob) {
+        m_cycloneJob->cancel.store(true, std::memory_order_release);
+        if(m_cycloneJob->worker.joinable()) m_cycloneJob->worker.join();
+        m_cycloneJob.reset();
+    }
+    m_cycloneRequestPending = false;
 }
 
 void ClimatologyOverlayFactory::StartDatasetLoad()
@@ -198,70 +288,98 @@ bool ClimatologyOverlayFactory::PollDatasetLoad(bool &succeeded, wxString &error
     return true;
 }
 
+void ClimatologyOverlayFactory::PollBackgroundWork(
+    bool &needs_refresh, bool &api_changed, int &disable_isobars,
+    bool &disable_cyclones_for_performance)
+{
+    needs_refresh = false;
+    api_changed = false;
+    disable_isobars = -1;
+    disable_cyclones_for_performance = false;
+
+    if(m_isobarJob &&
+       m_isobarJob->done.load(std::memory_order_acquire)) {
+        if(m_isobarJob->worker.joinable()) m_isobarJob->worker.join();
+        const bool cancelled = m_isobarJob->map->m_bNeedsRecompute.load(
+            std::memory_order_acquire);
+        const climatology::ClimatologyRenderState state =
+            m_dlg.CaptureRenderState();
+        const climatology::FieldRenderState &field =
+            state.fields[m_isobarJob->setting];
+        const bool still_requested = field.visible && field.enabled &&
+            field.isobars &&
+            field.units == m_isobarJob->units &&
+            field.isobar_spacing == m_isobarJob->spacing &&
+            IsobarStep(field.isobar_step) == m_isobarJob->step;
+        if(m_isobarJob->succeeded && !cancelled && still_requested) {
+            ClimatologyIsoBarMap *&slot =
+                m_Settings.Settings[m_isobarJob->setting]
+                    .m_pIsobars[m_isobarJob->month];
+            delete slot;
+            slot = m_isobarJob->map.release();
+            needs_refresh = true;
+        } else if(!cancelled && !m_isobarJob->succeeded) {
+            disable_isobars = m_isobarJob->setting;
+        }
+        m_isobarJob.reset();
+        needs_refresh = true;
+    }
+
+    if(m_textureJob &&
+       m_textureJob->done.load(std::memory_order_acquire)) {
+        if(m_textureJob->worker.joinable()) m_textureJob->worker.join();
+        if(m_textureJob->succeeded &&
+           !m_textureJob->cancel.load(std::memory_order_acquire)) {
+            m_readyTexture = std::move(m_textureJob);
+            needs_refresh = true;
+        } else {
+            m_textureJob.reset();
+            needs_refresh = true;
+        }
+    }
+
+    if(m_cycloneJob &&
+       m_cycloneJob->done.load(std::memory_order_acquire)) {
+        if(m_cycloneJob->worker.joinable()) m_cycloneJob->worker.join();
+        const bool publish = m_cycloneJob->succeeded &&
+            !m_cycloneJob->cancel.load(std::memory_order_acquire);
+        if(publish) {
+            for(int i = 0; i < CYCLONE_CACHE_SEMAPHORE_COUNT; ++i)
+                m_cyclone_cache_semaphore.Wait();
+            m_cyclone_cache.swap(m_cycloneJob->cache);
+            for(int i = 0; i < CYCLONE_CACHE_SEMAPHORE_COUNT; ++i)
+                m_cyclone_cache_semaphore.Post();
+            needs_refresh = true;
+            api_changed = true;
+        }
+        m_cycloneJob.reset();
+        if(m_cycloneRequestPending) {
+            const climatology::CycloneFilterState requested =
+                m_requestedCycloneFilters;
+            m_cycloneRequestPending = false;
+            StartCycloneCacheJob(requested);
+        }
+    }
+
+    if(m_disableCyclonesForPerformance) {
+        m_disableCyclonesForPerformance = false;
+        disable_cyclones_for_performance = true;
+    }
+}
+
 void ClimatologyOverlayFactory::PublishDataset(
     std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> snapshot)
 {
     m_snapshot = snapshot;
     m_query.reset(new climatology::ClimatologyQueryEngine(snapshot));
     const climatology::DatasetAvailability &available = snapshot->availability;
-    wxCheckBox *controls[] = {
-        m_dlg.m_cbWind, m_dlg.m_cbCurrent, m_dlg.m_cbPressure,
-        m_dlg.m_cbSeaTemperature, m_dlg.m_cbAirTemperature,
-        m_dlg.m_cbCloudCover, m_dlg.m_cbPrecipitation,
-        m_dlg.m_cbRelativeHumidity, m_dlg.m_cbLightning,
-        m_dlg.m_cbSeaDepth};
-    for(std::size_t field = 0;
-        field < static_cast<std::size_t>(climatology::DatasetField::Count);
-        ++field)
-        controls[field]->Enable(available.fields[field]);
-    m_dlg.m_cbCyclones->Enable(available.cyclones);
-    m_dlg.m_cfgdlg->m_cbElNino->Enable(available.enso);
-    m_dlg.m_cfgdlg->m_cbLaNina->Enable(available.enso);
-    m_dlg.m_cfgdlg->m_cbNeutral->Enable(available.enso);
+    m_dlg.ApplyDatasetAvailability(available);
 
-    BuildLegacyCycloneViews();
     m_bCompletedLoading.store(true, std::memory_order_release);
     if(available.cyclones)
         BuildCycloneCache();
     wxLogMessage(climatology_pi + _("dataset ready: ") +
                  wxString::FromUTF8(snapshot->metadata.version.c_str()));
-}
-
-void ClimatologyOverlayFactory::BuildLegacyCycloneViews()
-{
-    std::list<Cyclone*> *destinations[6] = {
-        &m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
-    for(std::size_t basin = 0; basin < 6; ++basin)
-        for(std::vector<climatology::CycloneTrack>::const_iterator track =
-                m_snapshot->cyclones.basins[basin].begin();
-            track != m_snapshot->cyclones.basins[basin].end(); ++track) {
-            Cyclone *legacy_track = new Cyclone;
-            for(std::vector<climatology::CycloneSegment>::const_iterator segment =
-                    track->segments.begin(); segment != track->segments.end();
-                ++segment) {
-                const ::CycloneState::State state =
-                    static_cast< ::CycloneState::State>(segment->state);
-                const CycloneDateTime time(segment->time.day,
-                    segment->time.month, segment->time.year,
-                    segment->time.hour);
-                legacy_track->states.push_back(new ::CycloneState(
-                    state, time, segment->latitude0, segment->longitude0,
-                    segment->latitude1, segment->longitude1,
-                    segment->wind_knots, segment->pressure_hpa));
-            }
-            destinations[basin]->push_back(legacy_track);
-        }
-
-    m_ElNinoYears.clear();
-    for(std::map<int, std::array<double, climatology::kClimatologyMonths> >
-            ::const_iterator year = m_snapshot->enso_by_year.begin();
-        year != m_snapshot->enso_by_year.end(); ++year) {
-        ElNinoYear values;
-        for(std::size_t month = 0; month < climatology::kClimatologyMonths;
-            ++month)
-            values.months[month] = year->second[month];
-        m_ElNinoYears[year->first] = values;
-    }
 }
 
 void ClimatologyOverlayFactory::GetDateInterpolation(const wxDateTime *cdate,
@@ -349,7 +467,7 @@ void ClimatologyOverlayFactory::DrawCircle( double x, double y, double r,
 
 struct ColorMap {
     double val;
-    wxString text;
+    const char *text;
     wxUint8 transp;
 };
 
@@ -433,9 +551,14 @@ static int color255(char a, char b)
     return strtol(str, 0, 16);
 }
 
-static wxColour TextColor(wxString text)
+static climatology::RgbaPixel TextColor(const char *text)
 {
-    return wxColour(color255(text[1], text[2]), color255(text[3], text[4]), color255(text[5], text[6]));
+    climatology::RgbaPixel pixel;
+    pixel.red = color255(text[1], text[2]);
+    pixel.green = color255(text[3], text[4]);
+    pixel.blue = color255(text[5], text[6]);
+    pixel.alpha = 255;
+    return pixel;
 }                        
 
 ColorMap *ColorMaps[] = {WindMap, CurrentMap, PressureMap, SeaTempMap, AirTempMap,
@@ -455,10 +578,10 @@ static const int ColorMapLens[] = { (sizeof WindMap) / (sizeof *WindMap),
                              (sizeof CycloneMap) / (sizeof *CycloneMap)};
 
 
-wxColour ClimatologyOverlayFactory::GetGraphicColor(int setting, double val_in)
+static climatology::RgbaPixel GraphicPixel(int setting, double val_in)
 {
     if(isnan(val_in))
-        return wxColour(0, 0, 0, 0); /* transparent */
+        return climatology::RgbaPixel(); /* transparent */
 
     int colormap_index = setting;
     ColorMap *map = ColorMaps[colormap_index];
@@ -469,18 +592,27 @@ wxColour ClimatologyOverlayFactory::GetGraphicColor(int setting, double val_in)
         double nmapvala = map[i-1].val/cmax;
         double nmapvalb = map[i].val/cmax;
         if(nmapvalb > val_in || i==maplen-1) {
-            wxColour b, c;
+            climatology::RgbaPixel b, c;
             c = TextColor(map[i].text);
             b = TextColor(map[i-1].text);
             double d = (val_in-nmapvala)/(nmapvalb-nmapvala);
-            c.Set((1-d)*b.Red()   + d*c.Red(),
-                  (1-d)*b.Green() + d*c.Green(),
-                  (1-d)*b.Blue()  + d*c.Blue(),
-                  255 - ((1-d)*map[i-1].transp + d*map[i].transp));
+            c.red = (1-d)*b.red + d*c.red;
+            c.green = (1-d)*b.green + d*c.green;
+            c.blue = (1-d)*b.blue + d*c.blue;
+            c.alpha = 255 -
+                ((1-d)*map[i-1].transp + d*map[i].transp);
             return c;
         }
     }
-    return *wxBLACK; /* unreachable */
+    climatology::RgbaPixel black;
+    black.alpha = 255;
+    return black; /* unreachable */
+}
+
+wxColour ClimatologyOverlayFactory::GetGraphicColor(int setting, double val_in)
+{
+    const climatology::RgbaPixel pixel = GraphicPixel(setting, val_in);
+    return wxColour(pixel.red, pixel.green, pixel.blue, pixel.alpha);
 }
 
 void ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog *progressdialog)
@@ -613,11 +745,11 @@ void ClimatologyOverlayFactory::Load()
 
 void ClimatologyOverlayFactory::Free()
 {
-#if 0
     for(int i=0; i<ClimatologyOverlaySettings::SETTINGS_COUNT; i++)
-        for(int m=0; m<13; m++)
+        for(int m=0; m<13; m++) {
             delete m_Settings.Settings[i].m_pIsobars[m];
-#endif
+            m_Settings.Settings[i].m_pIsobars[m] = NULL;
+        }
 
     // free wind data
     for(int m=0; m<13; m++) {
@@ -1352,95 +1484,52 @@ missing:
 
 void ClimatologyOverlayFactory::BuildCycloneCache()
 {
-    std::list<Cyclone*> *cyclones[6] = {&m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
-
-    /* make sure we have all the cyclone theatres */
-    for(int i=0; i < 6; i++)
-        if(cyclones[i]->empty())
+    const climatology::CycloneFilterState filters =
+        m_dlg.CaptureRenderState().cyclone_filter;
+    if(m_cycloneJob) {
+        if(SameCycloneFilters(m_cycloneJob->filters, filters) &&
+           !m_cycloneJob->cancel.load(std::memory_order_acquire))
             return;
-
-    int statemask = 0;
-    statemask |= 1*m_dlg.m_cfgdlg->m_cbTropical->GetValue();
-    statemask |= 2*m_dlg.m_cfgdlg->m_cbSubTropical->GetValue();
-    statemask |= 4*m_dlg.m_cfgdlg->m_cbExtraTropical->GetValue();
-    statemask |= 8*m_dlg.m_cfgdlg->m_cbRemanent->GetValue();
-
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
-        m_cyclone_cache_semaphore.Wait();
-
-    int minwindspeed = m_dlg.m_cfgdlg->m_sMinWindSpeed->GetValue();
-    int maxpressure = m_dlg.m_cfgdlg->m_sMaxPressure->GetValue();
-
-    m_cyclone_cache.clear();
-    wxStopWatch sw;
-
-    for(int i=0; i < 6; i++) {
-        for(std::list<Cyclone*>::iterator it = cyclones[i]->begin(); it != cyclones[i]->end(); it++) {
-            Cyclone *s = *it;
-
-            for(std::list<CycloneState*>::iterator it2 = s->states.begin(); it2 != s->states.end(); it2++) {
-                if((*it2)->windknots < minwindspeed)
-                    continue;
-
-                if((*it2)->pressure > maxpressure)
-                    continue;
-
-                /* rebuild cache for these? */
-#ifndef __OCPN__ANDROID__                
-                wxDateTime dt = (*it2)->datetime.DateTime();
-                //wxLogMessage(climatology_pi + "   " + dt.Format() + ", " + m_dlg.m_cfgdlg->m_dPStart->GetValue().Format());
-                if((dt < m_dlg.m_cfgdlg->m_dPStart->GetValue()) ||
-                   (dt > m_dlg.m_cfgdlg->m_dPEnd->GetValue()))
-                    continue;
-#endif
-                /* el nino test */
-                int year = (*it2)->datetime.year;
-                std::map<int, ElNinoYear>::iterator ipt = m_ElNinoYears.find(year);
-                if (ipt == m_ElNinoYears.end()) {
-                    if(!m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue() && m_ElNinoYears.size())
-                        continue;
-                } else {
-                    ElNinoYear elninoyear = m_ElNinoYears[year];
-                    int month = (*it2)->datetime.month;
-                    double value = elninoyear.months[month];
-        
-                    if(isnan(value)) {
-                        if(!m_dlg.m_cfgdlg->m_cbNotAvailable->GetValue())
-                            continue;
-                    } else {
-                        if(value >= .5) {
-                            if(!m_dlg.m_cfgdlg->m_cbElNino->GetValue())
-                                continue;
-                        } else if(value <= -.5) {
-                            if(!m_dlg.m_cfgdlg->m_cbLaNina->GetValue())
-                                continue;
-                        } else if(!m_dlg.m_cfgdlg->m_cbNeutral->GetValue())
-                            continue;
-                    }
-                }
-
-                if(!((1<<(*it2)->state) & statemask))
-                    continue;
-
-                int lon[2], lat[2];
-                for(int j = 0; j<2; j++) {
-                    lon[j] = (*it2)->lon[0] < 15 ? (*it2)->lon[j] : (*it2)->lon[j] - 360;
-                    lat[j] = (*it2)->lat[j];
-                }
-
-                for(int loni = wxMin(lon[0], lon[1]); loni <= wxMax(lon[0], lon[1]); loni++)
-                    for(int lati = wxMin(lat[0], lat[1]); lati <= wxMax(lat[0], lat[1]); lati++) {
-                        int hash = (loni * 180 + lati)*12 + (*it2)->datetime.month;
-                        m_cyclone_cache[hash].push_back(*it2);
-                    }
-            }
-        }
+        m_cycloneJob->cancel.store(true, std::memory_order_release);
+        m_requestedCycloneFilters = filters;
+        m_cycloneRequestPending = true;
+        return;
     }
+    StartCycloneCacheJob(filters);
+}
 
-    wxLogMessage(climatology_pi + _("cyclone cache time ") + wxString::Format("%ld ms", sw.Time()));
-    
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
-        m_cyclone_cache_semaphore.Post();
+void ClimatologyOverlayFactory::StartCycloneCacheJob(
+    const climatology::CycloneFilterState &filters)
+{
+    if(!m_snapshot || !m_snapshot->availability.cyclones)
+        return;
+
+    m_cycloneJob.reset(new ClimatologyCycloneJob);
+    ClimatologyCycloneJob *job = m_cycloneJob.get();
+    job->filters = filters;
+    const std::shared_ptr<const climatology::ClimatologyDatasetSnapshot>
+        snapshot = m_snapshot;
+    try {
+      job->worker = std::thread([snapshot, job]() {
+        try {
+            climatology::CycloneFilterState filters = job->filters;
+#ifdef __OCPN__ANDROID__
+            filters.start_utc = std::numeric_limits<std::int64_t>::min();
+            filters.end_utc = std::numeric_limits<std::int64_t>::max();
+#endif
+            climatology::CycloneIndexResult result =
+                climatology::BuildCycloneIndex(
+                    snapshot, filters, &job->cancel);
+            job->cache.swap(result.index);
+            job->succeeded = result.completed;
+        } catch(...) {
+            job->succeeded = false;
+        }
+        job->done.store(true, std::memory_order_release);
+      });
+    } catch(...) {
+        m_cycloneJob.reset();
+    }
 }
 
 static double strtod_nan(const char *str)
@@ -1512,6 +1601,7 @@ bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
                                                 int setting, int month,
                                                 PlugIn_ViewPort &vp)
 {
+    (void)vp;
     if(!texture_format)
         return false;
 
@@ -1531,72 +1621,78 @@ bool ClimatologyOverlayFactory::CreateGLTexture(ClimatologyOverlay &O,
     default: s=1;
     }
 
-    wxProgressDialog *progressdialog = nullptr;
-    wxDateTime start = wxDateTime::Now();
-
     int width = s*360+1;
     int height = s*360;
 
-    unsigned char *data = new unsigned char[width*height*4];
-
-    for(int x = 0; x < width; x++) {
-        if(x % 40 == 0) {
-            if(progressdialog)
-                progressdialog->Update(x);
-            else {
-                wxDateTime now = wxDateTime::Now();
-                if((now-start).GetMilliseconds() > 1000 && x < width/2) {
-                    progressdialog = new wxProgressDialog(
-                        _("Building Overlay map"), _("Climatology"), width+1, &m_dlg,
-                        wxPD_SMOOTH | wxPD_ELAPSED_TIME | wxPD_REMAINING_TIME);
-                }
-            }
+    if(m_readyTexture) {
+        if(m_readyTexture->setting == setting &&
+           m_readyTexture->month == month &&
+           m_readyTexture->width == width &&
+           m_readyTexture->height == height) {
+            GLuint texture;
+            glGenTextures(1, &texture);
+            glBindTexture(texture_format, texture);
+            glTexParameteri(texture_format, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(texture_format, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(texture_format, GL_TEXTURE_WRAP_S,
+                s_bnoglrepeat ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+            glTexParameteri(texture_format, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(texture_format, 0, GL_RGBA, width, height, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE,
+                         m_readyTexture->pixels.data());
+            O.m_iTexture = texture;
+            O.m_width = width - 1;
+            O.m_height = height;
+            O.m_latoff = m_readyTexture->latoff;
+            O.m_lonoff = m_readyTexture->lonoff;
+            m_readyTexture.reset();
+            return true;
         }
-
-        for(int y = 0; y < height; y++) {
-            /* put in mercator coordinates */
-            double lat = M_PI*(2.0*y/height-1);
-            lat = 2*rad2deg(atan(exp(lat))) - 90;
-            double lon = x/s;
-
-            double v = getValueMonth(MAG, setting, lat + latoff, lon + lonoff, month);
-            wxColour c = GetGraphicColor(setting, v);
-
-            int doff = 4*(y*width + x);
-            data[doff + 0] = c.Red();
-            data[doff + 1] = c.Green();
-            data[doff + 2] = c.Blue();
-            data[doff + 3] = c.Alpha();
-        }
+        m_readyTexture.reset();
     }
-    if (progressdialog) progressdialog->Destroy();
 
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(texture_format, texture);
+    if(m_textureJob) {
+        return false;
+    }
 
-    glTexParameteri( texture_format, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-    glTexParameteri( texture_format, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-
-    if(s_bnoglrepeat)
-       glTexParameteri( texture_format, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-    else
-        glTexParameteri( texture_format, GL_TEXTURE_WRAP_S, GL_REPEAT );
-    glTexParameteri( texture_format, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(texture_format, 0, GL_RGBA, width, height,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-    delete [] data;
-
-    O.m_iTexture = texture;
-    O.m_width = width - 1;
-    O.m_height = height;
-    O.m_latoff = latoff;
-    O.m_lonoff = lonoff;
-
-    return true;
+    m_textureJob.reset(new ClimatologyTextureJob);
+    ClimatologyTextureJob *job = m_textureJob.get();
+    job->setting = setting;
+    job->month = month;
+    job->width = width;
+    job->height = height;
+    job->latoff = latoff;
+    job->lonoff = lonoff;
+    const std::shared_ptr<const climatology::ClimatologyDatasetSnapshot>
+        snapshot = m_snapshot;
+    try {
+      job->worker = std::thread([job, snapshot, s]() {
+        try {
+            climatology::TextureRasterRequest request;
+            request.field = static_cast<climatology::DatasetField>(
+                job->setting);
+            request.color_field = job->setting;
+            request.month = job->month;
+            request.width = job->width;
+            request.height = job->height;
+            request.samples_per_degree = s;
+            request.latitude_offset = job->latoff;
+            request.longitude_offset = job->lonoff;
+            climatology::TextureRasterResult result =
+                climatology::BuildTextureRaster(
+                    snapshot, request, GraphicPixel, &job->cancel);
+            job->pixels.swap(result.pixels);
+            job->succeeded = result.completed;
+        } catch(...) {
+            job->succeeded = false;
+        }
+        job->done.store(true, std::memory_order_release);
+      });
+    } catch(...) {
+        m_textureJob.reset();
+    }
+    return false;
 }
 
 static inline void glTexCoord2d_2(int multitexturing, double x, double y)
@@ -2132,7 +2228,7 @@ double ClimatologyOverlayFactory::getCurCalibratedValue(enum Coord coord, int se
     if(coord == DIRECTION)
         return v;
 
-    return m_dlg.m_cfgdlg->m_Settings.CalibrateValue(setting, v);
+    return m_Settings.CalibrateValue(setting, v);
 }
 
 double ClimatologyOverlayFactory::getCalibratedValueMonth(enum Coord coord, int setting, double lat, double lon, int month)
@@ -2141,7 +2237,7 @@ double ClimatologyOverlayFactory::getCalibratedValueMonth(enum Coord coord, int 
     if(coord == DIRECTION)
         return v;
 
-    return m_dlg.m_cfgdlg->m_Settings.CalibrateValue(setting, v);
+    return m_Settings.CalibrateValue(setting, v);
 }
 
 double ClimatologyOverlayFactory::GetMin(int setting)
@@ -2245,23 +2341,36 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
                 int hash = (floor((double)loni) * 180
                             + floor((double)lati))*12 + monthi;
 
-                std::list<CycloneState*> &cyclonestates = m_cyclone_cache[hash];
-                for(std::list<CycloneState*>::iterator it = cyclonestates.begin();
-                    it != cyclonestates.end(); it++) {
-                    wxPoint p;
-                    CycloneState *ss = *it;
+                climatology::CycloneSpatialIndex::const_iterator bucket =
+                    m_cyclone_cache.find(hash);
+                if(bucket == m_cyclone_cache.end()) {
+                    if(monthi == month_end) break;
+                    monthi = (monthi + 1) % 12;
+                    continue;
+                }
+                const std::vector<const climatology::CycloneSegment*> &
+                    cyclonestates = bucket->second;
+                for(std::vector<const climatology::CycloneSegment*>::const_iterator
+                        it = cyclonestates.begin();
+                    it != cyclonestates.end(); ++it) {
+                    const climatology::CycloneSegment *segment = *it;
                         
-                    int cday = ss->datetime.month*365/12 + ss->datetime.day - 1;
+                    int cday = segment->time.month * 365 / 12 +
+                        segment->time.day - 1;
                     const int daydiff = climatology::CircularDayDistance(cday, day);
 
                     if(daydiff <= half_range) {
                         /* we should split all cyclones at 15 degrees longitude... until then... */
-                        while(lon1 - ss->lon[0] > 180) lon1 -= 360, lon2 -= 360;
-                        while(lon1 - ss->lon[0] < -180) lon1 += 360, lon2 += 360;
+                        while(lon1 - segment->longitude0 > 180)
+                            lon1 -= 360, lon2 -= 360;
+                        while(lon1 - segment->longitude0 < -180)
+                            lon1 += 360, lon2 += 360;
                                 
                         if(TestIntersectionXY(lat1, lon1, lat2, lon2,
-                                              ss->lat[0], ss->lon[0],
-                                              ss->lat[1], ss->lon[1])) {
+                                              segment->latitude0,
+                                              segment->longitude0,
+                                              segment->latitude1,
+                                              segment->longitude1)) {
                             m_cyclone_cache_semaphore.Post();
                             return 1;
                         }
@@ -2279,7 +2388,8 @@ int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, d
 
 void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &vp)
 {
-    if(!m_Settings.Settings[setting].m_bOverlayMap)
+    const climatology::FieldRenderState &state = m_renderState.fields[setting];
+    if(!state.overlay_map)
         return;
 
     int month, nmonth;
@@ -2291,7 +2401,7 @@ void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &
     } else
         GetDateInterpolation(NULL, month, nmonth, dpos);
 
-    if(!m_Settings.Settings[setting].m_bOverlayInterpolation) {
+    if(!state.overlay_interpolation) {
         nmonth = month;
         dpos = 1;
     }
@@ -2307,7 +2417,8 @@ void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &
         if( !O2.m_iTexture )
             CreateGLTexture( O2, setting, nmonth, vp);
 
-        DrawGLTexture( O1, O2, dpos, vp, m_Settings.Settings[setting].m_iOverlayTransparency/100.0 );
+        DrawGLTexture(O1, O2, dpos, vp,
+                      state.overlay_transparency / 100.0);
     }
     else
     {
@@ -2374,8 +2485,8 @@ void ClimatologyOverlayFactory::RenderNumber(wxPoint p, double v, const wxColour
 
 void ClimatologyOverlayFactory::RenderIsoBars(int setting, PlugIn_ViewPort &vp)
 {
-recompute:
-    if(!m_Settings.Settings[setting].m_bIsoBars)
+    const climatology::FieldRenderState &state = m_renderState.fields[setting];
+    if(!state.isobars)
         return;
 
     int month = m_bAllTimes ? 12 : m_CurrentTimeline.GetMonth();
@@ -2384,39 +2495,52 @@ recompute:
         month = 0;
 
     ClimatologyIsoBarMap *&pIsobars = m_Settings.Settings[setting].m_pIsobars[month];
-    double spacing = m_Settings.Settings[setting].m_iIsoBarSpacing, step;
-    switch(m_Settings.Settings[setting].m_iIsoBarStep) {
-    default: step = 4; break;
-    case 1: step = 2; break;
-    case 2: step = 1; break;
-    case 3: step = .5; break;
-    case 4: step = .25; break;
-    }
+    const double spacing = state.isobar_spacing;
+    const double step = IsobarStep(state.isobar_step);
 
-    int units = m_Settings.Settings[setting].m_Units;
+    int units = state.units;
     if(pIsobars && !pIsobars->SameSettings(spacing, step, units, month, day)) {
-        if(pIsobars->m_bComputing) {
-            pIsobars->m_bNeedsRecompute = true;
-            return;
-        }
-
         delete pIsobars;
         pIsobars = NULL;
     }
 
     if( !pIsobars ) {
-        pIsobars = new ClimatologyIsoBarMap(m_dlg.m_cfgdlg->SettingName(setting),
-                                            spacing, step, *this, setting, units, month, day);
-        bool ret = pIsobars->Recompute(&m_dlg);
-        if(!ret) {
-            if(pIsobars->m_bNeedsRecompute)
-                goto recompute;
-            pIsobars = NULL;
-
-            m_dlg.m_cfgdlg->DisableIsoBars(setting);
+        if(m_isobarJob) {
+            const bool same = m_isobarJob->setting == setting &&
+                m_isobarJob->month == month && m_isobarJob->units == units &&
+                m_isobarJob->spacing == spacing && m_isobarJob->step == step;
+            if(m_isobarJob->setting == setting && !same)
+                m_isobarJob->map->m_bNeedsRecompute.store(
+                    true, std::memory_order_release);
             return;
         }
-        goto recompute;
+
+        static const char *names[] = {
+            "Wind", "Current", "Sea Level Pressure",
+            "Sea Surface Temperature", "Air Temperature", "Cloud Cover",
+            "Precipitation", "Relative Humidity", "Lightning", "Sea Depth"};
+        m_isobarJob.reset(new ClimatologyIsobarJob);
+        ClimatologyIsobarJob *job = m_isobarJob.get();
+        job->setting = setting;
+        job->month = month;
+        job->units = units;
+        job->spacing = spacing;
+        job->step = step;
+        job->map.reset(new ClimatologyIsoBarMap(
+            _(names[setting]), spacing, step, *this, setting, units, month, day));
+        try {
+            job->worker = std::thread([job]() {
+                try {
+                    job->succeeded = job->map->Recompute(NULL);
+                } catch(...) {
+                    job->succeeded = false;
+                }
+                job->done.store(true, std::memory_order_release);
+            });
+        } catch(...) {
+            m_isobarJob.reset();
+        }
+        return;
     }
 
     pIsobars->Plot(m_dc, vp);
@@ -2424,10 +2548,11 @@ recompute:
 
 void ClimatologyOverlayFactory::RenderNumbers(int setting, PlugIn_ViewPort &vp)
 {
-    if(!m_Settings.Settings[setting].m_bNumbers)
+    const climatology::FieldRenderState &state = m_renderState.fields[setting];
+    if(!state.numbers)
         return;
 
-    double space = m_Settings.Settings[setting].m_iNumbersSpacing;
+    double space = state.numbers_spacing;
     wxPoint p;
     for(p.y = space/2; p.y <= vp.rv_rect.height-space/4; p.y+=space)
         for(p.x = space/2; p.x <= vp.rv_rect.width-space/4; p.x+=space) {
@@ -2439,7 +2564,8 @@ void ClimatologyOverlayFactory::RenderNumbers(int setting, PlugIn_ViewPort &vp)
 
 void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPort &vp)
 {
-    if(!m_Settings.Settings[setting].m_bDirectionArrows)
+    const climatology::FieldRenderState &state = m_renderState.fields[setting];
+    if(!state.direction_arrows)
         return;
 
     int month = m_bAllTimes ? 12 : m_CurrentTimeline.GetMonth();
@@ -2459,11 +2585,12 @@ void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPo
     default: return;
     }
 
-    double lengthtype = m_Settings.Settings[setting].m_iDirectionArrowsLengthType;
-    int width = m_Settings.Settings[setting].m_iDirectionArrowsWidth;
-    wxColour color = m_Settings.Settings[setting].m_cDirectionArrowsColor;
-    double size = m_Settings.Settings[setting].m_iDirectionArrowsSize;
-    double spacing = m_Settings.Settings[setting].m_iDirectionArrowsSpacing;
+    double lengthtype = state.arrow_length_type;
+    int width = state.arrow_width;
+    wxColour color(state.arrow_red, state.arrow_green, state.arrow_blue,
+                   state.arrow_alpha);
+    double size = state.arrow_size;
+    double spacing = state.arrow_spacing;
 
     int w = vp.pix_width, h = vp.pix_height;
     while((vp.lat_max - vp.lat_min) / step > h / spacing ||
@@ -2528,7 +2655,7 @@ void ClimatologyOverlayFactory::RenderDirectionArrows(int setting, PlugIn_ViewPo
 
 void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
 {
-    if(!m_dlg.m_cfgdlg->m_cbWindAtlasEnable->GetValue())
+    if(!m_renderState.wind_atlas.enabled)
         return;
 
     int month, nmonth;
@@ -2543,8 +2670,8 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
     double latstep = m_snapshot->wind.geometry.latitude_step;
     double lonstep = m_snapshot->wind.geometry.longitude_step;
     const double r = 12;
-    double size = m_dlg.m_cfgdlg->m_sWindAtlasSize->GetValue();
-    double spacing = m_dlg.m_cfgdlg->m_sWindAtlasSpacing->GetValue();
+    double size = m_renderState.wind_atlas.size;
+    double spacing = m_renderState.wind_atlas.spacing;
 
     int w = vp.pix_width, h = vp.pix_height;
     while((vp.lat_max - vp.lat_min) / latstep > h / spacing)
@@ -2565,7 +2692,7 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
             wxPoint p;
             GetCanvasPixLL(&vp, &p, lat, lon);
 
-            int opacity = m_dlg.m_cfgdlg->m_sWindAtlasOpacity->GetValue();
+            int opacity = m_renderState.wind_atlas.opacity;
 
             if(gale*2 > calm)
                 RenderNumber(p, 100.0*gale, wxColour(255, 0, 0, opacity));
@@ -2611,24 +2738,25 @@ void ClimatologyOverlayFactory::RenderWindAtlas(PlugIn_ViewPort &vp)
         }
 }
 
-void ClimatologyOverlayFactory::RenderCycloneSegment(CycloneState &ss, PlugIn_ViewPort &vp,
-                                                     int dayspan)
+void ClimatologyOverlayFactory::RenderCycloneSegment(
+    const climatology::CycloneSegment &segment, PlugIn_ViewPort &vp,
+    int dayspan,
+    std::unordered_set<const climatology::CycloneSegment*> &drawn)
 {
-    if(ss.drawn_counter == m_cyclone_drawn_counter)
+    if(!drawn.insert(&segment).second)
         return;
-
-    ss.drawn_counter = m_cyclone_drawn_counter;
                     
-    if(!m_dlg.m_cbAll->GetValue()) {
-        int daydiff = abs(ss.datetime.day - m_CurrentTimeline.GetDay()
-                          + 30.42*(ss.datetime.month - m_CurrentTimeline.GetMonth()));
+    if(!m_renderState.all_times) {
+        int daydiff = abs(segment.time.day - m_CurrentTimeline.GetDay()
+                          + 30.42*(segment.time.month - m_CurrentTimeline.GetMonth()));
         if(daydiff > 183)
             daydiff = 365 - daydiff;
         if(daydiff > dayspan/2)
             return;
     }
 
-    double *lat = ss.lat, *lon = ss.lon;
+    const double lat[2] = {segment.latitude0, segment.latitude1};
+    const double lon[2] = {segment.longitude0, segment.longitude1};
 #if 0
     /* prevent wrong crossover */
     if((lastlon+180 > vp.clon || lon+180 < vp.clon) &&
@@ -2641,7 +2769,7 @@ void ClimatologyOverlayFactory::RenderCycloneSegment(CycloneState &ss, PlugIn_Vi
         GetCanvasPixLL( &vp, &p[0], lat[0], lon[0] );
         GetCanvasPixLL( &vp, &p[1], lat[1], lon[1] );
 
-        wxColour c = GetGraphicColor(CYCLONE_SETTING, ss.windknots);
+        wxColour c = GetGraphicColor(CYCLONE_SETTING, segment.wind_knots);
                             
         DrawLine(p[0].x, p[0].y, p[1].x, p[1].y, c, 2);
                             
@@ -2694,10 +2822,10 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
         }
 #endif
 
-    int dayspan = m_dlg.m_cfgdlg->m_sCycloneDaySpan->GetValue();
+    int dayspan = m_renderState.cyclone_filter.day_span;
 
     int month_start, month_end;
-    if(m_dlg.m_cbAll->GetValue()) {
+    if(m_renderState.all_times) {
         month_start = 0;
         month_end = 11;
     } else {
@@ -2707,7 +2835,13 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
         month_end = (dt2 + ts_dayspan).GetMonth();
     }
 
-    m_cyclone_drawn_counter++;
+    m_cyclone_cache_semaphore.Wait();
+    if(m_cyclone_cache.empty()) {
+        m_cyclone_cache_semaphore.Post();
+        return;
+    }
+
+    std::unordered_set<const climatology::CycloneSegment*> drawn;
 
     wxDateTime start = wxDateTime::Now();
     for(int lati = floor(vp.lat_min); lati <= ceil(vp.lat_max); lati++)
@@ -2717,10 +2851,16 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
                 int lonin = loni < 15 ? loni : loni - 360;
                 int hash = (lonin * 180 + lati)*12 + monthi;
 
-                std::list<CycloneState*> &states = m_cyclone_cache[hash];
-                for(std::list<CycloneState*>::iterator it = states.begin();
-                    it != states.end(); it++)
-                    RenderCycloneSegment(**it, vp, dayspan);
+                climatology::CycloneSpatialIndex::const_iterator bucket =
+                    m_cyclone_cache.find(hash);
+                if(bucket != m_cyclone_cache.end()) {
+                    const std::vector<const climatology::CycloneSegment*> &states =
+                        bucket->second;
+                    for(std::vector<const climatology::CycloneSegment*>
+                            ::const_iterator it = states.begin();
+                        it != states.end(); ++it)
+                        RenderCycloneSegment(**it, vp, dayspan, drawn);
+                }
 
                 if(monthi == month_end)
                     break;
@@ -2729,13 +2869,11 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
         }
 
     wxDateTime end = wxDateTime::Now();
+    m_cyclone_cache_semaphore.Post();
 
     /* rendering is taking too long, and display lists not used */
     if(m_dc->GetDC() && (end - start).GetMilliseconds() >= 1200) {
-        m_dlg.m_cbCyclones->SetValue(false);
-        wxMessageDialog mdlg(&m_dlg, _("Computer too slow to render cyclones, disabling theater"),
-                             _("Climatology"), wxOK | wxICON_WARNING);
-        mdlg.ShowModal();
+        m_disableCyclonesForPerformance = true;
     }
 
 #ifdef USE_DL
@@ -2807,6 +2945,7 @@ bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
 {
     if(!IsReady())
         return false;
+    m_renderState = m_dlg.CaptureRenderState();
     m_dc = &dc;
 
     if(!dc.GetDC()) {
@@ -2831,10 +2970,10 @@ bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
 
     for(int overlay = 1; overlay >= 0; overlay--)
     for(int i=0; i<ClimatologyOverlaySettings::SETTINGS_COUNT; i++) {
-        if(!m_dlg.SettingEnabled(i))
+        if(!m_renderState.fields[i].visible)
             continue;
 
-        if(!m_Settings.Settings[i].m_bEnabled)
+        if(!m_renderState.fields[i].enabled)
             continue;
 
         if(overlay) /* render overlays first */
@@ -2847,10 +2986,10 @@ bool ClimatologyOverlayFactory::RenderOverlay( piDC &dc, PlugIn_ViewPort &vp )
 
     }
 
-    if(m_dlg.m_cbWind->GetValue())
+    if(m_renderState.show_wind_atlas)
         RenderWindAtlas(vp);
 
-    if(m_dlg.m_cbCyclones->GetValue())
+    if(m_renderState.show_cyclones)
         RenderCyclones(vp);
 
 #ifndef USE_GLSL

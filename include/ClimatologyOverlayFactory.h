@@ -28,10 +28,14 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "ClimatologyDataService.h"
 #include "ClimatologyQueryEngine.h"
+#include "ClimatologyRenderPreparation.h"
+#include "ClimatologyState.h"
 #include "zuFile.h"
 
 #include "IsoBarMap.h"
@@ -188,6 +192,9 @@ public:
 class ClimatologyDialog;
 class wxGLContext;
 class ClimatologyOverlayFactory;
+struct ClimatologyIsobarJob;
+struct ClimatologyTextureJob;
+struct ClimatologyCycloneJob;
 
 class ClimatologyIsoBarMap : public IsoBarMap
 {
@@ -196,7 +203,8 @@ public:
                       ClimatologyOverlayFactory &factory, int setting, int units,
                       int month, int day)
      : IsoBarMap(name, spacing, step),
-        m_factory(factory), m_setting(setting), m_units(units), m_month(month), m_day(day) {}
+        m_factory(factory), m_setting(setting), m_units(units), m_month(month),
+        m_day(day), m_calibration(climatology::CalibrationForField(setting, units)) {}
 
     double CalcParameter(double lat, double lon);
     bool SameSettings(double spacing, double step, int units, int month, int day)
@@ -209,6 +217,7 @@ private:
     
     ClimatologyOverlayFactory &m_factory;
     int m_setting, m_units, m_month, m_day;
+    climatology::ValueCalibration m_calibration;
 };
 
 enum {WIND_SETTING, CURRENT_SETTING, PRESSURE_SETTING, SEATEMP_SETTING,
@@ -252,11 +261,15 @@ public:
     // Called from the OpenCPN main thread. Returns true once for each
     // completed asynchronous load and publishes either the snapshot or error.
     bool PollDatasetLoad(bool &succeeded, wxString &error);
+    // Main-thread publication point for completed render-preparation jobs.
+    void PollBackgroundWork(bool &needs_refresh, bool &api_changed,
+                            int &disable_isobars,
+                            bool &disable_cyclones_for_performance);
     std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> Snapshot() const
     { return m_snapshot; }
 
     wxSemaphore m_cyclone_cache_semaphore;
-    std::map<int, std::list<CycloneState*> > m_cyclone_cache;
+    climatology::CycloneSpatialIndex m_cyclone_cache;
 
     void BuildCycloneCache();
     bool RenderOverlay( piDC &dc, PlugIn_ViewPort &vp );
@@ -273,7 +286,8 @@ private:
     void StartDatasetLoad();
     void PublishDataset(
         std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> snapshot);
-    void BuildLegacyCycloneViews();
+    void StartCycloneCacheJob(const climatology::CycloneFilterState &filters);
+    void CancelBackgroundWork();
     void Load();
     void LoadInternal(wxGenericProgressDialog *progressdialog);
     void Free();
@@ -308,7 +322,10 @@ private:
     void RenderDirectionArrows(int setting, PlugIn_ViewPort &vp);
 
     void RenderWindAtlas(PlugIn_ViewPort &vp);
-    void RenderCycloneSegment(CycloneState &ss, PlugIn_ViewPort &vp, int dayspan);
+    void RenderCycloneSegment(
+        const climatology::CycloneSegment &segment, PlugIn_ViewPort &vp,
+        int dayspan,
+        std::unordered_set<const climatology::CycloneSegment*> &drawn);
     void RenderCyclones(PlugIn_ViewPort &vp);
 
     bool CreateGLTexture(ClimatologyOverlay &O, int setting, int month, PlugIn_ViewPort &vp);
@@ -319,6 +336,7 @@ private:
 
     ClimatologyDialog &m_dlg;
     ClimatologyOverlaySettings &m_Settings;
+    climatology::ClimatologyRenderState m_renderState;
 
     ClimatologyOverlay m_pOverlay[13][ClimatologyOverlaySettings::SETTINGS_COUNT];
 
@@ -341,8 +359,6 @@ private:
     wxInt16 m_seadepth[180][360];   /* 1 degree intervals   */
 
     int m_cyclonesDisplayList;
-    long m_cyclone_drawn_counter;
-
     std::list<Cyclone*> m_wpa, m_epa, m_spa, m_atl, m_she, m_nio;
 
     std::map<int, ElNinoYear> m_ElNinoYears;
@@ -352,4 +368,12 @@ private:
     climatology::ClimatologyDataService m_dataService;
     std::shared_ptr<const climatology::ClimatologyDatasetSnapshot> m_snapshot;
     std::unique_ptr<climatology::ClimatologyQueryEngine> m_query;
+
+    std::unique_ptr<ClimatologyIsobarJob> m_isobarJob;
+    std::unique_ptr<ClimatologyTextureJob> m_textureJob;
+    std::unique_ptr<ClimatologyTextureJob> m_readyTexture;
+    std::unique_ptr<ClimatologyCycloneJob> m_cycloneJob;
+    climatology::CycloneFilterState m_requestedCycloneFilters;
+    bool m_cycloneRequestPending;
+    bool m_disableCyclonesForPerformance;
 };

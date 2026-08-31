@@ -98,6 +98,66 @@ ClimatologyDialog::~ClimatologyDialog()
 {
 }
 
+climatology::ClimatologyRenderState
+ClimatologyDialog::CaptureRenderState() const
+{
+    climatology::ClimatologyRenderState state;
+    wxCheckBox *field_controls[] = {
+        m_cbWind, m_cbCurrent, m_cbPressure, m_cbSeaTemperature,
+        m_cbAirTemperature, m_cbCloudCover, m_cbPrecipitation,
+        m_cbRelativeHumidity, m_cbLightning, m_cbSeaDepth};
+    for(std::size_t index = 0; index < climatology::kDisplayFieldCount;
+        ++index) {
+        const ClimatologyOverlaySettings::OverlayDataSettings &source =
+            m_cfgdlg->m_Settings.Settings[index];
+        climatology::FieldRenderState &field = state.fields[index];
+        field.visible = field_controls[index]->GetValue();
+        field.enabled = source.m_bEnabled;
+        field.units = source.m_Units;
+        field.overlay_map = source.m_bOverlayMap;
+        field.overlay_transparency = source.m_iOverlayTransparency;
+        field.overlay_interpolation = source.m_bOverlayInterpolation;
+        field.isobars = source.m_bIsoBars;
+        field.isobar_spacing = source.m_iIsoBarSpacing;
+        field.isobar_step = source.m_iIsoBarStep;
+        field.numbers = source.m_bNumbers;
+        field.numbers_spacing = source.m_iNumbersSpacing;
+        field.direction_arrows = source.m_bDirectionArrows;
+        field.arrow_length_type = source.m_iDirectionArrowsLengthType;
+        field.arrow_width = source.m_iDirectionArrowsWidth;
+        field.arrow_red = source.m_cDirectionArrowsColor.Red();
+        field.arrow_green = source.m_cDirectionArrowsColor.Green();
+        field.arrow_blue = source.m_cDirectionArrowsColor.Blue();
+        field.arrow_alpha = source.m_cDirectionArrowsColor.Alpha();
+        field.arrow_size = source.m_iDirectionArrowsSize;
+        field.arrow_spacing = source.m_iDirectionArrowsSpacing;
+    }
+    state.all_times = m_cbAll->GetValue();
+    state.show_wind_atlas = m_cbWind->GetValue();
+    state.show_cyclones = m_cbCyclones->GetValue();
+    state.wind_atlas.enabled = m_cfgdlg->m_cbWindAtlasEnable->GetValue();
+    state.wind_atlas.size = m_cfgdlg->m_sWindAtlasSize->GetValue();
+    state.wind_atlas.spacing = m_cfgdlg->m_sWindAtlasSpacing->GetValue();
+    state.wind_atlas.opacity = m_cfgdlg->m_sWindAtlasOpacity->GetValue();
+
+    climatology::CycloneFilterState &cyclones = state.cyclone_filter;
+    cyclones.tropical = m_cfgdlg->m_cbTropical->GetValue();
+    cyclones.subtropical = m_cfgdlg->m_cbSubTropical->GetValue();
+    cyclones.extratropical = m_cfgdlg->m_cbExtraTropical->GetValue();
+    cyclones.remnant = m_cfgdlg->m_cbRemanent->GetValue();
+    cyclones.minimum_wind_knots = m_cfgdlg->m_sMinWindSpeed->GetValue();
+    cyclones.maximum_pressure_hpa = m_cfgdlg->m_sMaxPressure->GetValue();
+    cyclones.start_utc = m_cfgdlg->m_dPStart->GetValue().GetTicks();
+    cyclones.end_utc = m_cfgdlg->m_dPEnd->GetValue().GetTicks();
+    cyclones.include_enso_unavailable =
+        m_cfgdlg->m_cbNotAvailable->GetValue();
+    cyclones.include_el_nino = m_cfgdlg->m_cbElNino->GetValue();
+    cyclones.include_la_nina = m_cfgdlg->m_cbLaNina->GetValue();
+    cyclones.include_neutral = m_cfgdlg->m_cbNeutral->GetValue();
+    cyclones.day_span = m_cfgdlg->m_sCycloneDaySpan->GetValue();
+    return state;
+}
+
 #ifdef __OCPN__ANDROID__
 void ClimatologyDialog::OnEvtPanGesture( wxQT_PanGestureEvent &event)
 {
@@ -185,6 +245,39 @@ bool ClimatologyDialog::SettingEnabled(int setting)
 void ClimatologyDialog::DisableSetting(int setting)
 {
     GetSettingControl(setting)->SetValue(false);
+}
+
+void ClimatologyDialog::DisableIsoBars(int setting)
+{
+    m_cfgdlg->DisableIsoBars(setting);
+    RefreshRedraw();
+}
+
+void ClimatologyDialog::DisableCyclonesForPerformance()
+{
+    m_cbCyclones->SetValue(false);
+    RefreshRedraw();
+    wxMessageDialog dialog(
+        this, _("Computer too slow to render cyclones, disabling theater"),
+        _("Climatology"), wxOK | wxICON_WARNING);
+    dialog.ShowModal();
+}
+
+void ClimatologyDialog::ApplyDatasetAvailability(
+    const climatology::DatasetAvailability &availability)
+{
+    wxCheckBox *controls[] = {
+        m_cbWind, m_cbCurrent, m_cbPressure, m_cbSeaTemperature,
+        m_cbAirTemperature, m_cbCloudCover, m_cbPrecipitation,
+        m_cbRelativeHumidity, m_cbLightning, m_cbSeaDepth};
+    for(std::size_t field = 0;
+        field < static_cast<std::size_t>(climatology::DatasetField::Count);
+        ++field)
+        controls[field]->Enable(availability.fields[field]);
+    m_cbCyclones->Enable(availability.cyclones);
+    m_cfgdlg->m_cbElNino->Enable(availability.enso);
+    m_cfgdlg->m_cbLaNina->Enable(availability.enso);
+    m_cfgdlg->m_cbNeutral->Enable(availability.enso);
 }
 
 wxCheckBox *ClimatologyDialog::GetSettingControl(int setting)

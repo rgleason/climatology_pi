@@ -1,4 +1,5 @@
 #include "ClimatologyMath.h"
+#include "ClimatologyState.h"
 
 #include <cassert>
 #include <cmath>
@@ -41,6 +42,17 @@ int main() {
     assert(climatology::CircularDayDistance(2, 363) == 4);
     assert(climatology::CircularDayDistance(363, 2) == 4);
     assert(climatology::CircularDayDistance(100, 110) == 10);
+
+    assert(close(climatology::CalibrationForField(0, 0).Apply(10.0), 10.0));
+    assert(close(climatology::CalibrationForField(0, 1).Apply(10.0),
+                 10.0 * 1.852 / 3.6));
+    assert(close(climatology::CalibrationForField(2, 1).Apply(1013.0),
+                 1013.0 / 1.33));
+    assert(close(climatology::CalibrationForField(3, 1).Apply(20.0), 68.0));
+    assert(close(climatology::CalibrationForField(6, 0).Apply(1.0),
+                 1000.0 / 365.24));
+    assert(close(climatology::CalibrationForField(6, 5).Apply(1.0), 3.28));
+    assert(close(climatology::CalibrationForField(9, 1).Apply(100.0), 328.0));
 
     const auto february_mid = climatology::MonthInterpolation(1, 15, 0.0, 29);
     assert(february_mid.month == 1);

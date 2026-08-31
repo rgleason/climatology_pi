@@ -12,6 +12,7 @@ src/ClimatologyChecksum.cpp
 src/ClimatologyDataService.cpp
 src/ClimatologyDatasetLoader.cpp
 src/ClimatologyQueryEngine.cpp
+src/ClimatologyRenderPreparation.cpp
 include/climatology_pi.h
 include/ClimatologyConfigDialog.h
 include/ClimatologyDialog.h
@@ -30,3 +31,5 @@ include/ClimatologyChecksum.h
 include/ClimatologyDataService.h
 include/ClimatologyDatasetLoader.h
 include/ClimatologyQueryEngine.h
+include/ClimatologyState.h
+include/ClimatologyRenderPreparation.h

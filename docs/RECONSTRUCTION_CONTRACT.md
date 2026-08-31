@@ -40,6 +40,13 @@ services from route workers under its invocation mutex.  Once advertised as
 ready, callbacks must therefore read only a complete immutable snapshot and
 must not touch dialogs, OpenGL state or other GUI objects.
 
+The same three pointer declarations are used by standard WeatherRouting.
+Release gating checks both `rgleason/weather_routing_pi` and
+`pob220/xweather_routing_pi`; Climatology remains within their supported
+0.10–1.6 version interval.  A second ready publication after the asynchronous
+cyclone index completes lets both consumers replace the initially unavailable
+cyclone callback state without restarting either plugin.
+
 Typed Provider API V1 is additive.  It advertises all-years data only and
 returns explicit status, units and direction conventions.
 

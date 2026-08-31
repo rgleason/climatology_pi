@@ -41,6 +41,7 @@
 #endif
 
 #include "ClimatologyConfigDialog.h"
+#include "ClimatologyState.h"
 #include "ClimatologyOverlayFactory.h"
 #include "ClimatologyUI.h"
 
@@ -67,9 +68,14 @@ public:
     void SetCursorLatLon(double lat, double lon);
     bool SettingEnabled(int setting);
     void DisableSetting(int setting);
+    void DisableIsoBars(int setting);
+    void DisableCyclonesForPerformance();
+    void ApplyDatasetAvailability(
+        const climatology::DatasetAvailability &availability);
 
     void FitLater() { m_fittimer.Start(100, true); }
     void Save();
+    climatology::ClimatologyRenderState CaptureRenderState() const;
 
     ClimatologyConfigDialog *m_cfgdlg;
     climatology_pi *pPlugIn;

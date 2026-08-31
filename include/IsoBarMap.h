@@ -24,6 +24,7 @@
  ***************************************************************************
  */
 
+#include <atomic>
 #include <list>
 
 
@@ -81,7 +82,7 @@ public:
 
     void Plot(piDC *dc, PlugIn_ViewPort &vp);
 
-    bool m_bNeedsRecompute, m_bComputing;
+    std::atomic<bool> m_bNeedsRecompute, m_bComputing;
 protected:
     double m_Spacing, m_Step, m_PoleAccuracy;
 

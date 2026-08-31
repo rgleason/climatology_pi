@@ -299,24 +299,39 @@ void climatology_pi::OnDatasetLoadTimer()
     }
     bool succeeded = false;
     wxString error;
-    if(!g_pOverlayFactory->PollDatasetLoad(succeeded, error))
-        return;
-
-    m_dataset_load_timer.Stop();
-    SendClimatology(succeeded);
-    if(succeeded) {
-        m_pClimatologyDialog->UpdateTrackingControls();
-        m_pClimatologyDialog->FitLater();
-        RequestRefresh(m_parent_window);
-        return;
+    if(g_pOverlayFactory->PollDatasetLoad(succeeded, error)) {
+        SendClimatology(succeeded);
+        if(succeeded) {
+            m_pClimatologyDialog->UpdateTrackingControls();
+            m_pClimatologyDialog->FitLater();
+            RequestRefresh(m_parent_window);
+            m_dataset_load_timer.Start(100);
+        } else {
+            m_dataset_load_timer.Stop();
+            wxLogError("climatology_pi: dataset load failed: " + error);
+            wxMessageDialog dialog(m_pClimatologyDialog,
+                _("The Climatology dataset could not be loaded. The matching complete "
+                  "versioned dataset must be reinstalled.\n\n") + error,
+                _("Climatology"), wxOK | wxICON_ERROR);
+            dialog.ShowModal();
+            return;
+        }
     }
 
-    wxLogError("climatology_pi: dataset load failed: " + error);
-    wxMessageDialog dialog(m_pClimatologyDialog,
-        _("The Climatology dataset could not be loaded. The matching complete "
-          "versioned dataset must be reinstalled.\n\n") + error,
-        _("Climatology"), wxOK | wxICON_ERROR);
-    dialog.ShowModal();
+    bool needs_refresh = false;
+    bool api_changed = false;
+    bool disable_cyclones = false;
+    int disable_isobars = -1;
+    g_pOverlayFactory->PollBackgroundWork(
+        needs_refresh, api_changed, disable_isobars, disable_cyclones);
+    if(disable_isobars >= 0)
+        m_pClimatologyDialog->DisableIsoBars(disable_isobars);
+    if(disable_cyclones)
+        m_pClimatologyDialog->DisableCyclonesForPerformance();
+    if(api_changed)
+        SendClimatology(true);
+    if(needs_refresh)
+        RequestRefresh(m_parent_window);
 }
 
 void climatology_pi::SetDefaults(void)

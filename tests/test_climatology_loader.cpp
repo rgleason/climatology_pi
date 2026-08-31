@@ -2,6 +2,7 @@
 #include "ClimatologyQueryEngine.h"
 #include "ClimatologyChecksum.h"
 #include "ClimatologyDataService.h"
+#include "ClimatologyRenderPreparation.h"
 
 #include <cassert>
 #include <chrono>
@@ -57,6 +58,16 @@ int main()
         0.0, 180.0, january);
     assert(std::fabs(dateline_left - dateline_right) < 1e-6);
 
+    CycloneFilterState cyclone_filters;
+    cyclone_filters.minimum_wind_knots = 0;
+    cyclone_filters.maximum_pressure_hpa = 2000;
+    cyclone_filters.start_utc = 788918400;   // 1995-01-01 UTC
+    cyclone_filters.end_utc = 1735689599;    // 2024-12-31 UTC
+    const CycloneIndexResult cyclone_index =
+        BuildCycloneIndex(loaded.snapshot, cyclone_filters);
+    assert(cyclone_index.completed);
+    assert(!cyclone_index.index.empty());
+
     ClimatologyDataService service;
     assert(service.Start(CLIMATOLOGY_TEST_DATA_DIR));
     assert(service.State() == DatasetLoadState::Loading ||
@@ -69,5 +80,30 @@ int main()
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     assert(asynchronous.Succeeded());
     assert(service.State() == DatasetLoadState::Ready);
+
+    // Repeated immediate cancellation must always join the worker and leave
+    // the service reusable; this exercises the shutdown path used when the
+    // plugin is disabled while OpenCPN remains live.
+    for(int iteration = 0; iteration < 8; ++iteration) {
+        ClimatologyDataService cancellable;
+        assert(cancellable.Start(CLIMATOLOGY_TEST_DATA_DIR));
+        cancellable.CancelAndWait();
+        assert(cancellable.State() == DatasetLoadState::Cancelled ||
+               cancellable.State() == DatasetLoadState::Ready);
+        assert(cancellable.Start(CLIMATOLOGY_TEST_DATA_DIR));
+        cancellable.CancelAndWait();
+    }
+
+    ClimatologyDataService invalid;
+    assert(invalid.Start("/definitely/not/a/climatology/dataset"));
+    DatasetLoadResult failed;
+    const std::chrono::steady_clock::time_point failure_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while(!invalid.TakeCompletion(failed) &&
+          std::chrono::steady_clock::now() < failure_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    assert(!failed.Succeeded());
+    assert(!failed.errors.empty());
+    assert(invalid.State() == DatasetLoadState::Failed);
     return 0;
 }

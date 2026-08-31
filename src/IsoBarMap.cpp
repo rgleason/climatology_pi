@@ -321,7 +321,7 @@ bool IsoBarMap::Recompute(wxWindow *parent)
     /* clear out old data */
   ClearMap();
 
-  m_bComputing = true;
+  m_bComputing.store(true, std::memory_order_release);
 
   wxProgressDialog *progressdialog = nullptr;
   wxDateTime start = wxDateTime::Now();
@@ -335,8 +335,9 @@ bool IsoBarMap::Recompute(wxWindow *parent)
   BuildParamCache(m_Cache[cachepage], min);
 
   for(double lat = min; lat + m_Step <= max; lat += m_Step) {
-      if(m_bNeedsRecompute) {
+      if(m_bNeedsRecompute.load(std::memory_order_acquire)) {
           if (progressdialog) progressdialog->Destroy();
+          m_bComputing.store(false, std::memory_order_release);
           return false;
       }
 
@@ -345,11 +346,12 @@ bool IsoBarMap::Recompute(wxWindow *parent)
           if((now-start).GetMilliseconds() > 1200) {
               if(!progressdialog->Update(lat - min)) {
                   progressdialog->Destroy();
+                  m_bComputing.store(false, std::memory_order_release);
                   return false;
               }
               start = now;
           }
-      } else if((now-start).GetMilliseconds() > 500) {
+      } else if(parent && (now-start).GetMilliseconds() > 500) {
           if(lat < (max - min)/2) {
               progressdialog = new wxProgressDialog(
                   _("Building Isobar Map"), m_Name, max - min + 1, parent,
@@ -383,7 +385,7 @@ bool IsoBarMap::Recompute(wxWindow *parent)
 
   if (progressdialog) progressdialog->Destroy();
 
-  m_bComputing = false;
+  m_bComputing.store(false, std::memory_order_release);
 
   m_MinContour /= m_Spacing;
   m_MinContour = floor(m_MinContour);
