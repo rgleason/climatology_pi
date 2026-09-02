@@ -1,6 +1,9 @@
 #include "ClimatologyMath.h"
 #include "ClimatologyState.h"
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <cassert>
 #include <cmath>
 #include <vector>

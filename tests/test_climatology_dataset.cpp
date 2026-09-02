@@ -2,6 +2,9 @@
 #include "ClimatologyQueryEngine.h"
 #include "ClimatologyRenderPreparation.h"
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <atomic>
 #include <cassert>
 #include <cmath>
