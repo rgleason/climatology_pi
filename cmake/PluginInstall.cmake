@@ -138,8 +138,9 @@ if (APPLE)
     )"
   )
 
+  find_package(BZip2 REQUIRED)
   find_package(ZLIB REQUIRED)
-  target_link_libraries(${PACKAGE_NAME} ${ZLIB_LIBRARIES})
+  target_link_libraries(${PACKAGE_NAME} ${BZIP2_LIBRARIES} ${ZLIB_LIBRARIES})
 
   # For Apple build, we need to copy the "data" directory contents to the build
   # directory, so that the packager can pick them up.

@@ -241,6 +241,14 @@ set(SRC ${SRCS} ${HDRS} )
 
 target_sources(${PACKAGE_NAME} PUBLIC ${SRC} )
 
+# The loader test uses the system compression libraries directly.  Discover
+# them before declaring the test targets so the imported targets also exist on
+# macOS; PluginInstall previously did this only for non-Apple Unix builds.
+if(UNIX AND NOT QT_ANDROID AND NOT OCPN_FLATPAK_CONFIG)
+  find_package(BZip2 REQUIRED)
+  find_package(ZLIB REQUIRED)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
   add_executable(climatology_math_tests
