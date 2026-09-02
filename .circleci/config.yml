@@ -92,7 +92,6 @@ commands:
                 - when:
                     condition: <<parameters.deploy_use_orb>>
                     steps:
-                    - cloudsmith/ensure-api-key
                     - cloudsmith/install-cli
                 - get-users-and-collaborators
                 - run: bash ci/cloudsmith-upload.sh
@@ -492,5 +491,4 @@ jobs:
             command: ci\circleci-build-msvc.bat
         - deploy-code:
             deploy_use_orb: false
-
 

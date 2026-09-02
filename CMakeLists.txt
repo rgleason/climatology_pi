@@ -274,7 +274,9 @@ if(BUILD_TESTING)
     $<$<CXX_COMPILER_ID:GNU,Clang>:-UNDEBUG>)
   target_include_directories(climatology_dataset_tests PRIVATE include)
   add_test(NAME climatology_dataset COMMAND climatology_dataset_tests)
-  if(UNIX AND NOT QT_ANDROID)
+  # The Flatpak configuration pass has no build dependencies or imported
+  # Zlib/BZip2 targets; executable tests belong to the subsequent build pass.
+  if(UNIX AND NOT QT_ANDROID AND NOT OCPN_FLATPAK_CONFIG)
     add_executable(climatology_loader_tests
       tests/test_climatology_loader.cpp
       src/ClimatologyDataset.cpp

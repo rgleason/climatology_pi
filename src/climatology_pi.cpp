@@ -27,11 +27,10 @@
 
 #include "wx/wxprec.h"
 
-#include <cinttypes>
 #include <cstdint>
 #include <ctime>
-#include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <string>
 
 #ifndef  WX_PRECOMP
@@ -74,9 +73,9 @@ static std::string FunctionPointerText(Function function)
         return "0x0";
     std::uintptr_t address = 0;
     std::memcpy(&address, &function, sizeof function);
-    char text[2 + sizeof(address) * 2 + 1];
-    std::snprintf(text, sizeof text, "0x%" PRIxPTR, address);
-    return text;
+    std::ostringstream text;
+    text << "0x" << std::hex << address;
+    return text.str();
 }
 
 wxString ClimatologyDataDirectory()
@@ -387,7 +386,7 @@ static int ClimatologyCycloneTrackCrossings(double lat1, double lon1, double lat
 static std::int32_t FinishClimatologyQuery(
     const climatology_api::QueryV1 *query,
     climatology_api::ResultV1 *result,
-    climatology_api::Status status)
+    climatology_api::QueryStatus status)
 {
     if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
         return climatology_api::STATUS_INVALID_REQUEST;
@@ -439,7 +438,7 @@ static std::int32_t ClimatologyQueryV1(
 {
     if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
         return climatology_api::STATUS_INVALID_REQUEST;
-    const climatology_api::Status validation =
+    const climatology_api::QueryStatus validation =
         climatology_api::ValidateQueryV1(query);
     if(validation != climatology_api::STATUS_OK)
         return FinishClimatologyQuery(query, result, validation);

@@ -6,6 +6,10 @@
 
 namespace climatology {
 
+// C++11 has no standard pi constant, and M_PI is an optional extension which
+// MSVC only exposes when configured before the first <cmath> include.
+constexpr double kPi = 3.14159265358979323846;
+
 double Wrap360(double degrees);
 double InterpolateMissing(double first, double second, double fraction);
 double InterpolateAngleRadians(double first, double second, double fraction);

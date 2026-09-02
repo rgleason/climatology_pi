@@ -1,5 +1,6 @@
 #include "ClimatologyRenderPreparation.h"
 
+#include "ClimatologyMath.h"
 #include "ClimatologyQueryEngine.h"
 
 #include <algorithm>
@@ -67,8 +68,8 @@ TextureRasterResult BuildTextureRaster(
             return result;
         }
         for(int y = 0; y < request.height; ++y) {
-            double latitude = M_PI * (2.0 * y / request.height - 1.0);
-            latitude = 2.0 * 180.0 / M_PI * std::atan(std::exp(latitude)) -
+            double latitude = kPi * (2.0 * y / request.height - 1.0);
+            latitude = 2.0 * 180.0 / kPi * std::atan(std::exp(latitude)) -
                 90.0;
             const double longitude = x / request.samples_per_degree;
             const double value = query.ValueMonth(

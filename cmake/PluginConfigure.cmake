@@ -12,6 +12,7 @@ message(STATUS "${CMLOC}CIRCLECI: ${CIRCLECLI}, Env CIRCLECI: $ENV{CIRCLECI}")
 message(STATUS "${CMLOC}TRAVIS: ${TRAVIS}, Env TRAVIS: $ENV{TRAVIS}")
 
 set(GIT_REPOSITORY "")
+set(GIT_REPOSITORY_COMMIT "")
 
 if ($ENV{CIRCLECI})
   set(GIT_REPOSITORY
@@ -19,6 +20,19 @@ if ($ENV{CIRCLECI})
   )
   set(GIT_REPOSITORY_BRANCH "$ENV{CIRCLE_BRANCH}")
   set(GIT_REPOSITORY_TAG "$ENV{CIRCLE_TAG}")
+  # Fork pull requests are exposed as synthetic branches such as pull/84 in
+  # the parent repository.  These are not normal heads and cannot be resolved
+  # by flatpak-builder.  Point the generated manifest at the fork and exact
+  # commit instead, using CircleCI's fork-PR metadata.
+  if (NOT "$ENV{CIRCLE_PR_USERNAME}" STREQUAL ""
+      AND NOT "$ENV{CIRCLE_PR_REPONAME}" STREQUAL ""
+      AND NOT "$ENV{CIRCLE_SHA1}" STREQUAL ""
+  )
+    set(GIT_REPOSITORY
+        "$ENV{CIRCLE_PR_USERNAME}/$ENV{CIRCLE_PR_REPONAME}"
+    )
+    set(GIT_REPOSITORY_COMMIT "$ENV{CIRCLE_SHA1}")
+  endif ()
 elseif ($ENV{TRAVIS})
   set(GIT_REPOSITORY "$ENV{TRAVIS_REPO_SLUG}")
   set(GIT_REPOSITORY_BRANCH "$ENV{TRAVIS_BRANCH}")
@@ -106,7 +120,11 @@ endif ()
 message(STATUS "${CMLOC}GIT_REPOSITORY: ${GIT_REPOSITORY}")
 message(STATUS "${CMLOC}Git Branch: \"${GIT_REPOSITORY_BRANCH}\"")
 message(STATUS "${CMLOC}Git Tag: \"${GIT_REPOSITORY_TAG}\"")
-if ("${GIT_REPOSITORY_BRANCH}" STREQUAL "")
+message(STATUS "${CMLOC}Git Commit: \"${GIT_REPOSITORY_COMMIT}\"")
+if (NOT "${GIT_REPOSITORY_COMMIT}" STREQUAL "")
+  set(GIT_BRANCH_OR_TAG "commit")
+  set(GIT_REPOSITORY_ITEM ${GIT_REPOSITORY_COMMIT})
+elseif ("${GIT_REPOSITORY_BRANCH}" STREQUAL "")
   set(GIT_BRANCH_OR_TAG "tag")
   set(GIT_REPOSITORY_ITEM ${GIT_REPOSITORY_TAG})
 else ()

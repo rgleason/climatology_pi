@@ -746,7 +746,8 @@ DatasetLoadResult ClimatologyDatasetLoader::Load(
         DatasetField::SeaDepth,
         Geometry(180, 360, 90.0, 0.5, 1.0, 1.0), -128,
         [](std::int8_t value) {
-            return std::max(0, std::min(39, static_cast<int>(value)));
+            const int index = static_cast<int>(value);
+            return index < 0 ? 0 : (index > 39 ? 39 : index);
         }, *snapshot, result.errors);
 
     const char* cyclone_names[6] = {
