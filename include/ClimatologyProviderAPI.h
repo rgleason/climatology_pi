@@ -14,7 +14,9 @@ namespace climatology_api {
 static const std::uint32_t QUERY_API_V1 = 1;
 static const std::size_t WIND_SECTOR_COUNT = 8;
 
-enum Status : std::int32_t {
+// Avoid Xlib's legacy Status macro, which is pulled in by GLX on older Linux
+// build images before consumers include this public header.
+enum QueryStatus : std::int32_t {
     STATUS_OK = 0,
     STATUS_UNKNOWN = 1,
     STATUS_INVALID_REQUEST = 2,
@@ -139,7 +141,7 @@ inline ResultV1 MakeResultV1()
     return result;
 }
 
-inline Status ValidateQueryV1(const QueryV1 *query)
+inline QueryStatus ValidateQueryV1(const QueryV1 *query)
 {
     if(!query || query->struct_size < sizeof(QueryV1))
         return STATUS_INVALID_REQUEST;

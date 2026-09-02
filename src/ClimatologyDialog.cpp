@@ -65,10 +65,16 @@ ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
 
     // The fitted legacy layout is technically large enough, but cramped in
     // practice (especially around the title and direction fields).  Establish
-    // a comfortable DPI-aware initial width without making it a minimum: the
-    // resize border remains fully functional.
+    // a comfortable initial width without making it a minimum: the resize
+    // border remains fully functional.  OpenCPN's Android wxWidgets fork does
+    // not provide wxWindow::FromDIP, and its dialogs are already display-scaled.
     const wxSize initial_size = GetSize();
-    SetSize(wxMax(initial_size.x, FromDIP(380)), initial_size.y);
+#ifdef __OCPN__ANDROID__
+    const int comfortable_width = 380;
+#else
+    const int comfortable_width = FromDIP(380);
+#endif
+    SetSize(wxMax(initial_size.x, comfortable_width), initial_size.y);
 
     // run fit delayed (buggy wxwidgets)
     m_fittimer.Connect(wxEVT_TIMER, wxTimerEventHandler

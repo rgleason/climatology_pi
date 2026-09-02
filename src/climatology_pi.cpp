@@ -386,7 +386,7 @@ static int ClimatologyCycloneTrackCrossings(double lat1, double lon1, double lat
 static std::int32_t FinishClimatologyQuery(
     const climatology_api::QueryV1 *query,
     climatology_api::ResultV1 *result,
-    climatology_api::Status status)
+    climatology_api::QueryStatus status)
 {
     if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
         return climatology_api::STATUS_INVALID_REQUEST;
@@ -438,7 +438,7 @@ static std::int32_t ClimatologyQueryV1(
 {
     if(!result || result->struct_size < sizeof(climatology_api::ResultV1))
         return climatology_api::STATUS_INVALID_REQUEST;
-    const climatology_api::Status validation =
+    const climatology_api::QueryStatus validation =
         climatology_api::ValidateQueryV1(query);
     if(validation != climatology_api::STATUS_OK)
         return FinishClimatologyQuery(query, result, validation);
