@@ -27,11 +27,10 @@
 
 #include "wx/wxprec.h"
 
-#include <cinttypes>
 #include <cstdint>
 #include <ctime>
-#include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <string>
 
 #ifndef  WX_PRECOMP
@@ -74,9 +73,9 @@ static std::string FunctionPointerText(Function function)
         return "0x0";
     std::uintptr_t address = 0;
     std::memcpy(&address, &function, sizeof function);
-    char text[2 + sizeof(address) * 2 + 1];
-    std::snprintf(text, sizeof text, "0x%" PRIxPTR, address);
-    return text;
+    std::ostringstream text;
+    text << "0x" << std::hex << address;
+    return text.str();
 }
 
 wxString ClimatologyDataDirectory()

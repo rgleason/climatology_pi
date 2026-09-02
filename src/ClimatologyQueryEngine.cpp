@@ -33,7 +33,7 @@ double DirectionDegrees(double eastward, double northward)
     if(!std::isfinite(eastward) || !std::isfinite(northward) ||
        (eastward == 0.0 && northward == 0.0))
         return NaN();
-    double degrees = std::atan2(eastward, northward) * 180.0 / M_PI;
+    double degrees = std::atan2(eastward, northward) * 180.0 / kPi;
     return degrees < 0.0 ? degrees + 360.0 : degrees;
 }
 
@@ -77,9 +77,9 @@ double WindCellValue(const MonthlyWindDistributionField& field,
         total_frequency += frequency;
         double multiplier = 1.0;
         if(component == QueryComponent::Eastward)
-            multiplier = std::sin(sector * 2.0 * M_PI / kWindSectors);
+            multiplier = std::sin(sector * 2.0 * kPi / kWindSectors);
         else if(component == QueryComponent::Northward)
-            multiplier = std::cos(sector * 2.0 * M_PI / kWindSectors);
+            multiplier = std::cos(sector * 2.0 * kPi / kWindSectors);
         weighted += multiplier * speed * frequency;
     }
     return total_frequency > 0.0 ? weighted / total_frequency : NaN();

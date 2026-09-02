@@ -1,9 +1,6 @@
 #include "ClimatologyMath.h"
 #include "ClimatologyState.h"
 
-#define _USE_MATH_DEFINES
-#include <cmath>
-
 #include <cassert>
 #include <cmath>
 #include <vector>
@@ -17,8 +14,9 @@ int main() {
     assert(close(climatology::Wrap360(720.5), 0.5));
 
     const double angle = climatology::InterpolateAngleRadians(
-        359.0 * M_PI / 180.0, 1.0 * M_PI / 180.0, 0.5);
-    assert(close(climatology::Wrap360(angle * 180.0 / M_PI), 0.0));
+        359.0 * climatology::kPi / 180.0,
+        1.0 * climatology::kPi / 180.0, 0.5);
+    assert(close(climatology::Wrap360(angle * 180.0 / climatology::kPi), 0.0));
 
     const std::vector<double> grid = {0.0, 10.0, 20.0, 30.0};
     const auto getter = [&grid](std::size_t row, std::size_t column) {
