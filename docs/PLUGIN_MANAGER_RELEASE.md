@@ -42,6 +42,11 @@ SDK/import evidence and runtime results as artifacts. The x64 jobs qualify
 packages without publishing them; the legacy wxWidgets 3.2.9 artifact remains
 separate from the primary wxWidgets 3.3.4 package.
 
+Every CircleCI artifact archive requires a companion XML. Retention finalizes a
+copy with the archive's actual CI download URL and SHA-256, and gives that copy
+the same basename as its tarball. The original build XML remains available to
+the production upload step. Missing or ambiguous XML/archive pairs fail the job.
+
 Stock OpenCPN imports each complete Windows package in a disposable CI profile,
 checks every installed plugin/data byte, opens Options > Plugins to verify the
 displayed 2.0.1 version, then reinstalls/restarts and requires two normal exits
