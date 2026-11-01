@@ -1,0 +1,266 @@
+name: Plugin Manager packages
+on:
+  workflow_dispatch:
+    inputs:
+      groups:
+        description: 'all, selected platform groups, display, or validate retained packages'
+        default: all
+        type: string
+      linux_images:
+        description: JSON list of native Debian images to build
+        default: '["debian:bullseye", "debian:bookworm", "debian:trixie"]'
+        type: string
+      run_id:
+        description: Retained native-package build for display or validation checks
+        default: '39616246106'
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  linux:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'linux') }}
+    name: Linux ${{ matrix.image }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(inputs.linux_images) }}
+        arch: [x86_64, arm64, armhf]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+          - arch: armhf
+            runner: ubuntu-24.04-arm
+            platform: linux/arm/v7
+          - image: ubuntu:22.04
+            arch: x86_64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - image: ubuntu:24.04
+            arch: x86_64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.arch == 'armhf'
+        with:
+          platforms: arm
+      - name: Build, test and package
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          case "$IMAGE" in
+            *bullseye) version=11; target="debian-$ARCH" ;;
+            *bookworm) version=12; target="debian-$ARCH" ;;
+            *trixie) version=13; target="debian-$ARCH" ;;
+            *22.04) version=22.04; target=ubuntu-wx32-x86_64 ;;
+            *24.04) version=24.04; target=ubuntu-gtk3-x86_64 ;;
+          esac
+          docker run --rm --platform "$PLATFORM" -v "$PWD:/source" -v /etc/ssl/certs/ca-certificates.crt:/tmp/build-ca.crt:ro -w /source \
+            -e GITHUB_ACTIONS -e GITHUB_REPOSITORY -e GITHUB_REF_NAME -e VERSION_ID="$version" -e PACKAGE_TARGET="$target" -e PACKAGE_ARCH="$ARCH" \
+            "$IMAGE" bash ci/public-packages/linux.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-${{ strategy.job-index }}
+          path: public-packages/
+          if-no-files-found: warn
+  windows:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'windows') }}
+    name: Windows wx${{ matrix.wx }} x86
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        wx: ['31', '32']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Build native plugin
+        shell: cmd
+        env:
+          WX_VER: ${{ matrix.wx }}
+          MSVC_VERSION: '2022'
+          CONFIGURATION: Release
+          OCPN_TARGET: MSVC
+        run: ci\circleci-build-msvc.bat
+      - name: Test and create import package
+        shell: bash
+        env:
+          WX: ${{ matrix.wx }}
+        run: |
+          ctest --test-dir build -C Release --output-on-failure
+          target=msvc-wx32
+          if [ "$WX" = 31 ]; then target=msvc; fi
+          python ci/public-packages/package.py --binary build/Release/climatology_pi.dll --build-dir build --kind windows --target "$target" --target-version 10 --arch x86
+      - name: Verify version in the stock Windows Plugin Manager
+        if: matrix.wx == '32'
+        shell: bash
+        run: python ci/public-packages/windows-host.py public-packages/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-wx${{ matrix.wx }}-x86
+          path: |
+            public-packages/
+            build/*.log
+            artifacts/windows-version/
+  macos:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'macos') }}
+    name: macOS universal
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build universal library and package
+        run: bash ci/public-packages/macos.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-universal
+          path: |
+            public-packages/
+            build/*.log
+  android:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'android') }}
+    name: Android ${{ matrix.arch }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, armhf]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gettext libxml2-utils
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;26.1.10909125'
+      - name: Build import package
+        run: bash ci/public-packages/android.sh '${{ matrix.arch }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-${{ matrix.arch }}
+          path: |
+            public-packages/
+            build-android-*/dependencies.txt
+  flatpak:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'flatpak') }}
+    name: Flatpak ${{ matrix.sdk }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: ['22.08', '24.08', '25.08']
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build import package
+        run: bash ci/public-packages/flatpak.sh '${{ matrix.sdk }}' '${{ matrix.arch }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flatpak-${{ matrix.sdk }}-${{ matrix.arch }}
+          path: public-packages/
+
+  windows64:
+    if: ${{ inputs.groups == 'all' || contains(inputs.groups, 'windows64') }}
+    name: Windows x64 wx${{ matrix.wx }} stock host
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        wx: ['3.3.4', '3.2.9']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build against the pinned stock x64 host
+        shell: pwsh
+        env:
+          CLIMATOLOGY_WX_VERSION: ${{ matrix.wx }}
+        run: |
+          choco install poedit -y --no-progress
+          $env:PATH = "C:\Program Files\Poedit\GettextTools\bin;" + $env:PATH
+          python ci/public-packages/windows64.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-x64-wx${{ matrix.wx }}
+          path: |
+            public-packages/
+            compatibility/
+            artifacts/windows-x64*/
+            artifacts/windows-version/
+
+  version-display:
+    if: ${{ contains(inputs.groups, 'display') }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86
+            artifact: windows-wx32-x86
+          - arch: x64
+            artifact: windows-x64-wx3.3.4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          name: ${{ matrix.artifact }}
+          path: retained-package
+      - name: Import and inspect the actual Plugin Manager version
+        run: python ci/public-packages/check-windows-artifact.py '${{ matrix.arch }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-version-${{ matrix.arch }}
+          path: artifacts/windows-version/
+
+  validate:
+    if: ${{ always() && (inputs.groups == 'validate' || (inputs.groups == 'all' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled'))) }}
+    needs: [linux, windows, macos, android, flatpak, windows64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: retained-packages
+          pattern: '!windows-x64-wx3.2.9'
+          run-id: ${{ inputs.groups == 'validate' && inputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y libxml2-utils
+      - name: Scientific pipeline regression tests
+        run: |
+          python -m pip install './tools/climatology_pipeline[source,test]' requests scipy
+          PYTHONPATH=tools/climatology_pipeline python -m pytest tools/climatology_pipeline/tests -q
+      - name: Reject Windows ABI mismatches and validate every complete package
+        run: |
+          python -m unittest discover -s ci/public-packages/tests -v
+          python ci/public-packages/collect.py retained-packages --output validated-packages --expected 23
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-packages
+          path: validated-packages/

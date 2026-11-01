@@ -1,0 +1,10 @@
+OpenCPN Climatology data bundle
+
+This directory is self-contained for normal offline use.  A modern versioned
+bundle includes dataset-manifest.json (machine readable) and
+DATASET_PROVENANCE.md (human readable), which identify each source product,
+actual per-variable period, processing method, generator revision and output
+checksum.
+
+These are historical planning climatologies, not forecasts.  The coarse depth
+layer is contextual and must not be used for navigation.

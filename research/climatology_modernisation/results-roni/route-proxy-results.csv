@@ -1,0 +1,25 @@
+route,month,regime,sample_years,passage_hours,route_distance_nm,rationale,eta_difference_hours_vs_all,distance_difference_nm_vs_all
+Panama-Marquesas,4,all_years,76,908.6972209594724,4312.650910553192,eastern/central tropical Pacific; expected high ENSO sensitivity,0.0,0.0
+Panama-Marquesas,4,neutral,43,871.1545413052909,4315.256498925904,eastern/central tropical Pacific; expected high ENSO sensitivity,-37.542679654181484,2.605588372712191
+Panama-Marquesas,4,el_nino,17,927.8154315796977,4314.018997086992,eastern/central tropical Pacific; expected high ENSO sensitivity,19.11821062022534,1.368086533800124
+Panama-Marquesas,4,la_nina,16,864.4046579445945,4397.41198464149,eastern/central tropical Pacific; expected high ENSO sensitivity,-44.29256301487783,84.76107408829739
+California-Hawaii,7,all_years,76,274.96169578749766,2306.391747385213,subtropical northeast Pacific; potentially moderate sensitivity,0.0,0.0
+California-Hawaii,7,neutral,42,274.51445230325817,2288.4927058501617,subtropical northeast Pacific; potentially moderate sensitivity,-0.4472434842394932,-17.89904153505131
+California-Hawaii,7,el_nino,20,275.7258671602077,2306.391747385213,subtropical northeast Pacific; potentially moderate sensitivity,0.7641713727100523,0.0
+California-Hawaii,7,la_nina,14,274.2806691907784,2304.601843231708,subtropical northeast Pacific; potentially moderate sensitivity,-0.6810265967192777,-1.7899041535051765
+Brisbane-Fiji,11,all_years,76,568.5800794082515,3401.714417962531,southwest Pacific warm season; potentially high sensitivity,0.0,0.0
+Brisbane-Fiji,11,neutral,27,608.5368910921686,3403.453421189354,southwest Pacific warm season; potentially high sensitivity,39.95681168391707,1.7390032268226605
+Brisbane-Fiji,11,el_nino,25,548.6494002284411,3228.4189919346995,southwest Pacific warm season; potentially high sensitivity,-19.930679179810454,-173.29542602783158
+Brisbane-Fiji,11,la_nina,24,549.264409635619,3158.9492160030836,southwest Pacific warm season; potentially high sensitivity,-19.315669772632532,-242.7652019594475
+Cape-Verde-Barbados,1,all_years,76,253.40652768636232,2153.955485334079,Atlantic trade-wind control route,0.0,0.0
+Cape-Verde-Barbados,1,neutral,26,253.40652768636232,2153.955485334079,Atlantic trade-wind control route,0.0,0.0
+Cape-Verde-Barbados,1,el_nino,27,253.40652768636232,2153.955485334079,Atlantic trade-wind control route,0.0,0.0
+Cape-Verde-Barbados,1,la_nina,23,253.40652768636232,2153.955485334079,Atlantic trade-wind control route,0.0,0.0
+Bermuda-Azores,5,all_years,76,540.5455331625143,2056.220225340935,North Atlantic subtropical passage; expected weak ENSO signal,0.0,0.0
+Bermuda-Azores,5,neutral,43,490.41980741140253,2056.220225340935,North Atlantic subtropical passage; expected weak ENSO signal,-50.12572575111176,0.0
+Bermuda-Azores,5,el_nino,14,645.7218018144916,2151.067022378911,North Atlantic subtropical passage; expected weak ENSO signal,105.17626865197735,94.8467970379761
+Bermuda-Azores,5,la_nina,19,590.0829941613225,2153.376038516316,North Atlantic subtropical passage; expected weak ENSO signal,49.53746099880823,97.1558131753809
+Cape-Town-Fremantle,12,all_years,76,744.3157606859112,5354.906341518565,southern Indian Ocean passage; tests remote teleconnection,0.0,0.0
+Cape-Town-Fremantle,12,neutral,26,724.3993955055251,5340.783879679523,southern Indian Ocean passage; tests remote teleconnection,-19.916365180386038,-14.122461839041534
+Cape-Town-Fremantle,12,el_nino,26,732.8065661391945,5354.906341518565,southern Indian Ocean passage; tests remote teleconnection,-11.509194546716685,0.0
+Cape-Town-Fremantle,12,la_nina,24,746.6299202532957,5523.1593345521715,southern Indian Ocean passage; tests remote teleconnection,2.314159567384536,168.2529930336068

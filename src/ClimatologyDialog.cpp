@@ -38,6 +38,7 @@
 #include "climatology_pi.h"
 #include "ClimatologyDialog.h"
 #include "ClimatologyConfigDialog.h"
+#include "ClimatologyTouch.h"
 
 ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
 #ifndef __WXOSX__
@@ -49,6 +50,15 @@ ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
 {
 #ifdef __OCPN__ANDROID__
     GetHandle()->setStyleSheet( qtStyleSheet);
+    wxStaticText* drag_handle = new wxStaticText(this, wxID_ANY, _("Climatology"));
+    GetSizer()->Insert(0, drag_handle, 0, wxEXPAND | wxALL, 5);
+#endif
+#ifdef __OCPN__ANDROID__
+    ClimatologyTouchControls(this, ClimatologyTouchFont());
+    wxTextCtrl* readings[] = {m_tWind, m_tWindDir, m_tCurrent, m_tCurrentDir,
+        m_tPressure, m_tSeaTemperature, m_tAirTemperature, m_tCloudCover,
+        m_tPrecipitation, m_tRelativeHumidity, m_tLightning, m_tSeaDepth};
+    for (wxTextCtrl* reading : readings) reading->SetEditable(false);
 #endif
     m_cfgdlg = new ClimatologyConfigDialog(this);
 
@@ -67,10 +77,11 @@ ClimatologyDialog::ClimatologyDialog(wxWindow *parent, climatology_pi *ppi)
     m_fittimer.Connect(wxEVT_TIMER, wxTimerEventHandler
                        ( ClimatologyDialog::OnFitTimer ), NULL, this);
 #ifdef __OCPN__ANDROID__
-    GetHandle()->setAttribute(Qt::WA_AcceptTouchEvents);
-    GetHandle()->grabGesture(Qt::PanGesture);
-    GetHandle()->setStyleSheet( qtStyleSheet);
-    Connect( wxEVT_QT_PANGESTURE,
+    // Only the title handles panel movement. A dialog-wide pan recognizer
+    // steals the slider's native touch-drag events.
+    drag_handle->GetHandle()->setAttribute(Qt::WA_AcceptTouchEvents);
+    drag_handle->GetHandle()->grabGesture(Qt::PanGesture);
+    drag_handle->Connect( wxEVT_QT_PANGESTURE,
                        (wxObjectEventFunction) (wxEventFunction) &ClimatologyDialog::OnEvtPanGesture, NULL, this );
 #endif
 }
@@ -104,17 +115,33 @@ void ClimatologyDialog::OnEvtPanGesture( wxQT_PanGestureEvent &event)
     switch(event.GetState()){
         case GestureStarted:
             m_startPos = GetPosition();
-            m_startMouse = event.GetCursorPos(); //g_mouse_pos_screen;
+            m_startMouse = event.GetCursorPos();
+            m_draggingDialog = true;
+            {
+                wxWindow* controls[] = {m_sTimeline, m_cMonth, m_sDay, m_cbAll,
+                    m_bpNow, m_bConfig, m_cbWind, m_cbCurrent, m_cbCyclones,
+                    m_cbPressure, m_cbSeaTemperature, m_cbAirTemperature,
+                    m_cbCloudCover, m_cbPrecipitation, m_cbRelativeHumidity,
+                    m_cbLightning, m_cbSeaDepth};
+                for (wxWindow* control : controls) {
+                    if (control->IsShown() && control->GetScreenRect().Contains(m_startMouse)) {
+                        m_draggingDialog = false;
+                        event.Skip();
+                        return;
+                    }
+                }
+            }
             break;
         default:
         {
+            if (!m_draggingDialog) { event.Skip(); return; }
             wxPoint pos = event.GetCursorPos();
             int x = wxMax(0, pos.x + m_startPos.x - m_startMouse.x);
             int y = wxMax(0, pos.y + m_startPos.y - m_startMouse.y);
             int xmax = ::wxGetDisplaySize().x - GetSize().x;
-            x = wxMin(x, xmax);
+            x = wxMin(x, wxMax(0, xmax));
             int ymax = ::wxGetDisplaySize().y - GetSize().y;          // Some fluff at the bottom
-            y = wxMin(y, ymax);
+            y = wxMin(y, wxMax(0, ymax));
 
             Move(x, y);
         } break;
@@ -161,6 +188,7 @@ void ClimatologyDialog::PopulateTrackingControls()
     SetControlsVisible(ClimatologyOverlaySettings::SEADEPTH, m_cbSeaDepth, m_tSeaDepth);
 
     Refresh();
+    Layout();
     Fit();
 }
 
