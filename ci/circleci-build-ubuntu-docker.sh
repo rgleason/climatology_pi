@@ -20,10 +20,14 @@ echo "DOCKER_OPTS=\"-H tcp://127.0.0.1:2375 -H $DOCKER_SOCK -s devicemapper\"" |
 sudo service docker restart
 sleep 5;
 
-if [ "$BUILD_ENV" = "raspbian" ]; then
-    docker run --rm --privileged multiarch/qemu-user-static:register --reset
-else
-    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+# This registration image contains an x86 executable. Native ARM workers
+# already run our arm64/armhf containers and cannot execute this image.
+if [[ "$(uname -m)" == x86_64 ]]; then
+    if [ "$BUILD_ENV" = "raspbian" ]; then
+        docker run --rm --privileged multiarch/qemu-user-static:register --reset
+    else
+        docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    fi
 fi
 
 docker run --privileged -d -ti -e "container=docker"  \

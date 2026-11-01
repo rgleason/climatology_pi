@@ -13,4 +13,11 @@ metadata=(build/*.xml)
 if (( ${#metadata[@]} )); then
     cp "${metadata[@]}" ci-artifacts/
 fi
-(cd ci-artifacts && sha256sum *.tar.gz > SHA256SUMS)
+(
+    cd ci-artifacts
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum *.tar.gz > SHA256SUMS
+    else
+        shasum -a 256 *.tar.gz > SHA256SUMS
+    fi
+)
