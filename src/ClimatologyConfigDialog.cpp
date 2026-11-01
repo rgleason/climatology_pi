@@ -38,6 +38,7 @@
 
 #include "climatology_pi.h"
 #include "ClimatologyConfigDialog.h"
+#include "ClimatologyTouch.h"
 
 static const wxString units0_names[] = {"Knots", "M/S", "MPH", "KPH", wxEmptyString};
 static const wxString units1_names[] = {"MilliBars", "mmHG", wxEmptyString};
@@ -62,7 +63,7 @@ static const int unittype[ClimatologyOverlaySettings::SETTINGS_COUNT] = {0, 0, 1
 
 wxString ClimatologyConfigDialog::SettingName(int setting)
 {
-    return _(name_from_index[setting]);
+    return wxGetTranslation(name_from_index[setting]);
 }
 
 double ClimatologyOverlaySettings::CalibrationOffset(int setting)
@@ -243,22 +244,36 @@ ClimatologyConfigDialog::ClimatologyConfigDialog(ClimatologyDialog *parent)
 
     m_cDataType->Clear();
     for(int i=0; i<ClimatologyOverlaySettings::SETTINGS_COUNT; i++)
-        m_cDataType->Append(_(name_from_index[i]));
+        m_cDataType->Append(wxGetTranslation(name_from_index[i]));
 
     m_cDataType->SetSelection(m_lastdatatype);
     PopulateUnits(m_lastdatatype);
     ReadDataTypeSettings(m_lastdatatype);
 
-    m_stVersion->SetLabel(wxString::Format("%d.%d.%d.%d",
+#ifdef __OCPN__ANDROID__
+    const char* version_format = "%d.%d.%d.%d\n%s";
+#else
+    const char* version_format = "%d.%d.%d.%d - dataset %s";
+#endif
+    m_stVersion->SetLabel(wxString::Format(version_format,
                                            PLUGIN_VERSION_MAJOR,
                                            PLUGIN_VERSION_MINOR,
                                            PLUGIN_VERSION_PATCH,
-                                           PLUGIN_VERSION_TWEAK));
+                                           PLUGIN_VERSION_TWEAK,
+                                           ClimatologyDatasetVersion().c_str()));
     m_tDataDirectory->SetValue(ClimatologyDataDirectory());
 
     m_refreshTimer.Connect(wxEVT_TIMER, wxTimerEventHandler(ClimatologyConfigDialog::OnRefreshTimer) , NULL, this);
 
     DimeWindow( this );
+#ifdef __OCPN__ANDROID__
+    ClimatologyTouchControls(this, ClimatologyTouchFont());
+    SetMinSize(wxSize(240, 240));
+    const wxSize screen = wxGetDisplaySize();
+    SetSize(wxSize(wxMin(880, screen.x - 40), wxMin(900, screen.y - 120)));
+    Centre();
+    Layout();
+#endif
 }
 
 
@@ -424,7 +439,7 @@ void ClimatologyConfigDialog::PopulateUnits(int settings)
 {
     m_cDataUnits->Clear();
     for(int i=0; !unit_names[unittype[settings]][i].empty(); i++)
-        m_cDataUnits->Append(_(unit_names[unittype[settings]][i]));
+        m_cDataUnits->Append(wxGetTranslation(unit_names[unittype[settings]][i]));
 }
 
 void ClimatologyConfigDialog::OnPageChanged( wxNotebookEvent& event )

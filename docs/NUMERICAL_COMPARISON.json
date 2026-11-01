@@ -1,0 +1,1365 @@
+{
+  "wind": [
+    {
+      "region": "North Atlantic westerlies",
+      "month": 1,
+      "latitude": 50.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 26.0,
+        "prevailing_mean_speed_kn": 29.0,
+        "calm_percent": 0.0,
+        "gale_percent": 18.0,
+        "frequency_sum_percent": 96.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 26.0,
+        "prevailing_mean_speed_kn": 24.0,
+        "calm_percent": 1.0,
+        "gale_percent": 10.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "NW",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "NE trade-wind Atlantic",
+      "month": 1,
+      "latitude": 20.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 50.0,
+        "prevailing_mean_speed_kn": 17.0,
+        "calm_percent": 1.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 98.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 44.0,
+        "prevailing_mean_speed_kn": 16.0,
+        "calm_percent": 1.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "N",
+          "NE"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "tropical convergence region",
+      "month": 1,
+      "latitude": 5.0,
+      "longitude": -25.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 68.0,
+        "prevailing_mean_speed_kn": 13.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 98.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 66.0,
+        "prevailing_mean_speed_kn": 10.0,
+        "calm_percent": 2.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "NE",
+          "S",
+          "SE",
+          "SW"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Southern Ocean",
+      "month": 1,
+      "latitude": -50.0,
+      "longitude": 0.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 42.0,
+        "prevailing_mean_speed_kn": 21.0,
+        "calm_percent": 0.0,
+        "gale_percent": 2.0,
+        "frequency_sum_percent": 102.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 40.0,
+        "prevailing_mean_speed_kn": 22.0,
+        "calm_percent": 1.0,
+        "gale_percent": 3.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "NW",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Mediterranean",
+      "month": 1,
+      "latitude": 35.0,
+      "longitude": 18.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "NW",
+        "prevailing_frequency_percent": 20.0,
+        "prevailing_mean_speed_kn": 14.0,
+        "calm_percent": 0.0,
+        "gale_percent": 2.0,
+        "frequency_sum_percent": 98.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 24.0,
+        "prevailing_mean_speed_kn": 16.0,
+        "calm_percent": 2.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "N",
+          "NE",
+          "NW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Indian Ocean monsoon",
+      "month": 1,
+      "latitude": 15.0,
+      "longitude": 70.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "N",
+        "prevailing_frequency_percent": 62.0,
+        "prevailing_mean_speed_kn": 11.0,
+        "calm_percent": 1.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "N",
+        "prevailing_frequency_percent": 66.0,
+        "prevailing_mean_speed_kn": 11.0,
+        "calm_percent": 1.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "N",
+          "NE",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "North Atlantic westerlies",
+      "month": 7,
+      "latitude": 50.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 28.0,
+        "prevailing_mean_speed_kn": 16.0,
+        "calm_percent": 1.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 26.0,
+        "prevailing_mean_speed_kn": 15.0,
+        "calm_percent": 2.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "NW",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "NE trade-wind Atlantic",
+      "month": 7,
+      "latitude": 20.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 94.0,
+        "prevailing_mean_speed_kn": 15.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "NE",
+        "prevailing_frequency_percent": 90.0,
+        "prevailing_mean_speed_kn": 16.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "N",
+          "NE"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "tropical convergence region",
+      "month": 7,
+      "latitude": 5.0,
+      "longitude": -25.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "S",
+        "prevailing_frequency_percent": 48.0,
+        "prevailing_mean_speed_kn": 15.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 102.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "S",
+        "prevailing_frequency_percent": 58.0,
+        "prevailing_mean_speed_kn": 12.0,
+        "calm_percent": 2.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "NE",
+          "S",
+          "SE",
+          "SW"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Southern Ocean",
+      "month": 7,
+      "latitude": -50.0,
+      "longitude": 0.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 36.0,
+        "prevailing_mean_speed_kn": 24.0,
+        "calm_percent": 0.0,
+        "gale_percent": 6.0,
+        "frequency_sum_percent": 102.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 34.0,
+        "prevailing_mean_speed_kn": 24.0,
+        "calm_percent": 0.0,
+        "gale_percent": 6.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "NW",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Mediterranean",
+      "month": 7,
+      "latitude": 35.0,
+      "longitude": 18.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "NW",
+        "prevailing_frequency_percent": 60.0,
+        "prevailing_mean_speed_kn": 9.0,
+        "calm_percent": 6.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "N",
+        "prevailing_frequency_percent": 36.0,
+        "prevailing_mean_speed_kn": 10.0,
+        "calm_percent": 4.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "N",
+          "NE",
+          "NW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    },
+    {
+      "region": "Indian Ocean monsoon",
+      "month": 7,
+      "latitude": 15.0,
+      "longitude": 70.0,
+      "old": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 82.0,
+        "prevailing_mean_speed_kn": 21.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 102.0
+      },
+      "new": {
+        "valid": true,
+        "prevailing_from": "W",
+        "prevailing_frequency_percent": 86.0,
+        "prevailing_mean_speed_kn": 20.0,
+        "calm_percent": 0.0,
+        "gale_percent": 0.0,
+        "frequency_sum_percent": 100.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_prevailing_from": [
+          "E",
+          "N",
+          "NE",
+          "SW",
+          "W"
+        ],
+        "note": "Broad physical sanity range; a failure must be investigated, not hidden"
+      }
+    }
+  ],
+  "wind_global": [
+    {
+      "month": 1,
+      "old_valid_cells": 139364,
+      "new_valid_cells": 174199,
+      "paired_valid_cells": 139231,
+      "new_cells_with_nonunit_frequency_sum": 0,
+      "old_mean_calm_percent": 1.158182887976809,
+      "new_mean_calm_percent": 2.408021860056602,
+      "old_mean_gale_percent": 1.5972489308573232,
+      "new_mean_gale_percent": 0.7371569297183107,
+      "paired_prevailing_sector_changed_fraction": 0.1933621104495407,
+      "paired_mean_absolute_sector_probability_difference": 0.021636848115721353,
+      "old_calm_gale_note": "The historical marker retains calm or gale, not both; its missing counterpart decodes as zero"
+    },
+    {
+      "month": 7,
+      "old_valid_cells": 134304,
+      "new_valid_cells": 174199,
+      "paired_valid_cells": 134116,
+      "new_cells_with_nonunit_frequency_sum": 0,
+      "old_mean_calm_percent": 1.5970187038360735,
+      "new_mean_calm_percent": 2.5989184782920685,
+      "old_mean_gale_percent": 1.5919927924708124,
+      "new_mean_gale_percent": 0.9286333446231034,
+      "paired_prevailing_sector_changed_fraction": 0.19650153598377523,
+      "paired_mean_absolute_sector_probability_difference": 0.021824148498314894,
+      "old_calm_gale_note": "The historical marker retains calm or gale, not both; its missing counterpart decodes as zero"
+    }
+  ],
+  "current": [
+    {
+      "system": "Gulf Stream",
+      "month": 1,
+      "latitude": 38.0,
+      "longitude": -68.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 1.6,
+        "v_north_kn": 0.0,
+        "speed_kn": 1.6,
+        "bearing_to_deg_true": 90.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 1.75,
+        "v_north_kn": 0.2,
+        "speed_kn": 1.7613914953808538,
+        "bearing_to_deg_true": 83.48019824834302
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          0.0,
+          100.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "North Atlantic Drift",
+      "month": 1,
+      "latitude": 50.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.15,
+        "v_north_kn": 0.05,
+        "speed_kn": 0.15811388300841897,
+        "bearing_to_deg_true": 71.56505117707799
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          20.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Canary Current",
+      "month": 1,
+      "latitude": 27.0,
+      "longitude": -17.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -0.05,
+        "v_north_kn": -0.05,
+        "speed_kn": 0.07071067811865475,
+        "bearing_to_deg_true": 225.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          120.0,
+          240.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "North Equatorial Current",
+      "month": 1,
+      "latitude": 10.0,
+      "longitude": -40.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -0.3,
+        "v_north_kn": 0.15,
+        "speed_kn": 0.33541019662496846,
+        "bearing_to_deg_true": 296.565051177078
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          220.0,
+          320.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Equatorial Countercurrent",
+      "month": 1,
+      "latitude": 5.0,
+      "longitude": -25.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.4,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.4,
+        "bearing_to_deg_true": 90.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          40.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Kuroshio",
+      "month": 1,
+      "latitude": 34.0,
+      "longitude": 140.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 1.15,
+        "v_north_kn": 0.0,
+        "speed_kn": 1.15,
+        "bearing_to_deg_true": 90.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.7,
+        "v_north_kn": 0.35,
+        "speed_kn": 0.7826237921249264,
+        "bearing_to_deg_true": 63.43494882292201
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          0.0,
+          110.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Agulhas",
+      "month": 1,
+      "latitude": -34.0,
+      "longitude": 28.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": -1.0,
+        "v_north_kn": -0.6,
+        "speed_kn": 1.16619037896906,
+        "bearing_to_deg_true": 239.03624346792648
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -1.1,
+        "v_north_kn": -0.9,
+        "speed_kn": 1.4212670403551897,
+        "bearing_to_deg_true": 230.71059313749964
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          120.0,
+          240.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Antarctic Circumpolar Current",
+      "month": 1,
+      "latitude": -50.0,
+      "longitude": 0.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.45,
+        "v_north_kn": -0.2,
+        "speed_kn": 0.49244289008980524,
+        "bearing_to_deg_true": 113.96248897457819
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          40.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Gulf Stream",
+      "month": 7,
+      "latitude": 38.0,
+      "longitude": -68.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 1.4,
+        "v_north_kn": 0.0,
+        "speed_kn": 1.4,
+        "bearing_to_deg_true": 90.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 1.35,
+        "v_north_kn": 0.0,
+        "speed_kn": 1.35,
+        "bearing_to_deg_true": 90.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          0.0,
+          100.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "North Atlantic Drift",
+      "month": 7,
+      "latitude": 50.0,
+      "longitude": -30.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.05,
+        "v_north_kn": 0.05,
+        "speed_kn": 0.07071067811865475,
+        "bearing_to_deg_true": 45.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          20.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Canary Current",
+      "month": 7,
+      "latitude": 27.0,
+      "longitude": -17.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -0.1,
+        "v_north_kn": -0.1,
+        "speed_kn": 0.1414213562373095,
+        "bearing_to_deg_true": 225.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          120.0,
+          240.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "North Equatorial Current",
+      "month": 7,
+      "latitude": 10.0,
+      "longitude": -40.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -0.1,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.1,
+        "bearing_to_deg_true": 270.0
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          220.0,
+          320.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Equatorial Countercurrent",
+      "month": 7,
+      "latitude": 5.0,
+      "longitude": -25.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.5,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.5,
+        "bearing_to_deg_true": 90.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.6,
+        "v_north_kn": 0.1,
+        "speed_kn": 0.6082762530298219,
+        "bearing_to_deg_true": 80.53767779197439
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          40.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Kuroshio",
+      "month": 7,
+      "latitude": 34.0,
+      "longitude": 140.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 1.15,
+        "v_north_kn": 0.0,
+        "speed_kn": 1.15,
+        "bearing_to_deg_true": 90.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.7,
+        "v_north_kn": 0.5,
+        "speed_kn": 0.8602325267042626,
+        "bearing_to_deg_true": 54.46232220802562
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          0.0,
+          110.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Agulhas",
+      "month": 7,
+      "latitude": -34.0,
+      "longitude": 28.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": -1.15,
+        "v_north_kn": -0.7,
+        "speed_kn": 1.346291201783626,
+        "bearing_to_deg_true": 238.67130713219584
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": -0.9,
+        "v_north_kn": -0.7,
+        "speed_kn": 1.140175425099138,
+        "bearing_to_deg_true": 232.1250163489018
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          120.0,
+          240.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    },
+    {
+      "system": "Antarctic Circumpolar Current",
+      "month": 7,
+      "latitude": -50.0,
+      "longitude": 0.0,
+      "old": {
+        "valid": true,
+        "u_east_kn": 0.0,
+        "v_north_kn": 0.0,
+        "speed_kn": 0.0,
+        "bearing_to_deg_true": 0.0
+      },
+      "new": {
+        "valid": true,
+        "u_east_kn": 0.45,
+        "v_north_kn": -0.2,
+        "speed_kn": 0.49244289008980524,
+        "bearing_to_deg_true": 113.96248897457819
+      },
+      "new_sanity": {
+        "passed": true,
+        "severity": "advisory",
+        "expected_bearing_to_deg_true": [
+          40.0,
+          140.0
+        ],
+        "note": "Broad current-system check; coastal position and season can legitimately matter"
+      }
+    }
+  ],
+  "current_global": [
+    {
+      "month": 1,
+      "old_valid_cells": 325609,
+      "new_valid_cells": 334294,
+      "paired_valid_cells": 321807,
+      "old_mean_speed_kn": 0.05344633142874102,
+      "new_mean_speed_kn": 0.17749322868000544,
+      "paired_vector_root_mean_square_difference_kn": 0.21616547038934028
+    },
+    {
+      "month": 7,
+      "old_valid_cells": 319650,
+      "new_valid_cells": 333077,
+      "paired_valid_cells": 316392,
+      "old_mean_speed_kn": 0.06401036668754674,
+      "new_mean_speed_kn": 0.1819324527495065,
+      "paired_vector_root_mean_square_difference_kn": 0.22070983421362833
+    }
+  ],
+  "scalar": [
+    {
+      "field": "sealevelpressure",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 1005.97,
+      "new": 1007.74,
+      "units": "hPa"
+    },
+    {
+      "field": "sealevelpressure",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 1018.52,
+      "new": 1016.18,
+      "units": "hPa"
+    },
+    {
+      "field": "sealevelpressure",
+      "region": "tropics",
+      "month": 1,
+      "old": 1011.72,
+      "new": 1011.72,
+      "units": "hPa"
+    },
+    {
+      "field": "sealevelpressure",
+      "region": "tropics",
+      "month": 7,
+      "old": 1014.16,
+      "new": 1013.98,
+      "units": "hPa"
+    },
+    {
+      "field": "sealevelpressure",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 1016.04,
+      "new": 1018.32,
+      "units": "hPa"
+    },
+    {
+      "field": "sealevelpressure",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 1014.6,
+      "new": 1013.53,
+      "units": "hPa"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 10.8,
+      "new": 10.399999999999999,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 14.2,
+      "new": 14.4,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "tropics",
+      "month": 1,
+      "old": 26.8,
+      "new": 27.200000000000003,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "tropics",
+      "month": 7,
+      "old": 27.4,
+      "new": 28.200000000000003,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 16.0,
+      "new": 16.4,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "seasurfacetemperature",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 25.200000000000003,
+      "new": 26.200000000000003,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 8.333333333333332,
+      "new": 8.333333333333332,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 14.333333333333332,
+      "new": 13.666666666666666,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "tropics",
+      "month": 1,
+      "old": 26.333333333333332,
+      "new": 26.0,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "tropics",
+      "month": 7,
+      "old": 26.0,
+      "new": 26.333333333333332,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 14.666666666666666,
+      "new": 14.666666666666666,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "airtemperature",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 26.0,
+      "new": 26.0,
+      "units": "degree_Celsius"
+    },
+    {
+      "field": "cloud",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 79.0,
+      "new": 79.0,
+      "units": "percent"
+    },
+    {
+      "field": "cloud",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 86.0,
+      "new": 83.5,
+      "units": "percent"
+    },
+    {
+      "field": "cloud",
+      "region": "tropics",
+      "month": 1,
+      "old": 67.0,
+      "new": 74.0,
+      "units": "percent"
+    },
+    {
+      "field": "cloud",
+      "region": "tropics",
+      "month": 7,
+      "old": 64.0,
+      "new": 74.0,
+      "units": "percent"
+    },
+    {
+      "field": "cloud",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 60.0,
+      "new": 53.0,
+      "units": "percent"
+    },
+    {
+      "field": "cloud",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 10.5,
+      "new": 11.5,
+      "units": "percent"
+    },
+    {
+      "field": "precipitation",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 5.6000000000000005,
+      "new": 5.6000000000000005,
+      "units": "mm day-1"
+    },
+    {
+      "field": "precipitation",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 2.4000000000000004,
+      "new": 3.0,
+      "units": "mm day-1"
+    },
+    {
+      "field": "precipitation",
+      "region": "tropics",
+      "month": 1,
+      "old": 7.2,
+      "new": 5.800000000000001,
+      "units": "mm day-1"
+    },
+    {
+      "field": "precipitation",
+      "region": "tropics",
+      "month": 7,
+      "old": 3.2,
+      "new": 5.4,
+      "units": "mm day-1"
+    },
+    {
+      "field": "precipitation",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 1.2000000000000002,
+      "new": 2.2,
+      "units": "mm day-1"
+    },
+    {
+      "field": "precipitation",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 0.2,
+      "new": 0.0,
+      "units": "mm day-1"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "North Atlantic",
+      "month": 1,
+      "old": 82.5,
+      "new": 75.0,
+      "units": "percent"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "North Atlantic",
+      "month": 7,
+      "old": 86.0,
+      "new": 86.0,
+      "units": "percent"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "tropics",
+      "month": 1,
+      "old": 81.5,
+      "new": 80.5,
+      "units": "percent"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "tropics",
+      "month": 7,
+      "old": 79.0,
+      "new": 77.0,
+      "units": "percent"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "Mediterranean",
+      "month": 1,
+      "old": 71.0,
+      "new": 69.5,
+      "units": "percent"
+    },
+    {
+      "field": "relativehumidity",
+      "region": "Mediterranean",
+      "month": 7,
+      "old": 76.5,
+      "new": 77.0,
+      "units": "percent"
+    }
+  ],
+  "scalar_global": [
+    {
+      "field": "sealevelpressure",
+      "units": "hPa",
+      "cells": 194400,
+      "old_valid": 108365,
+      "new_valid": 194400,
+      "paired_valid": 108365,
+      "old_mean": 1011.633418631477,
+      "new_mean": 1009.5773813271605,
+      "paired_mean_difference_new_minus_old": 0.08830775619434325,
+      "paired_mean_absolute_difference": 1.8629213306879524,
+      "paired_root_mean_square_difference": 3.6553194472103843
+    },
+    {
+      "field": "seasurfacetemperature",
+      "units": "degree_Celsius",
+      "cells": 777600,
+      "old_valid": 378027,
+      "new_valid": 527664,
+      "paired_valid": 367099,
+      "old_mean": 18.815535927327943,
+      "new_mean": 13.703174368537555,
+      "paired_mean_difference_new_minus_old": 0.31429614354710855,
+      "paired_mean_absolute_difference": 0.599966221645932,
+      "paired_root_mean_square_difference": 0.8696542681829054
+    },
+    {
+      "field": "airtemperature",
+      "units": "degree_Celsius",
+      "cells": 194400,
+      "old_valid": 99344,
+      "new_valid": 187350,
+      "paired_valid": 99344,
+      "old_mean": 18.284935845815212,
+      "new_mean": 7.756315274441775,
+      "paired_mean_difference_new_minus_old": -0.6276373006925431,
+      "paired_mean_absolute_difference": 0.8859182906533526,
+      "paired_root_mean_square_difference": 1.8248993399564528
+    },
+    {
+      "field": "cloud",
+      "units": "percent",
+      "cells": 194400,
+      "old_valid": 117664,
+      "new_valid": 194400,
+      "paired_valid": 117664,
+      "old_mean": 65.3077109396247,
+      "new_mean": 67.35577160493827,
+      "paired_mean_difference_new_minus_old": 2.14955296437313,
+      "paired_mean_absolute_difference": 9.81464169159641,
+      "paired_root_mean_square_difference": 15.419385774929385
+    },
+    {
+      "field": "precipitation",
+      "units": "mm day-1",
+      "cells": 124416,
+      "old_valid": 124416,
+      "new_valid": 124416,
+      "paired_valid": 124416,
+      "old_mean": 2.1265721450617283,
+      "new_mean": 2.4257298096707816,
+      "paired_mean_difference_new_minus_old": 0.2991576646090535,
+      "paired_mean_absolute_difference": 0.6158950617283951,
+      "paired_root_mean_square_difference": 1.1539451920142654
+    },
+    {
+      "field": "relativehumidity",
+      "units": "percent",
+      "cells": 777600,
+      "old_valid": 384103,
+      "new_valid": 777600,
+      "paired_valid": 384103,
+      "old_mean": 80.00354722561396,
+      "new_mean": 73.51330182613168,
+      "paired_mean_difference_new_minus_old": -2.097909935616228,
+      "paired_mean_absolute_difference": 3.5919961572807293,
+      "paired_root_mean_square_difference": 5.578580999500011
+    }
+  ],
+  "summary": {
+    "advisory_checks": 28,
+    "advisory_checks_passed": 28,
+    "all_advisory_checks_passed": true,
+    "note": "Broad physical sanity checks supplement source/grid validation; they are not statistical confidence intervals"
+  },
+  "source_binding": {
+    "wind": [
+      {
+        "month": 1,
+        "passed": true,
+        "valid_mask_exact": true,
+        "maximum_frequency_byte_error": 0,
+        "maximum_speed_byte_error": 0,
+        "maximum_calm_percentage_point_error": 0,
+        "maximum_gale_percentage_point_error": 0,
+        "note": "Exact byte equality is required after source-statistic quantisation"
+      },
+      {
+        "month": 7,
+        "passed": true,
+        "valid_mask_exact": true,
+        "maximum_frequency_byte_error": 0,
+        "maximum_speed_byte_error": 0,
+        "maximum_calm_percentage_point_error": 0,
+        "maximum_gale_percentage_point_error": 0,
+        "note": "Exact byte equality is required after source-statistic quantisation"
+      }
+    ],
+    "current": [
+      {
+        "month": 1,
+        "passed": true,
+        "valid_mask_exact": true,
+        "maximum_u_quantisation_error_kn": 0.024999847794329746,
+        "maximum_v_quantisation_error_kn": 0.024999994403849212,
+        "allowed_half_step_error_kn": 0.025,
+        "note": "Expected U/V is independently decoded after source-grid averaging and resampling"
+      },
+      {
+        "month": 7,
+        "passed": true,
+        "valid_mask_exact": true,
+        "maximum_u_quantisation_error_kn": 0.02499995454399989,
+        "maximum_v_quantisation_error_kn": 0.0249999730684011,
+        "allowed_half_step_error_kn": 0.025,
+        "note": "Expected U/V is independently decoded after source-grid averaging and resampling"
+      }
+    ],
+    "summary": {
+      "checks": 4,
+      "checks_passed": 4,
+      "all_checks_passed": true,
+      "wind_checkpoint": "wind-1995-2024.npz",
+      "current_checkpoint": "oscar-1995-2022.npz"
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "analysis_period": [
+    "1950-01",
+    "2025-12"
+  ],
+  "enso": "CPC ERSSTv6 relative ONI (RONI), |0.5 C|, at least five consecutive overlapping seasons",
+  "generated_utc": "2026-08-24T23:20:55.708733+00:00",
+  "multiple_testing": "component-wise Welch tests; within-cell Bonferroni then global Benjamini-Hochberg FDR 0.05",
+  "out_of_sample_unit": "complete qualified ENSO event",
+  "route_model": "coarse-grid documented generic 35-foot-cruiser screening proxy; not production Weather Routing",
+  "routes": [
+    {
+      "end_lat": -9.8,
+      "end_lon": -139.0,
+      "month": 4,
+      "name": "Panama-Marquesas",
+      "rationale": "eastern/central tropical Pacific; expected high ENSO sensitivity",
+      "start_lat": 8.9,
+      "start_lon": -79.6
+    },
+    {
+      "end_lat": 21.3,
+      "end_lon": -157.8,
+      "month": 7,
+      "name": "California-Hawaii",
+      "rationale": "subtropical northeast Pacific; potentially moderate sensitivity",
+      "start_lat": 34.0,
+      "start_lon": -120.5
+    },
+    {
+      "end_lat": -17.8,
+      "end_lon": 177.4,
+      "month": 11,
+      "name": "Brisbane-Fiji",
+      "rationale": "southwest Pacific warm season; potentially high sensitivity",
+      "start_lat": -27.4,
+      "start_lon": 153.2
+    },
+    {
+      "end_lat": 13.1,
+      "end_lon": -59.6,
+      "month": 1,
+      "name": "Cape-Verde-Barbados",
+      "rationale": "Atlantic trade-wind control route",
+      "start_lat": 16.9,
+      "start_lon": -25.0
+    },
+    {
+      "end_lat": 38.5,
+      "end_lon": -28.6,
+      "month": 5,
+      "name": "Bermuda-Azores",
+      "rationale": "North Atlantic subtropical passage; expected weak ENSO signal",
+      "start_lat": 32.3,
+      "start_lon": -64.8
+    },
+    {
+      "end_lat": -32.1,
+      "end_lon": 115.7,
+      "month": 12,
+      "name": "Cape-Town-Fremantle",
+      "rationale": "southern Indian Ocean passage; tests remote teleconnection",
+      "start_lat": -33.9,
+      "start_lon": 18.4
+    }
+  ],
+  "schema": 1,
+  "screening_dataset": "NCEP/NCAR Reanalysis 1 monthly means"
+}

@@ -132,7 +132,8 @@ int  zu_read(ZUFILE *f, void *buf, long len)
             break;
 #endif
     }
-    f->pos += nb;
+    if (nb > 0)
+        f->pos += nb;
     return nb;
 }
 
@@ -272,5 +273,4 @@ void   zu_rewind(ZUFILE *f)
 {
     zu_seek(f, 0, SEEK_SET);
 }
-
 

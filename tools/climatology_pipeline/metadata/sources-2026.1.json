@@ -1,0 +1,73 @@
+[
+  {
+    "name": "ECMWF ERA5 hourly data on single levels",
+    "product_id": "reanalysis-era5-single-levels",
+    "doi": "10.24381/cds.adbb2d47",
+    "accessed": "2026-08-17",
+    "url": "https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels",
+    "transport": "WeatherBench2 ERA5 0.25 degree Zarr through 2022 and ECMWF public ARCO Zarr for 2023-2024"
+  },
+  {
+    "name": "Planette ERA5 monthly archive",
+    "product_id": "planette-era5/month/0p25latx0p25lon",
+    "accessed": "2026-08-17",
+    "url": "https://registry.opendata.aws/planette-era5/",
+    "role": "public cloud transport for ERA5 monthly MSLP, T2m, Td2m and precipitation rate"
+  },
+  {
+    "name": "NSF NCAR GDEX ERA5 monthly single levels",
+    "product_id": "ds633.0/d633001/2/TP",
+    "accessed": "2026-08-17",
+    "url": "https://tds.gdex.ucar.edu/thredds/catalog/catalog_d633001.html",
+    "role": "public transport for ERA5 monthly total cloud cover"
+  },
+  {
+    "name": "OSCAR Surface Currents Final 0.25 Degree Version 2.0",
+    "product_id": "OSCAR_L4_OC_FINAL_V2.0",
+    "doi": "10.5067/OSCAR-25F20",
+    "accessed": "2026-08-17",
+    "url": "https://podaac.jpl.nasa.gov/dataset/OSCAR_L4_OC_FINAL_V2.0"
+  },
+  {
+    "name": "NOAA Optimum Interpolation SST Version 2.1",
+    "product_id": "gov.noaa.ncdc:C01606",
+    "doi": "10.25921/RE9P-PT57",
+    "accessed": "2026-08-17",
+    "url": "https://www.ncei.noaa.gov/products/optimum-interpolation-sst",
+    "acquired_object": "sst.mon.mean.nc",
+    "acquired_sha256": "b2d6d70f040118f2271470e55128dddd67d3e1fca92b5455f5201926944ab243"
+  },
+  {
+    "name": "International Best Track Archive for Climate Stewardship Version 4r01",
+    "product_id": "IBTrACS.ALL.v04r01",
+    "doi": "10.25921/82ty-9e16",
+    "accessed": "2026-08-17",
+    "url": "https://www.ncei.noaa.gov/products/international-best-track-archive",
+    "acquired_object": "ibtracs.ALL.list.v04r01.csv",
+    "acquired_sha256": "7047a3f831fc2511484d5c7c4dca07ce114e1a9951ddd6e6f685a7f54faf3e2b"
+  },
+  {
+    "name": "GEBCO_2026 Grid",
+    "product_id": "GEBCO_2026",
+    "doi": "10.5285/4f68d5c7-45eb-f999-e063-7086abc036fa",
+    "accessed": "2026-08-17",
+    "url": "https://www.gebco.net/data-products-gridded-bathymetry-data/gebco2026-grid",
+    "acquired_object": "GEBCO_2026.zip",
+    "acquired_sha256": "b8e3a2c7708f7bccb2ab1e506f477743a4aa88a705f71a7b6585ec3d35ae6994",
+    "retention": "raw ZIP and 7 GB NetCDF removed after validated streaming resample"
+  },
+  {
+    "name": "NASA LIS/OTD High Resolution Monthly Climatology v2.3.2013",
+    "product_id": "LISOTD_HRMC_V2.3.2013",
+    "accessed": "historical upstream build; exact date unavailable",
+    "url": "https://ghrc.nsstc.nasa.gov/pub/lis/climatology/LIS-OTD/HRMC/",
+    "provenance_limit": "the historical repository names but does not retain the source HDF or its checksum"
+  },
+  {
+    "name": "NOAA CPC Oceanic Nino Index based on ERSSTv6",
+    "product_id": "CPC-ONI-v6",
+    "accessed": "2026-08-17",
+    "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/oni/v6/",
+    "generated_output_sha256": "dcf4a0b26a4b281708d71430d76764df3f25e6cdeb76908d27a9d3e1afbac603"
+  }
+]

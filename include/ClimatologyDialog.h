@@ -102,6 +102,7 @@ private:
     
     wxWindow *pParent;
 
+    bool m_draggingDialog = false;
     wxPoint m_startPos, m_startMouse;
     double m_cursorlat, m_cursorlon;
 

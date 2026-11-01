@@ -66,14 +66,14 @@ set(COMMON_NAME "Climatology")    # Search "getcommonname"in climatology_pi.
 set(TITLE_NAME "climatology")
 set(PACKAGE_CONTACT "Sean D'Epagnier")
 set(PACKAGE "climatology")
-set(SHORT_DESCRIPTION "Climatology PlugIn: 32 years of monthly NOAA Data")
-set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historic weather data. Supported Climatology types include: - Average wind directions and speed- Percentage of gale and calm conditions - Sea Surface Currents - Average swell and sea state (not yet implemented) - Precipitation, Humidity, Cloud Cover, and Lightning Strikes - Monthly average Sea Level pressure and Sea Temperature, Air Temperature - Tropical Cyclone tracks")
+set(SHORT_DESCRIPTION "Climatology PlugIn: global monthly climate and cyclone data")
+set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historical weather and ocean data. Supported types include average wind direction and speed, gale and calm probabilities, sea-surface currents, precipitation, humidity, cloud cover, lightning strikes, sea-level pressure, sea and air temperature, and tropical-cyclone tracks. Versioned datasets report their exact source products and climatological periods.")
 
-set(VERSION_MAJOR "1")
-set(VERSION_MINOR "6")
-set(VERSION_PATCH "37")
+set(VERSION_MAJOR "2")
+set(VERSION_MINOR "0")
+set(VERSION_PATCH "1")
 set(VERSION_TWEAK "0")
-set(VERSION_DATE  "05/10/2026")#DD/MM/YYYY format
+set(VERSION_DATE  "30/10/2026")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
@@ -82,7 +82,7 @@ set(OCPN_API_VERSION_MINOR "18")
 set(WX_VER "32")
 set(WX_VER_PATCH "8")
 
-set(TP_COMMENT "  * Release using CI")
+set(TP_COMMENT "  * Typed climatology provider V1 and corrected official ENSO episode classification")
 
 set(PARENT "opencpn")
 
@@ -178,6 +178,7 @@ SET(SRCS
             src/IsoBarMap.cpp
             src/icons.cpp
             src/zuFile.cpp
+            src/ClimatologyMath.cpp
 )
 
 
@@ -192,6 +193,8 @@ SET(HDRS
 			include/IsoBarMap.h
 			include/linmath.h
 			include/zuFile.h
+			include/ClimatologyMath.h
+            include/ClimatologyAPI.h
 )
 
 add_definitions(-DPLUGIN_USE_SVG)
@@ -224,6 +227,39 @@ set(SRC ${SRCS} ${HDRS} )
 
 target_sources(${PACKAGE_NAME} PUBLIC ${SRC} )
 
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(climatology_math_tests
+    tests/test_climatology_math.cpp
+    src/ClimatologyMath.cpp
+  )
+  target_include_directories(climatology_math_tests PRIVATE include)
+  add_test(NAME climatology_math COMMAND climatology_math_tests)
+  add_executable(climatology_api_tests tests/test_climatology_api.cpp)
+  target_include_directories(climatology_api_tests PRIVATE include)
+  add_test(NAME climatology_api COMMAND climatology_api_tests)
+  add_executable(climatology_provider_api_tests
+    tests/test_climatology_provider_api.cpp
+  )
+  target_include_directories(climatology_provider_api_tests PRIVATE include)
+  add_test(NAME climatology_provider_api COMMAND climatology_provider_api_tests)
+  add_executable(climatology_provider_xlib_tests
+    tests/test_climatology_provider_api.cpp
+  )
+  target_include_directories(climatology_provider_xlib_tests PRIVATE include)
+  target_compile_definitions(climatology_provider_xlib_tests PRIVATE Status=int)
+  add_test(NAME climatology_provider_xlib COMMAND climatology_provider_xlib_tests)
+  # These regression tests use assert(), including in Release package builds.
+  foreach(test_target climatology_math_tests climatology_api_tests
+          climatology_provider_api_tests climatology_provider_xlib_tests)
+    if(MSVC)
+      target_compile_options(${test_target} PRIVATE /UNDEBUG)
+    else()
+      target_compile_options(${test_target} PRIVATE -UNDEBUG)
+    endif()
+  endforeach()
+endif()
+
 ##==============================================================
 
 if (NOT OCPN_FLATPAK_CONFIG)
@@ -238,6 +274,16 @@ if (NOT OCPN_FLATPAK_CONFIG)
 
   add_subdirectory(opencpn-libs/api-${OCPN_API_VERSION_MINOR})
   target_link_libraries(${PACKAGE_NAME} ocpn::api)
+  if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(CLIMATOLOGY_WINDOWS_IMPORT_LIBRARY "" CACHE FILEPATH
+        "Import library from the matching native OpenCPN Windows x64 host")
+    if(CLIMATOLOGY_WINDOWS_IMPORT_LIBRARY)
+      get_target_property(_climatology_api_target ocpn::api ALIASED_TARGET)
+      set_property(TARGET ${_climatology_api_target} PROPERTY INTERFACE_LINK_LIBRARIES
+                   "${CLIMATOLOGY_WINDOWS_IMPORT_LIBRARY}")
+    endif()
+    target_compile_options(${PACKAGE_NAME} PRIVATE /we4302 /we4311 /we4312)
+  endif()
 
   add_subdirectory(opencpn-libs/tinyxml)
   target_link_libraries(${PACKAGE_NAME} ocpn::tinyxml)
@@ -263,6 +309,12 @@ if (NOT OCPN_FLATPAK_CONFIG)
            SET(OPENCPN_IMPORT_LIB "../../${CMAKE_CFG_INTDIR}/${PARENT}")
                add_subdirectory(opencpn-libs/zlib)
                target_link_libraries(${PACKAGE_NAME} ocpn::zlib)
+               set(CLIMATOLOGY_WINDOWS_ZLIB_LIBRARY "" CACHE FILEPATH
+                   "Native zlib import library matching the selected host")
+               if(CLIMATOLOGY_WINDOWS_ZLIB_LIBRARY)
+                 set_property(TARGET _ZLIB_IF PROPERTY INTERFACE_LINK_LIBRARIES
+                              "${CLIMATOLOGY_WINDOWS_ZLIB_LIBRARY}")
+               endif()
        ELSE()
             #MINGW
             TARGET_LINK_LIBRARIES(${PACKAGE_NAME} "-lz")

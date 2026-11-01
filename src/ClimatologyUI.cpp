@@ -6,6 +6,12 @@
 ///////////////////////////////////////////////////////////////////////////
 
 #include "ClimatologyUI.h"
+#ifdef __OCPN__ANDROID__
+#include <wx/scrolwin.h>
+#define CLIMATOLOGY_SETTINGS_PANEL wxScrolledWindow
+#else
+#define CLIMATOLOGY_SETTINGS_PANEL wxPanel
+#endif
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -272,7 +278,7 @@ ClimatologyConfigDialogBase::ClimatologyConfigDialogBase( wxWindow* parent, wxWi
 	fgSizer3->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
 
 	m_notebook1 = new wxNotebook( this, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0 );
-	m_panel5 = new wxPanel( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+	m_panel5 = new CLIMATOLOGY_SETTINGS_PANEL( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
 	wxFlexGridSizer* fgSizer12;
 	fgSizer12 = new wxFlexGridSizer( 0, 1, 0, 0 );
 	fgSizer12->SetFlexibleDirection( wxBOTH );
@@ -457,7 +463,7 @@ ClimatologyConfigDialogBase::ClimatologyConfigDialogBase( wxWindow* parent, wxWi
 	m_panel5->Layout();
 	fgSizer12->Fit( m_panel5 );
 	m_notebook1->AddPage( m_panel5, _("Standard Displays"), true );
-	m_panel41 = new wxPanel( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+	m_panel41 = new CLIMATOLOGY_SETTINGS_PANEL( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
 	wxFlexGridSizer* fgSizer61;
 	fgSizer61 = new wxFlexGridSizer( 0, 2, 0, 0 );
 	fgSizer61->AddGrowableCol( 0 );
@@ -523,7 +529,7 @@ ClimatologyConfigDialogBase::ClimatologyConfigDialogBase( wxWindow* parent, wxWi
 	m_panel41->Layout();
 	fgSizer61->Fit( m_panel41 );
 	m_notebook1->AddPage( m_panel41, _("Wind"), false );
-	m_panel2 = new wxPanel( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+	m_panel2 = new CLIMATOLOGY_SETTINGS_PANEL( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
 	wxFlexGridSizer* fgSizer26;
 	fgSizer26 = new wxFlexGridSizer( 0, 1, 0, 0 );
 	fgSizer26->SetFlexibleDirection( wxBOTH );
@@ -756,7 +762,7 @@ ClimatologyConfigDialogBase::ClimatologyConfigDialogBase( wxWindow* parent, wxWi
 	m_panel2->Layout();
 	fgSizer26->Fit( m_panel2 );
 	m_notebook1->AddPage( m_panel2, _("Cyclones"), false );
-	m_panel4 = new wxPanel( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+	m_panel4 = new CLIMATOLOGY_SETTINGS_PANEL( m_notebook1, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
 	wxFlexGridSizer* fgSizer171;
 	fgSizer171 = new wxFlexGridSizer( 0, 1, 0, 0 );
 	fgSizer171->AddGrowableCol( 0 );

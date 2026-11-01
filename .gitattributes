@@ -1,0 +1,5 @@
+# The provenance manifest hashes these exact bytes on every platform.
+data/** -text
+# Build scripts must remain executable by bash on Windows and Unix.
+*.sh text eol=lf
+*.py text eol=lf
