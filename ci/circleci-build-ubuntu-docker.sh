@@ -43,7 +43,9 @@ docker run --privileged -d -ti -e "container=docker"  \
     -e "BUILD_ENV=$BUILD_ENV" \
     -e "TZ=$TZ" \
     -e "DEBIAN_FRONTEND=$DEBIAN_FRONTEND" \
-    -v $(pwd):/ci-source:rw -v ~/source_top:/source_top $DOCKER_IMAGE /bin/bash
+    -v $(pwd):/ci-source:rw -v ~/source_top:/source_top \
+    -v /etc/ssl/certs/ca-certificates.crt:/tmp/climatology-build-ca.crt:ro \
+    $DOCKER_IMAGE /bin/bash
 
 DOCKER_CONTAINER_ID=$(docker ps | grep $DOCKER_IMAGE | awk '{print $1}')
 
@@ -90,7 +92,8 @@ else
         cat >> build.sh << EOF
         echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
         bash ci-source/ci/prepare-bullseye.sh
-        apt-get -qq --allow-unauthenticated update --error-on=any && DEBIAN_FRONTEND='noninteractive' TZ='America/New_York' apt-get -y --no-install-recommends --allow-change-held-packages install tzdata
+        apt-get -qq --allow-unauthenticated update --error-on=any
+        DEBIAN_FRONTEND='noninteractive' TZ='America/New_York' apt-get -y --no-install-recommends --allow-change-held-packages install tzdata
         apt-get -y --fix-missing install --allow-change-held-packages --allow-unauthenticated  \
         devscripts equivs wget git build-essential gettext wx-common libgtk2.0-dev libbz2-dev libcurl4-openssl-dev libexpat1-dev libcairo2-dev libarchive-dev liblzma-dev libexif-dev lsb-release openssl libssl-dev
 EOF
