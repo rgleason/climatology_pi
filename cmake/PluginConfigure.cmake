@@ -380,6 +380,13 @@ else ()
   )
 endif (DEFINED ENV{OCPN_TARGET})
 if (OCPN_FLATPAK_CONFIG)
+  # Build the checked-out sources, including fork PR commits and local changes.
+  # CircleCI's synthetic pull/<number> branch cannot be cloned as a branch.
+  file(RELATIVE_PATH FLATPAK_BUILD_SUBDIR "${PROJECT_SOURCE_DIR}"
+       "${PROJECT_BINARY_DIR}")
+  if (FLATPAK_BUILD_SUBDIR MATCHES "^\\.\\." OR FLATPAK_BUILD_SUBDIR STREQUAL "")
+    set(FLATPAK_BUILD_SUBDIR "build")
+  endif ()
   message(STATUS "${CMLOG}Checking for flatpak extensions")
   find_file(
     PLUGIN_FLATPAK_ARGS

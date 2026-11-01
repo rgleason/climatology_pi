@@ -14,7 +14,8 @@ if [ "${CIRCLECI_LOCAL,,}" = "true" ]; then
     fi
 fi
 
-sudo apt-get -qq update
+sudo bash ci/prepare-bullseye.sh
+sudo apt-get -qq update --error-on=any
 sudo apt-get install devscripts equivs
 
 # Install extra build libs

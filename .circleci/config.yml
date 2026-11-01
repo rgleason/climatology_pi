@@ -81,9 +81,22 @@ commands:
                 type: boolean
                 default: true
         steps:
+            - run:
+                name: Retain built packages and metadata
+                command: bash ci/retain-packages.sh
+            - store_artifacts:
+                path: ci-artifacts
+                destination: packages
             - when:
                 condition: <<pipeline.parameters.run_workflow_deploy>>
                 steps:
+                - run:
+                    name: Skip publication for pull requests
+                    command: |
+                      if [[ -n "${CIRCLE_PULL_REQUEST:-}${CIRCLE_PULL_REQUESTS:-}" || "${CIRCLE_BRANCH:-}" == pull/* ]]; then
+                        echo "Pull request packages are retained as artifacts; publication is skipped."
+                        circleci-agent step halt
+                      fi
                 - when:
                     condition: <<parameters.install_python>>
                     steps:
