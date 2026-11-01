@@ -35,6 +35,14 @@ workflows:
               <<: *std-filters
           - build-msvc-wx32-2022:
               <<: *std-filters
+          - build-msvc-64-2022:
+              name: build-msvc-64-wx334-2022
+              wx_version: '3.3.4'
+              <<: *std-filters
+          - build-msvc-64-2022:
+              name: build-msvc-64-wx329-2022
+              wx_version: '3.2.9'
+              <<: *std-filters
           - build-debian-armhf-13-trixie:
               <<: *std-filters
           - build-debian-arm64-13-trixie:
@@ -208,6 +216,43 @@ jobs:
         - deploy-code:
             deploy_use_orb: false
             install_python: false
+    build-msvc-64-2022:
+        parameters:
+            wx_version:
+                type: enum
+                enum: ['3.3.4', '3.2.9']
+        executor:
+            name: win/server-2022
+            shell: bash.exe
+        environment:
+            CLIMATOLOGY_WX_VERSION: <<parameters.wx_version>>
+        steps:
+        - checkout
+        - run:
+            name: Install x64 packaging tools
+            shell: powershell.exe
+            command: |
+              choco install cmake poedit 7zip -y --no-progress
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        - run:
+            name: Build and qualify msvc-64 against the matching stock host
+            shell: cmd.exe
+            command: ci\circleci-build-msvc64.bat
+        - store_artifacts:
+            path: artifacts
+            destination: qualification
+        - run:
+            name: Retain the matching wxWidgets package
+            command: |
+              if [[ "$CLIMATOLOGY_WX_VERSION" == '3.2.9' ]]; then
+                package_dir=compatibility/windows-x64-wx329
+              else
+                package_dir=public-packages
+              fi
+              bash ci/retain-packages.sh "$package_dir"
+        - store_artifacts:
+            path: ci-artifacts
+            destination: packages
     build-msvc-wx32-2022:
         executor:
             name: win/server-2022

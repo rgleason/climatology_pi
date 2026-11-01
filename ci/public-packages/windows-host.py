@@ -18,7 +18,9 @@ archive = Path(sys.argv[1]).resolve()
 host = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else root / '.windows86-host/host'
 output = root / 'artifacts/windows-version'
 output.mkdir(parents=True, exist_ok=True)
-assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true', 'Disposable Windows CI only'
+assert sys.platform == 'win32' and (
+    os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CIRCLECI') == 'true'
+), 'Disposable Windows CI only'
 ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)
 if len(sys.argv) == 2:
     installer = host.parent / 'opencpn-5.14.2-x86.exe'

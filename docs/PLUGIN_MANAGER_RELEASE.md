@@ -35,6 +35,13 @@ collection. Both hosts advertise `msvc-64`; these binaries are incompatible
 and must not be offered as interchangeable entries for that shared target.
 The workflow retains the legacy package separately for older-host users.
 
+CircleCI also runs `build-msvc-64-wx334-2022` and
+`build-msvc-64-wx329-2022`, using this same checksum-pinned builder and stock-host
+qualification. Each job retains its matching package, metadata, checksum,
+SDK/import evidence and runtime results as artifacts. The x64 jobs qualify
+packages without publishing them; the legacy wxWidgets 3.2.9 artifact remains
+separate from the primary wxWidgets 3.3.4 package.
+
 Stock OpenCPN imports each complete Windows package in a disposable CI profile,
 checks every installed plugin/data byte, opens Options > Plugins to verify the
 displayed 2.0.1 version, then reinstalls/restarts and requires two normal exits

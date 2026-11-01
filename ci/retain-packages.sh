@@ -2,14 +2,15 @@
 set -euo pipefail
 shopt -s nullglob
 
-packages=(build/*.tar.gz)
+package_dir=${1:-build}
+packages=("$package_dir"/*.tar.gz)
 if (( ${#packages[@]} == 0 )); then
-    echo "No built plugin archive found in build/" >&2
+    echo "No built plugin archive found in $package_dir/" >&2
     exit 1
 fi
 mkdir -p ci-artifacts
 cp "${packages[@]}" ci-artifacts/
-metadata=(build/*.xml)
+metadata=("$package_dir"/*.xml)
 if (( ${#metadata[@]} )); then
     cp "${metadata[@]}" ci-artifacts/
 fi
