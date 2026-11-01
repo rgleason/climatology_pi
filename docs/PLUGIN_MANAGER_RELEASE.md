@@ -1,10 +1,9 @@
 # Climatology 2.0.1 Plugin Manager packages
 
-This release is the pob220 modernisation, based on scientific/runtime revision
-cd00282e6ea2784a6d78ccfe47fed713269ad87e, not an unmodified build of Rick
-Gleason's plugin. Rick's source and the OpenCPN master catalogue were both
-1.6.37.0 when checked on 21 October 2026. Our plugin is 2.0.1.0; its independent
-scientific dataset identity remains ocpn-climatology-2026.2.
+The plugin name is **Climatology** and the current version is **2.0.1**.
+The toolkit records this as **2.0.1.0** in package XMLs. Every current package
+contains the independent scientific dataset **ocpn-climatology-2026.2**,
+verified against its manifest and 52 output checksums.
 
 The `Plugin Manager packages` GitHub Actions workflow builds native Linux,
 Windows x86/x64, macOS universal, Flatpak and Android arm64/armhf artifacts.
@@ -34,6 +33,9 @@ package stays under `compatibility/windows-x64-wx329`, outside the catalogue
 collection. Both hosts advertise `msvc-64`; these binaries are incompatible
 and must not be offered as interchangeable entries for that shared target.
 The workflow retains the legacy package separately for older-host users.
+
+Both Windows x64 variants are Climatology 2.0.1 with the identical 2026.2
+scientific dataset. The `wx334` and `wx329` suffixes identify the host ABI.
 
 CircleCI also runs `build-msvc-64-wx334-2022` and
 `build-msvc-64-wx329-2022`, using this same checksum-pinned builder and stock-host

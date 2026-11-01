@@ -1,8 +1,15 @@
-# OpenCPN Climatology — legacy-compatible modernisation branch
+# Climatology 2.0.1 for OpenCPN
 
-This branch keeps the Climatology function-pointer interface used by Weather
-Routing while replacing the anonymous historical data-generation process with
-strict readers, reproducible Python builders, source provenance and tests.
+The plugin is **Climatology 2.0.1**, represented as **2.0.1.0** in the toolkit's
+four-component package metadata. Every current package contains the
+**ocpn-climatology-2026.2** dataset, identified by its manifest, source provenance
+and 52 scientific output checksums. Windows x64 packages labelled `wx334` and
+`wx329` select different host wxWidgets ABIs; both contain this same plugin
+version and scientific dataset. See [Plugin Manager packages](docs/PLUGIN_MANAGER_RELEASE.md).
+
+Climatology preserves the function-pointer interface used by Weather Routing
+and provides strict readers, reproducible Python builders, source provenance
+and tests.
 
 The plugin remains able to read the released historical files. A generated
 modern bundle carries `dataset-manifest.json`; plugin and dataset versions are

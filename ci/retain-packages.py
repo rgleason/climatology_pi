@@ -34,7 +34,7 @@ def retain(source, destination, artifact_base=None):
 
     pairs = []
     for archive in archives:
-        stem = archive.name.removesuffix('.tar.gz')
+        stem = archive.name[:-len('.tar.gz')]
         matches = [path for path, root in metadata.items()
                    if path.stem == stem or
                    unquote(urlsplit(root.findtext('tarball-url', '').strip()).path).rsplit('/', 1)[-1] == archive.name]
@@ -68,7 +68,8 @@ def retain(source, destination, artifact_base=None):
             value = ET.Element('tarball-checksum')
             root.insert(list(root).index(url) + 1, value)
         value.text = digest
-        ET.indent(root)
+        if hasattr(ET, 'indent'):
+            ET.indent(root)
         pairs.append((archive, stem + '.xml', ET.tostring(root, encoding='utf-8') + b'\n', digest))
 
     destination.mkdir(parents=True, exist_ok=True)

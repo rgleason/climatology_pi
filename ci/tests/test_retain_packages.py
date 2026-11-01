@@ -72,7 +72,7 @@ class RetainedPackages(unittest.TestCase):
         (self.source / 'another.xml').write_text(XML)
         with self.assertRaisesRegex(ValueError, 'Cannot identify the companion XML'):
             module.retain(self.source, self.output, 'https://example.invalid/artifacts')
-        self.xml.rename(self.archive.with_name(self.archive.name.removesuffix('.tar.gz') + '.xml'))
+        self.xml.rename(self.archive.with_name(self.archive.name[:-len('.tar.gz')] + '.xml'))
         (self.source / 'another.xml').rename(self.source / 'second.xml')
         module.retain(self.source, self.output, 'https://example.invalid/artifacts')
         self.assertEqual(len(list(self.output.glob('*.xml'))), 2)
