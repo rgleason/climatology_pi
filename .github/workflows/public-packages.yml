@@ -11,8 +11,8 @@ on:
         default: '["debian:bullseye", "debian:bookworm", "debian:trixie"]'
         type: string
       run_id:
-        description: Retained native-package build for display or validation checks
-        default: '41107455302'
+        description: 'Required for display/validate: retained build of the current plugin version'
+        default: ''
         type: string
 permissions:
   contents: read
@@ -221,6 +221,9 @@ jobs:
           - arch: x64
             artifact: windows-x64-wx3.3.4
     steps:
+      - name: Require an explicit retained build
+        if: ${{ inputs.run_id == '' }}
+        run: throw 'Supply run_id for a retained build of the current plugin version'
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
@@ -241,6 +244,9 @@ jobs:
     needs: [linux, windows, macos, android, flatpak, windows64]
     runs-on: ubuntu-24.04
     steps:
+      - name: Require an explicit retained build
+        if: ${{ inputs.groups == 'validate' && inputs.run_id == '' }}
+        run: echo 'Supply run_id for a retained build of the current plugin version' >&2; exit 1
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:

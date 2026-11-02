@@ -253,6 +253,31 @@ jobs:
         - store_artifacts:
             path: ci-artifacts
             destination: packages
+        - when:
+            condition: <<pipeline.parameters.run_workflow_deploy>>
+            steps:
+            - run:
+                name: Skip publication for pull requests and legacy compatibility
+                command: |
+                  if [[ "$CLIMATOLOGY_WX_VERSION" != '3.3.4' || -n "${CIRCLE_PULL_REQUEST:-}${CIRCLE_PULL_REQUESTS:-}" || "${CIRCLE_BRANCH:-}" == pull/* ]]; then
+                    echo "Pull request and legacy compatibility packages remain CI artifacts."
+                    circleci-agent step halt
+                    exit 0
+                  fi
+            - get-users-and-collaborators
+            - run:
+                name: Publish the qualified primary Windows x64 package
+                command: |
+                  if [[ "$CIRCLE_PROJECT_USERNAME" != "$CIRCLE_USERNAME" && ( -z "${collab_users:-}" || -z "${git_user:-}" || "$collab_users" != *"$git_user"* ) ]]; then
+                    echo "Publication is restricted to the repository owner or collaborators."
+                    exit 1
+                  fi
+                  if [[ -z "${CLOUDSMITH_API_KEY:-}" ]]; then
+                    echo "Publication requires CLOUDSMITH_API_KEY."
+                    exit 1
+                  fi
+                  python -m pip install cloudsmith-cli
+                  python ci/public-packages/cloudsmith_publication.py --publish
     build-msvc-wx32-2022:
         executor:
             name: win/server-2022
