@@ -26,6 +26,7 @@ WORK = ROOT / ('.windows64' if WX_VERSION == '3.3.4' else '.windows64-wx329')
 ARTIFACTS = ROOT / 'artifacts' / ('windows-x64' if WX_VERSION == '3.3.4' else 'windows-x64-wx329')
 
 from windows_abi import validate as validate_windows_abi
+from cloudsmith_publication import context as publication_context, publication_plan
 
 
 def run(*args, cwd=ROOT):
@@ -170,12 +171,24 @@ def main():
     run('ctest', '--test-dir', work, '-C', 'Release', '--output-on-failure')
     library = work / 'Release/climatology_pi.dll'
     verify_host_imports(library, host_exports)
+    publication_args = []
+    if os.environ.get('CIRCLECI') == 'true' and WX_VERSION == '3.3.4':
+        repository, version = publication_context()
+        publication_args = ['--publication-repository', repository, '--publication-version', version]
     run(sys.executable, ROOT / 'ci/public-packages/package.py', '--binary', library,
         '--build-dir', work, '--kind', 'windows', '--target', 'msvc-64',
-        '--target-version', '10', '--arch', 'x86_64', '--wx-version', WX_VERSION)
+        '--target-version', '10', '--arch', 'x86_64', '--wx-version', WX_VERSION, *publication_args)
     package_dir = ROOT / ('public-packages' if WX_VERSION == '3.3.4' else 'compatibility/windows-x64-wx329')
     archive = next(package_dir.glob('*.tar.gz'))
     run(sys.executable, ROOT / 'ci/public-packages/windows-host.py', archive, WORK / 'host')
+    if publication_args:
+        plan = publication_plan(package_dir, repository, version)
+        (package_dir / 'publication-plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+        publication_artifacts = ARTIFACTS / 'publication'
+        publication_artifacts.mkdir(parents=True, exist_ok=True)
+        for path in (archive, archive.with_name(archive.name[:-len('.tar.gz')] + '.xml'),
+                     package_dir / 'publication-plan.json'):
+            shutil.copy2(path, publication_artifacts / path.name)
 
 if __name__ == '__main__':
     main()

@@ -16,6 +16,8 @@ python --version
 if errorlevel 1 exit /b 1
 python -m unittest discover -s ci\public-packages\tests -p test_windows_abi.py
 if errorlevel 1 exit /b 1
+python -m unittest discover -s ci\public-packages\tests -p test_cloudsmith_publication.py
+if errorlevel 1 exit /b 1
 python -m unittest discover -s ci\tests -p test_retain_packages.py
 if errorlevel 1 exit /b 1
 python ci\public-packages\windows64.py

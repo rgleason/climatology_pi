@@ -1,6 +1,6 @@
-# Climatology 2.0.1 for OpenCPN
+# Climatology 2.0.2 for OpenCPN
 
-The plugin is **Climatology 2.0.1**, represented as **2.0.1.0** in the toolkit's
+The plugin is **Climatology 2.0.2**, represented as **2.0.2.0** in the toolkit's
 four-component package metadata. Every current package contains the
 **ocpn-climatology-2026.2** dataset, identified by its manifest, source provenance
 and 52 scientific output checksums. Windows x64 packages labelled `wx334` and

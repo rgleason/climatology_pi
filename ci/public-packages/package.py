@@ -12,9 +12,10 @@ import tarfile
 import xml.etree.ElementTree as ET
 
 from windows_abi import validate as validate_windows_abi
+from release import VERSION
+from cloudsmith_publication import download_url
 
-VERSION = '2.0.1.0'
-TAG = 'v2.0.1.0-modern-data'
+TAG = 'v' + VERSION + '-modern-data'
 REPO = 'https://github.com/pob220/climatology_pi'
 BASELINE = 'cd00282e6ea2784a6d78ccfe47fed713269ad87e'
 SOURCE = Path(__file__).resolve().parents[2]
@@ -64,8 +65,14 @@ def make_package(args):
     label = f'{args.target}-{args.target_version}-{args.arch.replace(";", "-")}'
     if args.kind == 'windows' and args.arch == 'x86_64':
         label += '-wx' + args.wx_version.replace('.', '')
-    name = f'climatology_pi-{VERSION}_{label}'
+    name = f'climatology_pi-{VERSION}-{label}'
     url = f'{REPO}/releases/download/{TAG}/{name}.tar.gz'
+    info_url = f'{REPO}/releases/tag/{TAG}'
+    if args.publication_repository:
+        if not args.publication_version:
+            raise ValueError('Cloudsmith publication requires a repository and version')
+        url = download_url(args.publication_repository, args.publication_version, name + '.tar.gz')
+        info_url = 'https://github.com/rgleason/climatology_pi'
     plugin = ET.Element('plugin', version='1')
     values = [
         ('name', 'Climatology'), ('version', VERSION), ('release', '0'),
@@ -80,7 +87,7 @@ def make_package(args):
          'Research and passage planning climatology; not a forecast or official navigation data.'),
         ('target', args.target), ('target-version', args.target_version),
         ('target-arch', args.arch), ('tarball-url', url),
-        ('info-url', f'{REPO}/releases/tag/{TAG}'),
+        ('info-url', info_url),
     ]
     for key, value in values:
         ET.SubElement(plugin, key).text = value
@@ -168,4 +175,6 @@ if __name__ == '__main__':
     parser.add_argument('--wx-version', choices=['3.2.9', '3.3.4'])
     parser.add_argument('--binary-source-revision', help='Retained CI binary revision when only repackaging data/locales')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--publication-repository')
+    parser.add_argument('--publication-version')
     make_package(parser.parse_args())

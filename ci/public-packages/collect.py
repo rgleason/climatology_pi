@@ -12,9 +12,9 @@ import tarfile
 import xml.etree.ElementTree as ET
 
 from windows_abi import validate as validate_windows_abi
+from release import VERSION
 
 SOURCE = Path(__file__).resolve().parents[2]
-VERSION = '2.0.1.0'
 BASELINE = 'cd00282e6ea2784a6d78ccfe47fed713269ad87e'
 
 
