@@ -72,7 +72,7 @@ def make_package(args):
         if not args.publication_version:
             raise ValueError('Cloudsmith publication requires a repository and version')
         url = download_url(args.publication_repository, args.publication_version, name + '.tar.gz')
-        info_url = f'{REPO}/blob/{packaging_revision}/docs/PLUGIN_MANAGER_RELEASE.md'
+        info_url = 'https://github.com/rgleason/climatology_pi'
     plugin = ET.Element('plugin', version='1')
     values = [
         ('name', 'Climatology'), ('version', VERSION), ('release', '0'),
