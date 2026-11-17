@@ -135,7 +135,6 @@ double ClimatologyIsoBarMap::CalcParameter(double lat, double lon)
 #define CYCLONE_CACHE_SEMAPHORE_COUNT 4
 ClimatologyOverlayFactory::ClimatologyOverlayFactory( ClimatologyDialog &dlg )
     : //m_bUpdateCyclones(true),
-    m_cyclone_cache_semaphore(CYCLONE_CACHE_SEMAPHORE_COUNT),
     m_bCompletedLoading(false),
     m_dlg(dlg), m_Settings(dlg.m_cfgdlg->m_Settings),
     m_cyclonesDisplayList(0), m_cyclone_drawn_counter(0)
@@ -629,6 +628,7 @@ void ClimatologyOverlayFactory::LoadInternal(wxGenericProgressDialog *progressdi
     if(!ReadCycloneData("cyclone-she", m_she, true))
         allcyclone = false;
 
+    m_cyclone_data_complete = allcyclone;
     if(allcyclone)
         m_dlg.m_cbCyclones->Enable();
 
@@ -676,6 +676,7 @@ void ClimatologyOverlayFactory::Free()
     }
     
     // free cyclones
+    m_cyclone_data_complete = false;
     std::list<Cyclone*> *cyclones[6] = {&m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
     for(int i=0; i < 6; i++) {
         for(std::list<Cyclone*>::iterator it = cyclones[i]->begin(); it != cyclones[i]->end(); it++) {
@@ -685,6 +686,8 @@ void ClimatologyOverlayFactory::Free()
         cyclones[i]->clear();
     }
     m_cyclone_cache.clear();
+    std::atomic_store(&m_cyclone_index,
+        std::shared_ptr<const climatology::CycloneTrackIndex>());
 }
 
 static wxUint16 DecodeLE16(const unsigned char *bytes)
@@ -1400,6 +1403,8 @@ missing:
 
 void ClimatologyOverlayFactory::BuildCycloneCache()
 {
+    // Partial basin data cannot establish a zero-crossing conclusion.
+    if (!m_cyclone_data_complete) return;
     std::list<Cyclone*> *cyclones[6] = {&m_epa, &m_wpa, &m_spa, &m_atl, &m_nio, &m_she};
 
     /* make sure we have all the cyclone theatres */
@@ -1413,13 +1418,12 @@ void ClimatologyOverlayFactory::BuildCycloneCache()
     statemask |= 4*m_dlg.m_cfgdlg->m_cbExtraTropical->GetValue();
     statemask |= 8*m_dlg.m_cfgdlg->m_cbRemanent->GetValue();
 
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
-        m_cyclone_cache_semaphore.Wait();
 
     int minwindspeed = m_dlg.m_cfgdlg->m_sMinWindSpeed->GetValue();
     int maxpressure = m_dlg.m_cfgdlg->m_sMaxPressure->GetValue();
 
-    m_cyclone_cache.clear();
+    decltype(m_cyclone_cache) nextCache;
+    auto nextIndex = std::make_shared<climatology::CycloneTrackIndex>();
     wxStopWatch sw;
 
     for(int i=0; i < 6; i++) {
@@ -1470,25 +1474,29 @@ void ClimatologyOverlayFactory::BuildCycloneCache()
                 if(!((1<<(*it2)->state) & statemask))
                     continue;
 
-                int lon[2], lat[2];
-                for(int j = 0; j<2; j++) {
-                    lon[j] = (*it2)->lon[0] < 15 ? (*it2)->lon[j] : (*it2)->lon[j] - 360;
-                    lat[j] = (*it2)->lat[j];
-                }
-
-                for(int loni = wxMin(lon[0], lon[1]); loni <= wxMax(lon[0], lon[1]); loni++)
-                    for(int lati = wxMin(lat[0], lat[1]); lati <= wxMax(lat[0], lat[1]); lati++) {
-                        int hash = (loni * 180 + lati)*12 + (*it2)->datetime.month;
-                        m_cyclone_cache[hash].push_back(*it2);
-                    }
+                const auto* state = *it2;
+                nextIndex->Add(state->lat[0],state->lon[0],state->lat[1],
+                               state->lon[1],state->datetime.month*365/12 +
+                               state->datetime.day-1);
+                const double lon0=climatology::CycloneTrackIndex::Wrap(state->lon[0]);
+                const double lon1=climatology::CycloneTrackIndex::Align(
+                    climatology::CycloneTrackIndex::Wrap(state->lon[1]),lon0);
+                for(int col=int(std::floor(std::min(lon0,lon1)));
+                    col<=int(std::floor(std::max(lon0,lon1)));++col)
+                    for(int row=int(std::floor(std::min(state->lat[0],state->lat[1])));
+                        row<=int(std::floor(std::max(state->lat[0],state->lat[1])));++row)
+                        nextCache[std::make_tuple((col%360+360)%360,row,
+                            state->datetime.month)].push_back(*it2);
             }
         }
     }
 
     wxLogMessage(climatology_pi + _("cyclone cache time ") + wxString::Format("%ld ms", sw.Time()));
     
-    for(int i=0; i<CYCLONE_CACHE_SEMAPHORE_COUNT; i++)
-        m_cyclone_cache_semaphore.Post();
+    m_cyclone_cache.swap(nextCache); // rendering and settings run on the UI thread
+    std::atomic_store(&m_cyclone_index,
+        std::shared_ptr<const climatology::CycloneTrackIndex>(nextIndex));
+    SendPluginMessage("CLIMATOLOGY_CYCLONE_REVISION", "");
 }
 
 static double strtod_nan(const char *str)
@@ -2287,103 +2295,16 @@ double ClimatologyOverlayFactory::GetMax(int setting)
     }
 }
 
-#define EPS 2e-14
-#define EPS2 2e-7
-
-static inline int TestIntersectionXY(double x1, double y1, double x2, double y2,
-                              double x3, double y3, double x4, double y4)
+int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1,
+    double lat2, double lon2, const wxDateTime& date, int dayrange)
 {
-    double ax = x2 - x1, ay = y2 - y1;
-    double bx = x3 - x4, by = y3 - y4;
-    double cx = x1 - x3, cy = y1 - y3;
-
-    double denom = ay * bx - ax * by;
-
-    if(fabs(denom) < EPS) { /* parallel or really close to parallel */
-//        if(fabs((y1*ax - ay*x1)*bx - (y3*bx - by*x3)*ax) > EPS2)
-//            return 0; /* different intercepts, no intersection */
-      return 1;
-//        return 0;
-    }
-
-    double recip = 1 / denom;
-    double na = (by * cx - bx * cy) * recip;
-    if(na < -EPS2 || na > 1 + EPS2)
-        return 0;
-
-    double nb = (ax * cy - ay * cx) * recip;
-    if(nb < -EPS2 || nb > 1 + EPS2)
-        return 0;
-
-    return 1;
-}
-
-int ClimatologyOverlayFactory::CycloneTrackCrossings(double lat1, double lon1, double lat2, double lon2,
-                                                     const wxDateTime &date, int dayrange)
-{
-    // if dayrange is zero, we are just probing, so other parameters are likely invalid
-    if(!dayrange)
-        return 0;
-
-    m_cyclone_cache_semaphore.Wait();
-    /* build hash table cache to speed up cyclone crossing calculation */
-    if(m_cyclone_cache.empty()) {
-        m_cyclone_cache_semaphore.Post();
-        return -1;
-    }
-        
-    int lon_min = wxMin(lon1, lon2), lon_max = wxMax(lon1, lon2);
-
-    if(lon_min > 15 || lon_max > 15)
-        lon_min -= 360, lon_max -= 360;
-
-    int lat_min = wxMin(lat1, lat2), lat_max = wxMax(lat1, lat2);
-
-    int day = date.GetMonth()*365/12 + date.GetDay()-1;
-    const int half_range = wxMin(dayrange / 2, 182);
-    const int day1 = (day - half_range + 365) % 365;
-    const int day2 = (day + half_range) % 365;
-    const int month_start = dayrange >= 365 ? 0 : day1 * 12 / 365;
-    const int month_end = dayrange >= 365 ? 11 : day2 * 12 / 365;
-
-    for(int loni = lon_min; loni <= lon_max; loni++)
-        for(int lati = lat_min; lati <= lat_max; lati++) {
-            int monthi = month_start;
-            for(;;) {
-
-                int hash = (floor((double)loni) * 180
-                            + floor((double)lati))*12 + monthi;
-
-                std::list<CycloneState*> &cyclonestates = m_cyclone_cache[hash];
-                for(std::list<CycloneState*>::iterator it = cyclonestates.begin();
-                    it != cyclonestates.end(); it++) {
-                    wxPoint p;
-                    CycloneState *ss = *it;
-                        
-                    int cday = ss->datetime.month*365/12 + ss->datetime.day - 1;
-                    const int daydiff = climatology::CircularDayDistance(cday, day);
-
-                    if(daydiff <= half_range) {
-                        /* we should split all cyclones at 15 degrees longitude... until then... */
-                        while(lon1 - ss->lon[0] > 180) lon1 -= 360, lon2 -= 360;
-                        while(lon1 - ss->lon[0] < -180) lon1 += 360, lon2 += 360;
-                                
-                        if(TestIntersectionXY(lat1, lon1, lat2, lon2,
-                                              ss->lat[0], ss->lon[0],
-                                              ss->lat[1], ss->lon[1])) {
-                            m_cyclone_cache_semaphore.Post();
-                            return 1;
-                        }
-                    }
-                }
-                if(monthi == month_end)
-                    break;
-                monthi = (monthi + 1) % 12;
-            }
-        }
-
-    m_cyclone_cache_semaphore.Post();
-    return 0;
+    if (!dayrange) return std::atomic_load(&m_cyclone_index) ? 0 : -1; // availability probe
+    if (!date.IsValid()) return -1;
+    const auto index=std::atomic_load(&m_cyclone_index);
+    if (!index) return -1;
+    const auto utc=date.GetTm(wxDateTime::UTC);
+    return index->Crossings(lat1,lon1,lat2,lon2,
+                           utc.mon*365/12+utc.mday-1,dayrange);
 }
 
 void ClimatologyOverlayFactory::RenderOverlayMap( int setting, PlugIn_ViewPort &vp)
@@ -2821,13 +2742,11 @@ void ClimatologyOverlayFactory::RenderCyclones(PlugIn_ViewPort &vp)
         for(int loni = floor(vp.lon_min); loni <= ceil(vp.lon_max); loni++) {
             int monthi = month_start;
             for(;;) {
-                int lonin = loni < 15 ? loni : loni - 360;
-                int hash = (lonin * 180 + lati)*12 + monthi;
-
-                std::list<CycloneState*> &states = m_cyclone_cache[hash];
-                for(std::list<CycloneState*>::iterator it = states.begin();
-                    it != states.end(); it++)
-                    RenderCycloneSegment(**it, vp, dayspan);
+                const auto found=m_cyclone_cache.find(std::make_tuple(
+                    (loni%360+360)%360,lati,monthi));
+                if(found!=m_cyclone_cache.end())
+                    for(auto* state:found->second)
+                        RenderCycloneSegment(*state,vp,dayspan);
 
                 if(monthi == month_end)
                     break;

@@ -27,6 +27,9 @@
 #include <list>
 #include <map>
 #include <vector>
+#include <memory>
+#include <tuple>
+#include "CycloneTrackIndex.h"
 
 #include "zuFile.h"
 
@@ -243,8 +246,9 @@ public:
         double lat1, double lon1, double lat2, double lon2,
         const wxDateTime &date, int dayrange);
 
-    wxSemaphore m_cyclone_cache_semaphore;
-    std::map<int, std::list<CycloneState*> > m_cyclone_cache;
+    bool m_cyclone_data_complete = false;
+    std::shared_ptr<const climatology::CycloneTrackIndex> m_cyclone_index;
+    std::map<std::tuple<int,int,int>, std::list<CycloneState*> > m_cyclone_cache;
 
     void BuildCycloneCache();
     bool RenderOverlay( piDC &dc, PlugIn_ViewPort &vp );

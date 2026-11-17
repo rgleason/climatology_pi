@@ -574,6 +574,8 @@ void climatology_pi::SendClimatology(bool valid)
     Json::Value v;
     v["ClimatologyVersionMajor"] = GetPlugInVersionMajor();
     v["ClimatologyVersionMinor"] = GetPlugInVersionMinor();
+    v["ClimatologyCycloneWorkerSafe"] = true;
+    v["ClimatologyCycloneRevisionSupported"] = true;
     Json::Value manifest;
     if(ReadDatasetManifest(manifest)) {
         v["ClimatologyDatasetVersion"] = manifest.get("dataset_version", "unknown");

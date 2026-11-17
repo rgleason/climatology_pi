@@ -71,9 +71,9 @@ set(LONG_DESCRIPTION "Climatology provides overlay capabilities for historical w
 
 set(VERSION_MAJOR "2")
 set(VERSION_MINOR "0")
-set(VERSION_PATCH "2")
+set(VERSION_PATCH "3")
 set(VERSION_TWEAK "0")
-set(VERSION_DATE  "02/11/2026")#DD/MM/YYYY format
+set(VERSION_DATE  "17/11/2026")#DD/MM/YYYY format
 set(OCPN_MIN_VERSION "ov58")
 
 set(OCPN_API_VERSION_MAJOR "1")
@@ -235,6 +235,11 @@ if(BUILD_TESTING)
   )
   target_include_directories(climatology_math_tests PRIVATE include)
   add_test(NAME climatology_math COMMAND climatology_math_tests)
+  find_package(Threads REQUIRED)
+  add_executable(climatology_cyclone_tests tests/test_cyclone_index.cpp)
+  target_include_directories(climatology_cyclone_tests PRIVATE include)
+  target_link_libraries(climatology_cyclone_tests PRIVATE Threads::Threads)
+  add_test(NAME climatology_cyclone COMMAND climatology_cyclone_tests)
   add_executable(climatology_api_tests tests/test_climatology_api.cpp)
   target_include_directories(climatology_api_tests PRIVATE include)
   add_test(NAME climatology_api COMMAND climatology_api_tests)
@@ -250,7 +255,7 @@ if(BUILD_TESTING)
   target_compile_definitions(climatology_provider_xlib_tests PRIVATE Status=int)
   add_test(NAME climatology_provider_xlib COMMAND climatology_provider_xlib_tests)
   # These regression tests use assert(), including in Release package builds.
-  foreach(test_target climatology_math_tests climatology_api_tests
+  foreach(test_target climatology_cyclone_tests climatology_math_tests climatology_api_tests
           climatology_provider_api_tests climatology_provider_xlib_tests)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /UNDEBUG)
